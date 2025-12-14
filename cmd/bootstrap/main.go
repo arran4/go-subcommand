@@ -9,6 +9,12 @@ import (
 	go_subcommand "github.com/arran4/go-subcommand"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	fs := flag.NewFlagSet("", flag.ExitOnError)
 	var dir string
