@@ -1,0 +1,13 @@
+Usage:
+  {{"{{.ProgName}}"}} [flags] {{ .SubCommandSequence }}
+
+{{ .SubCommandDescription }}
+
+{{ if .HasSubcommands }}
+Commands:
+{{- range .Subcommands }}
+  {{"{{.ProgName}}"}} {{.SubCommandName}} - {{.SubCommandDescription}}
+{{- end }}
+{{- end }}
+
+{{"{{template "flag_groups_section" .FlagGroups}}"}}

@@ -1,0 +1,68 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"os"
+
+	templates "{{$.Pkg}}/cmd/{{$.MainCmdName}}/templates"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+type UserError struct {
+	UserError string
+	error
+}
+
+type ExitError struct {
+	Code int
+	error
+}
+
+func NewUserError(err error, s string) error {
+	return &UserError{
+		UserError: s,
+		error:     err,
+	}
+}
+
+type Cmd interface {
+	Usage()
+	Execute(args []string) error
+}
+
+func executeUsage(w io.Writer, filename string, data Cmd) error {
+	if err := templates.GetTemplates().ExecuteTemplate(w, filename, data); err != nil {
+		_, _ = fmt.Fprintf(w, "template execute: %v\n", err)
+		return fmt.Errorf("execute template: %v", err)
+	}
+	return nil
+}
+
+func main() {
+	root, err := NewRoot(os.Args[0], version, commit, date)
+	if err != nil {
+		log.Panicf("Parameter Error: %s", err)
+	}
+	if err := root.Execute(os.Args[1:]); err != nil {
+		var ue *UserError
+		var ee *ExitError
+		exitCode := -1
+		switch {
+		case errors.As(err, ue) && ue != nil:
+			_, _ = fmt.Fprintln(os.Stderr, ue.UserError)
+		case errors.As(err, ee) && ee != nil:
+			exitCode = ee.Code
+		default:
+			_, _ = fmt.Fprintln(os.Stderr, err.Error())
+		}
+		os.Exit(exitCode)
+	}
+}
