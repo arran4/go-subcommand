@@ -1,0 +1,1 @@
+The files in this directory represent the target state of the code generation. Do not modify them directly. Instead, run the `gosub-bootstrap generate` command on the `examples/basic1` directory and use `git diff` to compare the output.

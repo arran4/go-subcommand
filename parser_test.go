@@ -16,7 +16,7 @@ func TestParseSubCommandComments(t *testing.T) {
 	}{
 		{
 			name:                   "Example 1",
-			text:                   "// go-subcommand: basic1 example1\n// description: Does nothing practical",
+			text:                   "ExampleCmd1 is a subcommand `basic1 example1`\nDoes nothing practical",
 			wantCmdName:            "basic1",
 			wantSubCommandSequence: []string{"example1"},
 			wantDescription:        "Does nothing practical",
@@ -24,7 +24,7 @@ func TestParseSubCommandComments(t *testing.T) {
 		},
 		{
 			name:                   "Example 1.1",
-			text:                   "// go-subcommand: basic1 example1",
+			text:                   "ExampleCmd1 is a subcommand `basic1 example1`",
 			wantCmdName:            "basic1",
 			wantSubCommandSequence: []string{"example1"},
 			wantDescription:        "",

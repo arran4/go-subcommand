@@ -18,8 +18,10 @@ type SubCommandTree struct {
 	*SubCommand
 }
 
-func (sct * SubCommandTree) Insert(importPath string, sequence []string, s *SubCommand) {
+func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []string, s *SubCommand) {
 	if len(sequence) == 0 {
+		s.ImportPath = importPath
+		s.SubCommandPackageName = packageName
 		sct.SubCommand = s
 		return
 	}
@@ -29,7 +31,7 @@ func (sct * SubCommandTree) Insert(importPath string, sequence []string, s *SubC
 		subCommandTree = NewSubCommandTree(nil)
 		sct.SubCommands[subCommandName] = subCommandTree
 	}
-	subCommandTree.Insert(importPath, sequence[1:], s)
+	subCommandTree.Insert(importPath, packageName, sequence[1:], s)
 }
 
 type CommandTree struct {
@@ -38,11 +40,11 @@ type CommandTree struct {
 }
 
 type CommandsTree struct {
-	Commands map[string]*CommandTree
+	Commands    map[string]*CommandTree
 	PackagePath string
 }
 
-func (cst *CommandsTree) Insert(importPath string, cmdName string, subcommandSequence[]string, s *SubCommand) {
+func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcommandSequence []string, s *SubCommand) {
 	ct, ok := cst.Commands[cmdName]
 	if !ok {
 		ct = &CommandTree{
@@ -51,7 +53,7 @@ func (cst *CommandsTree) Insert(importPath string, cmdName string, subcommandSeq
 		}
 		cst.Commands[cmdName] = ct
 	}
-	ct.Insert(importPath, subcommandSequence, s)
+	ct.Insert(importPath, packageName, subcommandSequence, s)
 }
 
 func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
@@ -123,6 +125,7 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 		return err
 	}
 	importPath := path.Join(cmdTree.PackagePath, importPrefix)
+	packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {
 		case *ast.FuncDecl:
@@ -133,60 +136,26 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 			if !ok || len(subCommandSequence) == 0 {
 				continue
 			}
-			parentSubCommandSequence := subCommandSequence[:len(subCommandSequence)-1]
+
+			var params []*FunctionParameter
+			if s.Type.Params != nil {
+				for _, p := range s.Type.Params.List {
+					for _, name := range p.Names {
+						params = append(params, &FunctionParameter{
+							Name: name.Name,
+							Type: p.Type.(*ast.Ident).Name,
+						})
+					}
+				}
+			}
+
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
-			cmdTree.Insert(importPath, cmdName, parentSubCommandSequence, &SubCommand{
-				SubCommandFunctionName:       s.Name.Name,
-				SubCommandDescription: description,
-				SubCommandName: subCommandName,
-				ImportPath:             importPath,
-				SubCommandPackageName:  f.Name.Name,
-/*				FunctionParams: slices.Collect(func(yield func(*NameType) bool) {
-					if s.Type.Params == nil {
-						return
-					}
-					for _, each := range s.Type.Params.List {
-						for _, eachName := range each.Names {
-							if each.Names == nil {
-								if !yield(&NameType{
-									Type: GetType(each.Type),
-								}) {
-									return
-								}
-								continue
-							}
-							if !yield(&NameType{
-								Name: eachName.Name,
-								Type: GetType(each.Type),
-							}) {
-								return
-							}
-						}
-					}
-				}),
-				ReturnValues: slices.Collect(func(yield func(*NameType) bool) {
-					if s.Type.Results == nil {
-						return
-					}
-					for _, each := range s.Type.Results.List {
-						if each.Names == nil {
-							if !yield(&NameType{
-								Type: GetType(each.Type),
-							}) {
-								return
-							}
-							continue
-						}
-						for _, eachName := range each.Names {
-							if !yield(&NameType{
-								Name: eachName.Name,
-								Type: GetType(each.Type),
-							}) {
-								return
-							}
-						}
-					}
-				}),*/
+			parentSubCommandSequence := subCommandSequence[:len(subCommandSequence)-1]
+			cmdTree.Insert(importPath, packageName, cmdName, parentSubCommandSequence, &SubCommand{
+				SubCommandFunctionName: s.Name.Name,
+				SubCommandDescription:  description,
+				SubCommandName:         subCommandName,
+				Parameters:             params,
 			})
 		}
 	}
@@ -195,25 +164,27 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, ok bool) {
 	scanner := bufio.NewScanner(strings.NewReader(text))
+	var descriptionLines []string
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		line = strings.TrimPrefix(line, "//")
-		line = strings.TrimSpace(line)
-
-		if strings.HasPrefix(line, "go-subcommand:") {
-			line = strings.TrimPrefix(line, "go-subcommand:")
-			parts := strings.Fields(line)
-			if len(parts) > 0 {
-				cmdName = parts[0]
-				if len(parts) > 1 {
-					subCommandSequence = parts[1:]
+		line := scanner.Text()
+		if strings.Contains(line, "is a subcommand `") {
+			ok = true
+			start := strings.Index(line, "`")
+			end := strings.LastIndex(line, "`")
+			if start != -1 && end != -1 && start < end {
+				commandPart := line[start+1 : end]
+				parts := strings.Fields(commandPart)
+				if len(parts) > 0 {
+					cmdName = parts[0]
+					if len(parts) > 1 {
+						subCommandSequence = parts[1:]
+					}
 				}
-				ok = true
 			}
-		} else if strings.HasPrefix(line, "description:") {
-			description = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
+		} else {
+			descriptionLines = append(descriptionLines, line)
 		}
 	}
+	description = strings.TrimSpace(strings.Join(descriptionLines, "\n"))
 	return
 }
-
