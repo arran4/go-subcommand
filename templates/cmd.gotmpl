@@ -3,37 +3,30 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
-	"{{}}"
+	"{{.SubCommandPackageName}}"
 )
 
-var _ Cmd = (*{{.ParentCmdName}})(nil)
+var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
 
 type {{.SubCommandName}}Cmd struct {
-	*{{.ParentCmdName}}
+	*RootCmd
 	Flags *flag.FlagSet
 }
 
 func (c *{{.SubCommandName}}Cmd) Usage() {
-	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", c)
-	if err != nil {
-		log.Panicf("Error generating usage: %s", err)
-	}
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", c.Flags.Name())
+	c.Flags.PrintDefaults()
 }
 
 func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	err := c.Flags.Parse(args)
 	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+		return fmt.Errorf("flag parse error %s", err.Error())
 	}
-	{{ if .ReturnsErr }}
-	    return {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}()
-    {{ else }}
-        {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}()
-	    return
-    {{ end }}
+	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}()
+	return nil
 }
 
 func (c *RootCmd) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {

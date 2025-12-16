@@ -1,13 +1,16 @@
 package go_subcommand
 
 import (
+	"bufio"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
-	"maps"
+	"io/ioutil"
 	"path"
-	"slices"
+	"strings"
+
+	"golang.org/x/mod/modfile"
 )
 
 type SubCommandTree struct {
@@ -53,37 +56,64 @@ func (cst *CommandsTree) Insert(importPath string, cmdName string, subcommandSeq
 
 func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 	return &SubCommandTree{
-		SubCommands: map[string]*SubCommandTree{
-		},
+		SubCommands: map[string]*SubCommandTree{},
 		SubCommand:  subCommand,
 	}
 }
 
 func ParseGoFiles(importPrefix string, files ...io.Reader) (*DataModel, error) {
 	fset := token.NewFileSet()
-	var rootCommands = &CommandsTree{
-		Commands: map[string]*CommandTree{},
-		PackagePath: "", // TODO
+
+	goModBytes, err := ioutil.ReadFile("go.mod")
+	if err != nil {
+		return nil, err
+	}
+	modPath := modfile.ModulePath(goModBytes)
+
+	rootCommands := &CommandsTree{
+		Commands:    map[string]*CommandTree{},
+		PackagePath: modPath,
 	}
 	for _, file := range files {
 		if err := ParseGoFile(fset, importPrefix, file, rootCommands); err != nil {
 			return nil, err
 		}
 	}
+
 	d := &DataModel{
-		d.PackageName: , // Populate from go.mod
+		PackageName: "main",
 	}
-	var commands map[string]*Command
-	for _, subcommand := range subcommands {
-		if cmd, ok := commands[subcommand.MainCmdName]; ok {
-			subcommand.Command = cmd
-			cmd.SubCommands = append(cmd.SubCommands, subcommand)
-		} else {
-			commands[subcommand.MainCmdName] = subcommand.Command
-			subcommand.Command.DataModel = d
+
+	var commands []*Command
+	for cmdName, cmdTree := range rootCommands.Commands {
+		cmd := &Command{
+			DataModel:   d,
+			MainCmdName: cmdName,
 		}
+
+		var subCommands []*SubCommand
+		var collectSubCommands func(sct *SubCommandTree, parent *SubCommand)
+		collectSubCommands = func(sct *SubCommandTree, parent *SubCommand) {
+			if sct.SubCommand != nil {
+				sct.SubCommand.Command = cmd
+				sct.SubCommand.Parent = parent
+				subCommands = append(subCommands, sct.SubCommand)
+			}
+			for _, subTree := range sct.SubCommands {
+				currentParent := parent
+				if sct.SubCommand != nil {
+					currentParent = sct.SubCommand
+				}
+				collectSubCommands(subTree, currentParent)
+			}
+		}
+
+		collectSubCommands(cmdTree.SubCommandTree, nil)
+		cmd.SubCommands = subCommands
+		commands = append(commands, cmd)
 	}
-	d.Commands = slices.Collect(maps.Values(commands))
+	d.Commands = commands
+
 	return d, nil
 }
 
@@ -92,7 +122,7 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 	if err != nil {
 		return err
 	}
-	importPath := path.Join(importPrefix, f.Name.Name)
+	importPath := path.Join(cmdTree.PackagePath, importPrefix)
 	for _, s := range f.Decls {
 		switch s := s.(type) {
 		case *ast.FuncDecl:
@@ -100,13 +130,17 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 				continue
 			}
 			cmdName, subCommandSequence, description, ok := ParseSubCommandComments(s.Doc.Text())
-			if !ok {
+			if !ok || len(subCommandSequence) == 0 {
 				continue
 			}
-			cmdTree.Insert(importPath, cmdName, subCommandSequence[:len(subCommandSequence) - 2], &SubCommand{
+			parentSubCommandSequence := subCommandSequence[:len(subCommandSequence)-1]
+			subCommandName := subCommandSequence[len(subCommandSequence)-1]
+			cmdTree.Insert(importPath, cmdName, parentSubCommandSequence, &SubCommand{
 				SubCommandFunctionName:       s.Name.Name,
 				SubCommandDescription: description,
-				SubCommandName: subCommandSequence[len(subCommandSequence) - 1],
+				SubCommandName: subCommandName,
+				ImportPath:             importPath,
+				SubCommandPackageName:  f.Name.Name,
 /*				FunctionParams: slices.Collect(func(yield func(*NameType) bool) {
 					if s.Type.Params == nil {
 						return
@@ -160,6 +194,26 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 }
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, ok bool) {
-	// TODO
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimPrefix(line, "//")
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "go-subcommand:") {
+			line = strings.TrimPrefix(line, "go-subcommand:")
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				cmdName = parts[0]
+				if len(parts) > 1 {
+					subCommandSequence = parts[1:]
+				}
+				ok = true
+			}
+		} else if strings.HasPrefix(line, "description:") {
+			description = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
+		}
+	}
+	return
 }
 

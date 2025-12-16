@@ -7,9 +7,9 @@ import (
 
 func main() {
 	root := NewRootCmd()
-
-	root.Commands["version"] = root.NewversionCmd()
-
+	{{range .SubCommands}}
+	root.Commands["{{.SubCommandName | lower}}"] = root.New{{.SubCommandName}}Cmd()
+	{{end}}
 
 	if len(os.Args) < 2 {
 		root.Usage()

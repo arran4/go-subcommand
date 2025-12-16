@@ -17,6 +17,8 @@ type SubCommand struct {
 	SubCommandName         string
 	SubCommandFunctionName string
 	SubCommandDescription  string
+	ImportPath             string
+	SubCommandPackageName  string
 }
 
 func (sc *SubCommand) SubCommandSequence() string {
