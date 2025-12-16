@@ -9,6 +9,7 @@ type Command struct {
 	*DataModel
 	MainCmdName string
 	SubCommands []*SubCommand
+	PackagePath string
 }
 
 type FunctionParameter struct {
@@ -19,6 +20,7 @@ type FunctionParameter struct {
 type SubCommand struct {
 	*Command
 	Parent                 *SubCommand
+	SubCommands            []*SubCommand
 	SubCommandName         string
 	SubCommandFunctionName string
 	SubCommandDescription  string
@@ -42,7 +44,5 @@ func (sc *SubCommand) ParentCmdName() string {
 }
 
 func (sc *SubCommand) HasSubcommands() bool {
-	// This seems incorrect, it should check if any other subcommand has this one as a parent.
-	// This will be fixed later if needed.
-	return false
+	return len(sc.SubCommands) > 0
 }

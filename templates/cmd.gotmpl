@@ -5,36 +5,54 @@ import (
 	"fmt"
 	"os"
 
-	"{{.SubCommandPackageName}}"
+	"{{.ImportPath}}"
 )
 
 var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
 
 type {{.SubCommandName}}Cmd struct {
-	*RootCmd
+	{{if .Parent}}*{{.Parent.SubCommandName}}Cmd{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
+	{{range .Parameters}}
+	{{.Name}} {{.Type}}
+	{{end}}
+	SubCommands map[string]Cmd
 }
 
 func (c *{{.SubCommandName}}Cmd) Usage() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", c.Flags.Name())
-	c.Flags.PrintDefaults()
+	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", c)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
 }
 
 func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
+	if len(args) > 0 {
+		if cmd, ok := c.SubCommands[args[0]]; ok {
+			return cmd.Execute(args[1:])
+		}
+	}
 	err := c.Flags.Parse(args)
 	if err != nil {
-		return fmt.Errorf("flag parse error %s", err.Error())
+		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}()
+	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}})
 	return nil
 }
 
-func (c *RootCmd) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {
+func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {
 	set := flag.NewFlagSet("{{.SubCommandName | lower}}", flag.ContinueOnError)
 	v := &{{.SubCommandName}}Cmd{
-		RootCmd: c,
+		{{if .Parent}}{{.Parent.SubCommandName}}Cmd: c,{{else}}RootCmd: c,{{end}}
 		Flags:   set,
+		SubCommands: make(map[string]Cmd),
 	}
+	{{range .Parameters}}
+	set.{{.Type | title}}Var(&v.{{.Name}}, "{{.Name}}", "", "TODO: Add usage text")
+	{{end}}
 	set.Usage = v.Usage
+	{{range .SubCommands}}
+	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandName}}Cmd()
+	{{end}}
 	return v
 }

@@ -1,10 +1,12 @@
 package go_subcommand
 
 import (
+	"bytes"
 	"embed"
+	"fmt"
+	"go/format"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,29 +19,73 @@ var templatesFS embed.FS
 
 var templates *template.Template
 
-func Generate(dir string) {
+type closableFile struct {
+	io.Reader
+	io.Closer
+}
+
+func Generate(dir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
 		"lower": strings.ToLower,
+		"title": strings.Title,
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
 	if err != nil {
-		log.Panicf("Error parsing templates: %s", err)
+		return fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	dataModel := parse(dir)
+	dataModel, err := parse(dir)
+	if err != nil {
+		return err
+	}
+	if len(dataModel.Commands) == 0 {
+		return fmt.Errorf("no commands found in %s", dir)
+	}
 	for _, cmd := range dataModel.Commands {
 		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
-		generateFile(cmdOutDir, "main.go", "main.go.gotmpl", cmd)
-		generateFile(cmdOutDir, "root.go", "root.go.gotmpl", cmd)
+		if err := generateFile(cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
+		if err := generateFile(cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
+		cmdTemplatesDir := path.Join(cmdOutDir, "templates")
+		if err := generateFile(cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
 		for _, subCmd := range cmd.SubCommands {
-			generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd)
+			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, subCmd); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
-func parse(dir string) *DataModel {
+func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubCommand) error {
+	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
+		return err
+	}
+	if err := generateFile(cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
+		return err
+	}
+	for _, s := range subCmd.SubCommands {
+		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parse(dir string) (*DataModel, error) {
 	var files []io.Reader
+	var closers []io.Closer
+	defer func() {
+		for _, c := range closers {
+			c.Close()
+		}
+	}()
 	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -52,26 +98,37 @@ func parse(dir string) *DataModel {
 			return err
 		}
 		files = append(files, f)
+		closers = append(closers, f)
 		return nil
 	})
-	dataModel, err := ParseGoFiles(dir, files...)
-	if err != nil {
-		panic(err)
-	}
-	return dataModel
+	return ParseGoFiles(dir, files...)
 }
 
-func generateFile(dir, fileName, templateName string, data interface{}) {
+func generateFile(dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		log.Panicf("failed to create directory %s: %s", dir, err)
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 	filePath := path.Join(dir, fileName)
 	f, err := os.Create(filePath)
 	if err != nil {
-		log.Panicf("failed to create file %s: %s", filePath, err)
+		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
 	defer f.Close()
-	if err := templates.ExecuteTemplate(f, templateName, data); err != nil {
-		log.Panicf("failed to execute template %s: %s", templateName, err)
+
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
+		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
+	}
+
+	if formatCode {
+		formatted, err := format.Source(buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("failed to format generated code for %s: %w\n%s", fileName, err, buf.String())
+		}
+		_, err = f.Write(formatted)
+		return err
+	} else {
+		_, err = f.Write(buf.Bytes())
+		return err
 	}
 }

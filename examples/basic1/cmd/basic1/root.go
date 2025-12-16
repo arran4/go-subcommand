@@ -25,16 +25,16 @@ func (c *RootCmd) Usage() {
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
-		FlagSet: flag.NewFlagSet(name, flag.ExitOnError),
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]Cmd),
-		Version: version,
-		Commit:  commit,
-		Date:    date,
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	{{range .SubCommands}}
-	c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandName}}Cmd()
-	{{end}}
+
+	c.Commands["example1"] = c.Newexample1Cmd()
+
 	return c, nil
 }
 

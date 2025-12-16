@@ -2,11 +2,13 @@ package go_subcommand
 
 import (
 	"bufio"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
 	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 
@@ -66,7 +68,12 @@ func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 func ParseGoFiles(importPrefix string, files ...io.Reader) (*DataModel, error) {
 	fset := token.NewFileSet()
 
-	goModBytes, err := ioutil.ReadFile("go.mod")
+	goModPath := "go.mod"
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("go.mod not found in the root of the repository")
+	}
+
+	goModBytes, err := ioutil.ReadFile(goModPath)
 	if err != nil {
 		return nil, err
 	}
@@ -91,32 +98,33 @@ func ParseGoFiles(importPrefix string, files ...io.Reader) (*DataModel, error) {
 		cmd := &Command{
 			DataModel:   d,
 			MainCmdName: cmdName,
+			PackagePath: rootCommands.PackagePath,
 		}
 
 		var subCommands []*SubCommand
-		var collectSubCommands func(sct *SubCommandTree, parent *SubCommand)
-		collectSubCommands = func(sct *SubCommandTree, parent *SubCommand) {
-			if sct.SubCommand != nil {
-				sct.SubCommand.Command = cmd
-				sct.SubCommand.Parent = parent
-				subCommands = append(subCommands, sct.SubCommand)
-			}
-			for _, subTree := range sct.SubCommands {
-				currentParent := parent
-				if sct.SubCommand != nil {
-					currentParent = sct.SubCommand
-				}
-				collectSubCommands(subTree, currentParent)
-			}
-		}
-
-		collectSubCommands(cmdTree.SubCommandTree, nil)
+		subCommands = collectSubCommands(cmd, cmdTree.SubCommandTree, nil)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
 	d.Commands = commands
-
 	return d, nil
+}
+
+func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
+	var subCommands []*SubCommand
+	if sct.SubCommand != nil {
+		sct.SubCommand.Command = cmd
+		sct.SubCommand.Parent = parent
+		subCommands = append(subCommands, sct.SubCommand)
+		for _, subTree := range sct.SubCommands {
+			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, subTree, sct.SubCommand)...)
+		}
+	} else {
+		for _, subTree := range sct.SubCommands {
+			subCommands = append(subCommands, collectSubCommands(cmd, subTree, parent)...)
+		}
+	}
+	return subCommands
 }
 
 func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTree *CommandsTree) error {
