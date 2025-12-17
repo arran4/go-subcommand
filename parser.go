@@ -132,7 +132,6 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 	if err != nil {
 		return err
 	}
-	importPath := path.Join(cmdTree.PackagePath, importPrefix)
 	packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {

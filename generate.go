@@ -24,6 +24,8 @@ type closableFile struct {
 	io.Closer
 }
 
+// Generate is a subcommand `gosub generate`
+// Generates the subcommand code
 func Generate(dir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
