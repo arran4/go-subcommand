@@ -9,14 +9,24 @@ type Command struct {
 	*DataModel
 	MainCmdName string
 	SubCommands []*SubCommand
+	PackagePath string
+}
+
+type FunctionParameter struct {
+	Name string
+	Type string
 }
 
 type SubCommand struct {
 	*Command
 	Parent                 *SubCommand
+	SubCommands            []*SubCommand
 	SubCommandName         string
 	SubCommandFunctionName string
 	SubCommandDescription  string
+	ImportPath             string
+	SubCommandPackageName  string
+	Parameters             []*FunctionParameter
 }
 
 func (sc *SubCommand) SubCommandSequence() string {
