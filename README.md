@@ -123,7 +123,7 @@ go run ./cmd/my-app users create --username "JohnDoe" --email "john.doe@example.
 
 ## Contributing
 
-Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
+Contributions are welcome! If you find a bug or have a feature request, please (discuss features first) open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand). 
 
 ## License
 
