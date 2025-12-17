@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -158,7 +157,7 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
 			parentSubCommandSequence := subCommandSequence[:len(subCommandSequence)-1]
-			cmdTree.Insert(importPath, packageName, cmdName, parentSubCommandSequence, &SubCommand{
+			cmdTree.Insert(importPrefix, packageName, cmdName, parentSubCommandSequence, &SubCommand{
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandName:         subCommandName,
