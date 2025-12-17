@@ -41,7 +41,21 @@ func PrintHelloWorld() {
 
 ### 2. Add a `generate.go` File
 
-Create a file named `generate.go` in the same directory and add the following `go:generate` directive. This version will use `gosubc` if it's in your path, otherwise it will use `go run`:
+Create a file named `generate.go` in the same directory and add one of the following `go:generate` directives.
+
+**Option 1: Simple Command**
+
+This is the easiest option and is recommended for most use cases. It requires `gosubc` to be installed on your system.
+
+```go
+package main
+
+//go:generate gosubc generate
+```
+
+**Option 2: Conditional Command**
+
+This version is more robust and will use `gosubc` if it's in your `PATH`, otherwise it will fall back to using `go run`. This is useful for projects where contributors may not have `gosubc` installed.
 
 ```go
 package main
