@@ -24,7 +24,7 @@ type closableFile struct {
 	io.Closer
 }
 
-// Generate is a subcommand `gosub generate`
+// Generate is a subcommand `gosubc generate`
 // Generates the subcommand code
 func Generate(dir string) error {
 	var err error
@@ -81,6 +81,9 @@ func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubComma
 }
 
 func parse(dir string) (*DataModel, error) {
+	if dir == "" {
+		dir = "."
+	}
 	var files []File
 	var closers []io.Closer
 	defer func() {

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/arran4/go-subcommand/cmd/gosub/templates"
+	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
 
 type Cmd interface {

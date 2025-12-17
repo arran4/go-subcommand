@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Validate is a subcommand `gosub validate`
+// Validate is a subcommand `gosubc validate`
 // Validates the subcommand code
 func Validate(dir string) error {
 	_, err := parse(dir)
@@ -15,7 +15,7 @@ func Validate(dir string) error {
 	return nil
 }
 
-// List is a subcommand `gosub list`
+// List is a subcommand `gosubc list`
 // Lists the subcommands
 func List(dir string) error {
 	dataModel, err := parse(dir)

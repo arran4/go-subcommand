@@ -1,4 +1,4 @@
-Usage: gosub list <subcommand> [arguments]
+Usage: gosubc generate <subcommand> [arguments]
 
 Subcommands:
 

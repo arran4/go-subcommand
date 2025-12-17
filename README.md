@@ -6,15 +6,15 @@
 
 - **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
 - **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
-- **Automatic Code Generation:** `go-subcommand` parses your Go files and generates a complete, ready-to-use CLI.
+- **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
 - **Easy to Use:** Get started quickly with a simple `go generate` command.
 
 ## Installation
 
-To install `go-subcommand`, use `go get`:
+To install `gosubc`, use `go get`:
 
 ```bash
-go get github.com/arran4/go-subcommand/cmd/go-subcommand
+go get github.com/arran4/go-subcommand/cmd/gosubc
 ```
 
 ## Getting Started
@@ -46,7 +46,7 @@ Create a file named `generate.go` in the same directory and add the following `g
 ```go
 package main
 
-//go:generate go-subcommand
+//go:generate gosubc generate
 ```
 
 ### 3. Generate the CLI

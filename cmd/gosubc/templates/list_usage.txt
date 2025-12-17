@@ -1,4 +1,4 @@
-Usage: gosub validate <subcommand> [arguments]
+Usage: gosubc list <subcommand> [arguments]
 
 Subcommands:
 
