@@ -1,6 +1,6 @@
 # Go Subcommand
 
-**Go Subcommand** is a powerful and intuitive tool that simplifies the creation of command-line interfaces (CLIs) in Go. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
+**Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
 
 ## Key Features
 
@@ -14,7 +14,7 @@
 To install `go-subcommand`, use `go get`:
 
 ```bash
-go get github.com/arran4/go-subcommand/cmd/gosub-bootstrap
+go get github.com/arran4/go-subcommand/cmd/go-subcommand
 ```
 
 ## Getting Started
@@ -46,7 +46,7 @@ Create a file named `generate.go` in the same directory and add the following `g
 ```go
 package main
 
-//go:generate go run github.com/arran4/go-subcommand/cmd/gosub-bootstrap
+//go:generate go-subcommand
 ```
 
 ### 3. Generate the CLI
