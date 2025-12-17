@@ -1,0 +1,5 @@
+Usage: gosub generate <subcommand> [arguments]
+
+Subcommands:
+
+    version      Print version information

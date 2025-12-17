@@ -12,7 +12,7 @@ var (
 )
 
 func main() {
-	root, err := NewRoot("{{.MainCmdName}}", version, commit, date)
+	root, err := NewRoot("gosub", version, commit, date)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

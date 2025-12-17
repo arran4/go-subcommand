@@ -48,7 +48,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 		SubCommands: make(map[string]Cmd),
 	}
 	{{range .Parameters}}
-	set.{{.Type | title}}Var(&v.{{.Name}}, "{{.Name}}", "", "TODO: Add usage text")
+	set.{{.Type | title}}Var(&v.{{.Name}}, "{{.Name}}", {{if eq .Type "string"}}""{{else if eq .Type "int"}}0{{else if eq .Type "int64"}}0{{else if eq .Type "float64"}}0.0{{else if eq .Type "bool"}}false{{else}}0{{end}}, "TODO: Add usage text")
 	{{end}}
 	set.Usage = v.Usage
 	{{range .SubCommands}}

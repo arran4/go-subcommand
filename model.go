@@ -46,3 +46,7 @@ func (sc *SubCommand) ParentCmdName() string {
 func (sc *SubCommand) HasSubcommands() bool {
 	return len(sc.SubCommands) > 0
 }
+
+func (sc *SubCommand) ProgName() string {
+	return sc.Command.MainCmdName + " " + sc.SubCommandSequence()
+}

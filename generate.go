@@ -81,14 +81,14 @@ func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubComma
 }
 
 func parse(dir string) (*DataModel, error) {
-	var files []io.Reader
+	var files []File
 	var closers []io.Closer
 	defer func() {
 		for _, c := range closers {
 			c.Close()
 		}
 	}()
-	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -99,10 +99,16 @@ func parse(dir string) (*DataModel, error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, f)
+		files = append(files, File{
+			Path:   path,
+			Reader: f,
+		})
 		closers = append(closers, f)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	return ParseGoFiles(dir, files...)
 }
 

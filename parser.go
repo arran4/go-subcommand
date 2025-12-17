@@ -9,10 +9,17 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/mod/modfile"
 )
+
+type File struct {
+	Path   string
+	Reader io.Reader
+}
 
 type SubCommandTree struct {
 	SubCommands map[string]*SubCommandTree
@@ -64,12 +71,12 @@ func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 	}
 }
 
-func ParseGoFiles(importPrefix string, files ...io.Reader) (*DataModel, error) {
+func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 	fset := token.NewFileSet()
 
-	goModPath := "go.mod"
+	goModPath := filepath.Join(root, "go.mod")
 	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("go.mod not found in the root of the repository")
+		return nil, fmt.Errorf("go.mod not found in the root of the repository: %s", goModPath)
 	}
 
 	goModBytes, err := ioutil.ReadFile(goModPath)
@@ -83,7 +90,17 @@ func ParseGoFiles(importPrefix string, files ...io.Reader) (*DataModel, error) {
 		PackagePath: modPath,
 	}
 	for _, file := range files {
-		if err := ParseGoFile(fset, importPrefix, file, rootCommands); err != nil {
+		rel, err := filepath.Rel(root, file.Path)
+		if err != nil {
+			return nil, err
+		}
+		dir := filepath.Dir(rel)
+		if dir == "." {
+			dir = ""
+		}
+		importPath := path.Join(modPath, dir)
+
+		if err := ParseGoFile(fset, importPath, file.Reader, rootCommands); err != nil {
 			return nil, err
 		}
 	}
@@ -126,7 +143,7 @@ func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) [
 	return subCommands
 }
 
-func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTree *CommandsTree) error {
+func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree *CommandsTree) error {
 	f, err := parser.ParseFile(fset, "", file, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
 		return err
@@ -156,8 +173,7 @@ func ParseGoFile(fset *token.FileSet, importPrefix string, file io.Reader, cmdTr
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
-			parentSubCommandSequence := subCommandSequence[:len(subCommandSequence)-1]
-			cmdTree.Insert(importPrefix, packageName, cmdName, parentSubCommandSequence, &SubCommand{
+			cmdTree.Insert(importPath, packageName, cmdName, subCommandSequence, &SubCommand{
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandName:         subCommandName,
