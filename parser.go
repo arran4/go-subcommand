@@ -148,7 +148,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 	if err != nil {
 		return err
 	}
-	packageName := f.Name.Name
+	// packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {
 		case *ast.FuncDecl:
@@ -173,7 +173,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
-			cmdTree.Insert(importPath, packageName, cmdName, subCommandSequence, &SubCommand{
+			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &SubCommand{
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandName:         subCommandName,

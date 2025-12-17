@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arran4/go-subcommand"
+	go_subcommand "github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*validateCmd)(nil)
