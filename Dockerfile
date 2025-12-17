@@ -1,4 +1,9 @@
+FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY . .
+RUN go build -o /gosubc ./cmd/gosubc
 FROM scratch
-COPY gosubc /
+ENV PATH=/usr/bin
+COPY --from=build /gosubc /usr/bin
 USER 1001
-ENTRYPOINT ["/gosubc"]
+ENTRYPOINT ["/usr/bin/gosubc"]
