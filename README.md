@@ -11,10 +11,10 @@
 
 ## Installation
 
-To install `gosubc`, use `go get`:
+To install `gosubc`, use `go install`:
 
 ```bash
-go get github.com/arran4/go-subcommand/cmd/gosubc
+go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 ```
 
 ## Getting Started
@@ -41,12 +41,26 @@ func PrintHelloWorld() {
 
 ### 2. Add a `generate.go` File
 
-Create a file named `generate.go` in the same directory and add the following `go:generate` directive:
+Create a file named `generate.go` in the same directory and add one of the following `go:generate` directives.
+
+**Option 1: Simple Command**
+
+This is the easiest option and is recommended for most use cases. It requires `gosubc` to be installed on your system.
 
 ```go
 package main
 
 //go:generate gosubc generate
+```
+
+**Option 2: Conditional Command**
+
+This version is more robust and will use `gosubc` if it's in your `PATH`, otherwise it will fall back to using `go run`. This is useful for projects where contributors may not have `gosubc` installed.
+
+```go
+package main
+
+//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
 ```
 
 ### 3. Generate the CLI
