@@ -42,7 +42,7 @@ nfpms:
     formats:
       - deb
       - rpm
-      - pacman
+      - apk
     bindir: /usr/bin
 
 dockers:
