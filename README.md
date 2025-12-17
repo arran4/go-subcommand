@@ -2,6 +2,8 @@
 
 **Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
 
+**Note:** API still under development. 
+
 ## Key Features
 
 - **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
