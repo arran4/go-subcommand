@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+/basic1
+/complex
+/gosub
+/cmd/basic1/
+/cmd/complex/
