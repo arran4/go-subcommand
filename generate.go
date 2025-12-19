@@ -67,7 +67,7 @@ func Generate(dir string) error {
 }
 
 func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubCommand) error {
-	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
+	if err := generateFile(cmdOutDir, strings.ToLower(subCmd.SubCommandName)+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
 	if err := generateFile(cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
