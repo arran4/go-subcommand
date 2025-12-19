@@ -36,6 +36,7 @@ func executeUsage(out io.Writer, templateName string, data interface{}) error {
 	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
 }
 
+// RootCmd is the entry point for the CLI application.
 type RootCmd struct {
 	*flag.FlagSet
 	Commands map[string]Cmd
@@ -53,6 +54,7 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+// NewRoot creates a new RootCmd instance with version information.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),

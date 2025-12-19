@@ -12,6 +12,7 @@ import (
 
 var _ Cmd = (*validateCmd)(nil)
 
+// validateCmd implements the "validate" subcommand.
 type validateCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
@@ -44,6 +45,7 @@ func (c *validateCmd) Execute(args []string) error {
 	return nil
 }
 
+// NewvalidateCmd returns a new instance of validateCmd.
 func (c *RootCmd) NewvalidateCmd() *validateCmd {
 	set := flag.NewFlagSet("validate", flag.ContinueOnError)
 	v := &validateCmd{

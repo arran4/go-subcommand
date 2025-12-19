@@ -12,6 +12,7 @@ import (
 
 var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
 
+// {{.SubCommandName}}Cmd implements the "{{.SubCommandName | lower}}" subcommand.
 type {{.SubCommandName}}Cmd struct {
 	{{if .Parent}}*{{.Parent.SubCommandName}}Cmd{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
@@ -46,6 +47,7 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	return nil
 }
 
+// New{{.SubCommandName}}Cmd returns a new instance of {{.SubCommandName}}Cmd.
 func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {
 	set := flag.NewFlagSet("{{.SubCommandName | lower}}", flag.ContinueOnError)
 	v := &{{.SubCommandName}}Cmd{

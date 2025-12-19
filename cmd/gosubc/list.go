@@ -12,6 +12,7 @@ import (
 
 var _ Cmd = (*listCmd)(nil)
 
+// listCmd implements the "list" subcommand.
 type listCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
@@ -44,6 +45,7 @@ func (c *listCmd) Execute(args []string) error {
 	return nil
 }
 
+// NewlistCmd returns a new instance of listCmd.
 func (c *RootCmd) NewlistCmd() *listCmd {
 	set := flag.NewFlagSet("list", flag.ContinueOnError)
 	v := &listCmd{

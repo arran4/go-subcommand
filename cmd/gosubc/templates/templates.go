@@ -18,6 +18,7 @@ var (
 	templatesOnce     sync.Once
 )
 
+// GetTemplates returns the parsed templates for usage messages.
 func GetTemplates() *template.Template {
 	templatesOnce.Do(func() {
 		compiledTemplates = template.Must(template.New("").ParseFS(CLITemplatesFS, "*.txt"))

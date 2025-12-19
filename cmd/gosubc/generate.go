@@ -12,6 +12,7 @@ import (
 
 var _ Cmd = (*generateCmd)(nil)
 
+// generateCmd implements the "generate" subcommand.
 type generateCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
@@ -44,6 +45,7 @@ func (c *generateCmd) Execute(args []string) error {
 	return nil
 }
 
+// NewgenerateCmd returns a new instance of generateCmd.
 func (c *RootCmd) NewgenerateCmd() *generateCmd {
 	set := flag.NewFlagSet("generate", flag.ContinueOnError)
 	v := &generateCmd{
