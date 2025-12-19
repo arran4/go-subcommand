@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*generateCmd)(nil)
@@ -36,7 +36,9 @@ func (c *generateCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+
 	go_subcommand.Generate(c.dir)
+
 	return nil
 }
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"{{.ImportPath}}"
+	{{if .ImportPath}}"{{.ImportPath}}"{{end}}
 )
 
 var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
@@ -36,7 +36,11 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+	{{if .RunCode}}
+	{{.RunCode}}
+	{{else}}
 	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}})
+	{{end}}
 	return nil
 }
 

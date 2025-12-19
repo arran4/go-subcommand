@@ -67,6 +67,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.Commands["list"] = c.NewlistCmd()
 
+	c.Commands["version"] = c.NewVersionCmd()
+
+	c.Commands["help"] = c.NewHelpCmd()
+
+	c.Commands["usage"] = c.NewUsageCmd()
+
 	return c, nil
 }
 

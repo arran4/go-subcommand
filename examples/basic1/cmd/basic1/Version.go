@@ -4,29 +4,25 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*validateCmd)(nil)
+var _ Cmd = (*VersionCmd)(nil)
 
-type validateCmd struct {
+type VersionCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
-
-	dir string
 
 	SubCommands map[string]Cmd
 }
 
-func (c *validateCmd) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", c)
+func (c *VersionCmd) Usage() {
+	err := executeUsage(os.Stderr, "version_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *validateCmd) Execute(args []string) error {
+func (c *VersionCmd) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -37,20 +33,18 @@ func (c *validateCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 
-	go_subcommand.Validate(c.dir)
+	fmt.Printf("Version: %s\n", c.Version)
 
 	return nil
 }
 
-func (c *RootCmd) NewvalidateCmd() *validateCmd {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &validateCmd{
+func (c *RootCmd) NewVersionCmd() *VersionCmd {
+	set := flag.NewFlagSet("version", flag.ContinueOnError)
+	v := &VersionCmd{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
-
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
 
 	set.Usage = v.Usage
 

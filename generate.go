@@ -45,6 +45,7 @@ func Generate(dir string) error {
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 	for _, cmd := range dataModel.Commands {
+		injectStandardCommands(cmd)
 		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
 		if err := generateFile(cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
@@ -69,7 +70,7 @@ func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubComma
 	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
-	if err := generateFile(cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
+	if err := generateFile(cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
 	}
 	for _, s := range subCmd.SubCommands {
@@ -113,6 +114,47 @@ func parse(dir string) (*DataModel, error) {
 		return nil, err
 	}
 	return ParseGoFiles(dir, files...)
+}
+
+func injectStandardCommands(cmd *Command) {
+	hasVersion := false
+	hasHelp := false
+	hasUsage := false
+	for _, sc := range cmd.SubCommands {
+		switch strings.ToLower(sc.SubCommandName) {
+		case "version":
+			hasVersion = true
+		case "help":
+			hasHelp = true
+		case "usage":
+			hasUsage = true
+		}
+	}
+
+	if !hasVersion {
+		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
+			Command:               cmd,
+			SubCommandName:        "Version",
+			SubCommandDescription: "Prints the version",
+			RunCode:               `fmt.Printf("Version: %s\n", c.Version)`,
+		})
+	}
+	if !hasHelp {
+		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
+			Command:               cmd,
+			SubCommandName:        "Help",
+			SubCommandDescription: "Prints help",
+			RunCode:               `c.RootCmd.Usage()`,
+		})
+	}
+	if !hasUsage {
+		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
+			Command:               cmd,
+			SubCommandName:        "Usage",
+			SubCommandDescription: "Prints usage",
+			RunCode:               `c.RootCmd.Usage()`,
+		})
+	}
 }
 
 func generateFile(dir, fileName, templateName string, data interface{}, formatCode bool) error {
