@@ -6,30 +6,25 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*generateCmd)(nil)
+var _ Cmd = (*VersionCmd)(nil)
 
-// generateCmd implements the "generate" subcommand.
-type generateCmd struct {
+type VersionCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
-
-	dir string
 
 	SubCommands map[string]Cmd
 }
 
-func (c *generateCmd) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", c)
+func (c *VersionCmd) Usage() {
+	err := executeUsage(os.Stderr, "version_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *generateCmd) Execute(args []string) error {
+func (c *VersionCmd) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -40,21 +35,18 @@ func (c *generateCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 
-	go_subcommand.Generate(c.dir)
+	fmt.Printf("Version: %s\n", c.Version)
 
 	return nil
 }
 
-// NewgenerateCmd returns a new instance of generateCmd.
-func (c *RootCmd) NewgenerateCmd() *generateCmd {
-	set := flag.NewFlagSet("generate", flag.ContinueOnError)
-	v := &generateCmd{
+func (c *RootCmd) NewVersionCmd() *VersionCmd {
+	set := flag.NewFlagSet("version", flag.ContinueOnError)
+	v := &VersionCmd{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
-
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
 
 	set.Usage = v.Usage
 
