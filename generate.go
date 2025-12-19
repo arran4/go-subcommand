@@ -26,11 +26,13 @@ type closableFile struct {
 
 // Generate is a subcommand `gosubc generate`
 // Generates the subcommand code
-func Generate(dir string) error {
+func Generate(dir string, manDir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
-		"lower": strings.ToLower,
-		"title": strings.Title,
+		"lower":   strings.ToLower,
+		"title":   strings.Title,
+		"upper":   strings.ToUpper,
+		"replace": strings.ReplaceAll,
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
 	if err != nil {
@@ -57,7 +59,7 @@ func Generate(dir string) error {
 			return err
 		}
 		for _, subCmd := range cmd.SubCommands {
-			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, subCmd); err != nil {
+			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
 		}
@@ -65,15 +67,21 @@ func Generate(dir string) error {
 	return nil
 }
 
-func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubCommand) error {
+func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
 	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
 	if err := generateFile(cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
 	}
+	if manDir != "" {
+		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
+		if err := generateFile(manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
+			return err
+		}
+	}
 	for _, s := range subCmd.SubCommands {
-		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, s); err != nil {
+		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, s); err != nil {
 			return err
 		}
 	}

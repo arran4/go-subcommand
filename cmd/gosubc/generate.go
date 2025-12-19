@@ -14,7 +14,8 @@ type generateCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
 
-	dir string
+	dir    string
+	manDir string
 
 	SubCommands map[string]Cmd
 }
@@ -36,7 +37,7 @@ func (c *generateCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	go_subcommand.Generate(c.dir)
+	go_subcommand.Generate(c.dir, c.manDir)
 	return nil
 }
 
@@ -49,6 +50,7 @@ func (c *RootCmd) NewgenerateCmd() *generateCmd {
 	}
 
 	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
+	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in")
 
 	set.Usage = v.Usage
 

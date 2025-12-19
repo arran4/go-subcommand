@@ -1,0 +1,17 @@
+{{- $cmdName := (printf "%s-%s" .MainCmdName (replace .SubCommandSequence " " "-") | upper) -}}
+.TH {{ $cmdName }} 1 "Unknown" "Unknown" "User Commands"
+.SH NAME
+{{ .MainCmdName }}-{{ replace .SubCommandSequence " " "-" }} \- {{ .SubCommandDescription }}
+.SH SYNOPSIS
+.B {{ .MainCmdName }} {{ .SubCommandSequence }}
+{{ range .Parameters }}[{{ .Name }}] {{ end }}
+.SH DESCRIPTION
+{{ .SubCommandDescription }}
+{{ if .Parameters }}
+.SH OPTIONS
+{{ range .Parameters }}
+.TP
+.B {{ .Name }}
+{{ .Type }}
+{{ end }}
+{{ end }}
