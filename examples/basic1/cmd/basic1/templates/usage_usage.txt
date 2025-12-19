@@ -1,1 +1,0 @@
-Usage: basic1 Usage [arguments]
