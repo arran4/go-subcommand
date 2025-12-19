@@ -1,5 +1,3 @@
-Usage: gosubc generate <subcommand> [arguments]
+Usage: gosubc generate [arguments]
 
-Subcommands:
 
-    version      Print version information

@@ -6,27 +6,25 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/arran4/go-subcommand/examples/basic1"
 )
 
-var _ Cmd = (*example1Cmd)(nil)
+var _ Cmd = (*UsageCmd)(nil)
 
-type example1Cmd struct {
+type UsageCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
 
 	SubCommands map[string]Cmd
 }
 
-func (c *example1Cmd) Usage() {
-	err := executeUsage(os.Stderr, "example1_usage.txt", c)
+func (c *UsageCmd) Usage() {
+	err := executeUsage(os.Stderr, "usage_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *example1Cmd) Execute(args []string) error {
+func (c *UsageCmd) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -37,14 +35,14 @@ func (c *example1Cmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 
-	basic1.ExampleCmd1()
+	c.RootCmd.Usage()
 
 	return nil
 }
 
-func (c *RootCmd) Newexample1Cmd() *example1Cmd {
-	set := flag.NewFlagSet("example1", flag.ContinueOnError)
-	v := &example1Cmd{
+func (c *RootCmd) NewUsageCmd() *UsageCmd {
+	set := flag.NewFlagSet("usage", flag.ContinueOnError)
+	v := &UsageCmd{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
