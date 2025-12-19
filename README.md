@@ -75,6 +75,20 @@ go generate
 
 This will create a `cmd/my-app` directory containing the generated CLI code.
 
+#### Man Page Generation (Optional)
+
+You can optionally generate unix man pages by providing the `--man-dir` flag:
+
+```bash
+gosubc generate --man-dir path/to/man/pages
+```
+
+Or in your `go:generate` directive:
+
+```go
+//go:generate gosubc generate --man-dir ./man
+```
+
 ### 4. Run Your New CLI
 
 You can now run your newly generated CLI:

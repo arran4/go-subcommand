@@ -24,7 +24,6 @@ type SubCommand struct {
 	SubCommandName         string
 	SubCommandFunctionName string
 	SubCommandDescription  string
-	RunCode                string
 	ImportPath             string
 	SubCommandPackageName  string
 	Parameters             []*FunctionParameter

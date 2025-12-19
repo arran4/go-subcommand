@@ -1,1 +1,5 @@
-Usage: basic1 example1 [arguments]
+Usage: basic1 example1 <subcommand> [arguments]
+
+Subcommands:
+
+    version      Print version information

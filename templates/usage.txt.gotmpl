@@ -1,7 +1,7 @@
-Usage: {{.ProgName}}{{if .HasSubcommands}} <subcommand>{{end}} [arguments]
+Usage: {{.ProgName}} <subcommand> [arguments]
 
-{{if .HasSubcommands}}Subcommands:
+Subcommands:
 {{range .SubCommands}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{end}}
-{{end}}
+    version      Print version information

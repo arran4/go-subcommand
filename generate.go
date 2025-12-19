@@ -26,11 +26,14 @@ type closableFile struct {
 
 // Generate is a subcommand `gosubc generate`
 // Generates the subcommand code
-func Generate(dir string) error {
+// manDir is optional, if set it will generate man pages in that directory
+func Generate(dir string, manDir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
-		"lower": strings.ToLower,
-		"title": strings.Title,
+		"lower":   strings.ToLower,
+		"title":   strings.Title,
+		"upper":   strings.ToUpper,
+		"replace": strings.ReplaceAll,
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
 	if err != nil {
@@ -45,7 +48,6 @@ func Generate(dir string) error {
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 	for _, cmd := range dataModel.Commands {
-		injectStandardCommands(cmd)
 		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
 		if err := generateFile(cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
@@ -58,7 +60,7 @@ func Generate(dir string) error {
 			return err
 		}
 		for _, subCmd := range cmd.SubCommands {
-			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, subCmd); err != nil {
+			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
 		}
@@ -66,15 +68,21 @@ func Generate(dir string) error {
 	return nil
 }
 
-func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir string, subCmd *SubCommand) error {
-	if err := generateFile(cmdOutDir, strings.ToLower(subCmd.SubCommandName)+".go", "cmd.gotmpl", subCmd, true); err != nil {
+func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
+	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
-	if err := generateFile(cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
+	if err := generateFile(cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
+	}
+	if manDir != "" {
+		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
+		if err := generateFile(manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
+			return err
+		}
 	}
 	for _, s := range subCmd.SubCommands {
-		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, s); err != nil {
+		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, s); err != nil {
 			return err
 		}
 	}
@@ -114,47 +122,6 @@ func parse(dir string) (*DataModel, error) {
 		return nil, err
 	}
 	return ParseGoFiles(dir, files...)
-}
-
-func injectStandardCommands(cmd *Command) {
-	hasVersion := false
-	hasHelp := false
-	hasUsage := false
-	for _, sc := range cmd.SubCommands {
-		switch strings.ToLower(sc.SubCommandName) {
-		case "version":
-			hasVersion = true
-		case "help":
-			hasHelp = true
-		case "usage":
-			hasUsage = true
-		}
-	}
-
-	if !hasVersion {
-		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
-			Command:               cmd,
-			SubCommandName:        "Version",
-			SubCommandDescription: "Prints the version",
-			RunCode:               `fmt.Printf("Version: %s\n", c.Version)`,
-		})
-	}
-	if !hasHelp {
-		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
-			Command:               cmd,
-			SubCommandName:        "Help",
-			SubCommandDescription: "Prints help",
-			RunCode:               `c.RootCmd.Usage()`,
-		})
-	}
-	if !hasUsage {
-		cmd.SubCommands = append(cmd.SubCommands, &SubCommand{
-			Command:               cmd,
-			SubCommandName:        "Usage",
-			SubCommandDescription: "Prints usage",
-			RunCode:               `c.RootCmd.Usage()`,
-		})
-	}
 }
 
 func generateFile(dir, fileName, templateName string, data interface{}, formatCode bool) error {

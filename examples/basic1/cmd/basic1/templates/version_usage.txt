@@ -1,3 +1,7 @@
-Usage: basic1 Version [arguments]
+Usage: {{.ProgName}} <subcommand> [arguments]
 
-
+Subcommands:
+{{range .SubCommands}}
+    {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
+{{end}}
+    version      Print version information
