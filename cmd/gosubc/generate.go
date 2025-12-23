@@ -49,7 +49,7 @@ func (c *RootCmd) NewgenerateCmd() *generateCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
+	set.StringVar(&v.dir, "dir", "", "Directory to scan for subcommand definitions (defaults to current directory)")
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in")
 
 	set.Usage = v.Usage
