@@ -1,144 +1,143 @@
-# Go Subcommand
+# Go Subcommand (`gosubc`)
 
-**Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
+`go-subcommand` is a tool that generates a dependency-less CLI subcommand system for Go applications. It uses code comments to define the CLI structure, allowing you to keep your command definitions right next to the code that implements them.
 
-**Note:** API still under development. 
+**Status:** Pre-v1. The API and generated code structure may change.
 
-## Key Features
+## Features
 
-- **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
-- **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
-- **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
-- **Easy to Use:** Get started quickly with a simple `go generate` command.
+- **Zero Dependencies:** The generated code relies only on the Go standard library.
+- **Declarative:** Define your CLI commands using Go comments.
+- **Go Generate Friendly:** Integrate easily with `go generate` for automatic updates.
+- **Man Page Generation:** Automatically generate man pages for your CLI.
 
 ## Installation
 
-To install `gosubc`, use `go install`:
+Install the `gosubc` tool using `go install`:
 
 ```bash
 go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 ```
 
-## Getting Started
+## Usage
 
-Using `go-subcommand` is as easy as adding a comment to your Go functions.
+### 1. Define Commands
 
-### 1. Define Your Commands
+Add a comment to any exported function in your package that you want to be a subcommand. The format is:
 
-Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// MyFunction is a subcommand \`my-app my-command\``.
+```go
+// FunctionName is a subcommand `root-command [sub-command]...`
+```
 
-For example, create a file named `main.go`:
+Example:
 
 ```go
 package main
 
 import "fmt"
 
-// PrintHelloWorld is a subcommand `my-app hello`
-// This command prints "Hello, World!" to the console.
-func PrintHelloWorld() {
-    fmt.Println("Hello, World!")
+// Hello is a subcommand `myapp hello`
+func Hello() {
+	fmt.Println("Hello world")
+}
+
+// AddUser is a subcommand `myapp users add`
+func AddUser(name string, age int) {
+	fmt.Printf("Adding user %s, age %d\n", name, age)
 }
 ```
 
-### 2. Add a `generate.go` File
+Function arguments are automatically parsed as command-line flags. Supported types include `string`, `int`, `bool`, etc.
 
-Create a file named `generate.go` in the same directory and add one of the following `go:generate` directives.
+### 2. Configure `go:generate`
 
-**Option 1: Simple Command**
+Add a `generate.go` file (or add to an existing one) in your project root or `cmd` directory.
 
-This is the easiest option and is recommended for most use cases. It requires `gosubc` to be installed on your system.
-
-```go
-package main
-
-//go:generate gosubc generate
-```
-
-**Option 2: Conditional Command**
-
-This version is more robust and will use `gosubc` if it's in your `PATH`, otherwise it will fall back to using `go run`. This is useful for projects where contributors may not have `gosubc` installed.
+**Recommended (Robust):**
+This version uses the installed `gosubc` if available, or falls back to `go run` to ensure the tool is available.
 
 ```go
-package main
-
 //go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
 ```
 
-### 3. Generate the CLI
-
-Run `go generate` in your terminal:
-
-```bash
-go generate
-```
-
-This will create a `cmd/my-app` directory containing the generated CLI code.
-
-#### Man Page Generation (Optional)
-
-You can optionally generate unix man pages by providing the `--man-dir` flag:
-
-```bash
-gosubc generate --man-dir path/to/man/pages
-```
-
-Or in your `go:generate` directive:
+**Simple:**
 
 ```go
-//go:generate gosubc generate --man-dir ./man
+//go:generate gosubc generate
 ```
 
-### 4. Run Your New CLI
+### 3. Generate Code
 
-You can now run your newly generated CLI:
+Run `go generate` in your project root:
 
 ```bash
-go run ./cmd/my-app hello
+go generate ./...
 ```
 
-You should see the output:
+This will generate a `cmd` directory (or update it) with the necessary entry points and subcommand logic.
 
-```
-Hello, World!
-```
+### 4. Build and Run
 
-## Advanced Usage
-
-### Subcommands
-
-You can create nested subcommands by extending the command path in the comment:
-
-```go
-// PrintUser is a subcommand `my-app users get`
-// This command retrieves and prints a user's information.
-func PrintUser(username string) {
-    fmt.Printf("Fetching user: %s\n", username)
-}
-```
-
-### Parameters
-
-`go-subcommand` automatically maps function parameters to command-line arguments:
-
-```go
-// CreateUser is a subcommand `my-app users create`
-// Creates a new user with the given username and email.
-func CreateUser(username string, email string) {
-    fmt.Printf("Creating user %s with email %s\n", username, email)
-}
-```
-
-After running `go generate`, you can use the new command like this:
+Build your application using the generated main file:
 
 ```bash
-go run ./cmd/my-app users create --username "JohnDoe" --email "john.doe@example.com"
+go build -o myapp ./cmd/myapp
+./myapp hello
+./myapp users add --name "Alice" --age 30
 ```
+
+## CLI Reference
+
+The `gosubc` tool has three main commands: `generate`, `list`, and `validate`.
+
+### `generate`
+
+Generates the CLI code based on the found subcommand comments.
+
+```bash
+gosubc generate [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+- `--man-dir <path>`: Directory to generate Unix man pages in. If omitted, man pages are not generated.
+
+### `list`
+
+Lists all identified subcommands in the project.
+
+```bash
+gosubc list [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+
+### `validate`
+
+Validates the subcommand definitions to ensure there are no conflicts or errors.
+
+```bash
+gosubc validate [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+
+## Examples
+
+Check the `examples/` directory for working examples:
+
+- `examples/basic1`: A simple example with basic subcommands.
+- `examples/complex`: A more complex example showing nested commands and parameters.
 
 ## Contributing
 
-Contributions are welcome! If you find a bug or have a feature request, please (discuss features first) open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand). 
+Contributions are welcome! Please open an issue to discuss any changes before submitting a pull request.
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD 3-Clause License. See the [LICENSE](LICENSE) file for details.
