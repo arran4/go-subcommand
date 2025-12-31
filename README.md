@@ -2,7 +2,7 @@
 
 **Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
 
-**Note:** API still under development. 
+**Status:** Pre-v1. The API and generated code structure may change.
 
 ## Key Features
 
@@ -10,6 +10,7 @@
 - **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
 - **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
 - **Easy to Use:** Get started quickly with a simple `go generate` command.
+- **Man Page Generation:** Automatically generate Unix man pages for your CLI.
 
 ## Installation
 
@@ -135,10 +136,58 @@ After running `go generate`, you can use the new command like this:
 go run ./cmd/my-app users create --username "JohnDoe" --email "john.doe@example.com"
 ```
 
+## CLI Reference
+
+The `gosubc` tool provides several commands to help manage your CLI project.
+
+### `generate`
+
+Generates the CLI code based on the found subcommand comments.
+
+```bash
+gosubc generate [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+- `--man-dir <path>`: Directory to generate Unix man pages in. If omitted, man pages are not generated.
+
+### `list`
+
+Lists all identified subcommands in the project. This is useful for debugging or verifying that `gosubc` is correctly parsing your comments.
+
+```bash
+gosubc list [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+
+### `validate`
+
+Validates the subcommand definitions to ensure there are no conflicts or errors.
+
+```bash
+gosubc validate [flags]
+```
+
+**Flags:**
+
+- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
+
+## Examples
+
+Check the `examples/` directory for working examples:
+
+- [`examples/basic1`](examples/basic1): A simple example with basic subcommands.
+- [`examples/complex`](examples/complex): A more complex example showing nested commands and parameters.
+
 ## Contributing
 
-Contributions are welcome! If you find a bug or have a feature request, please (discuss features first) open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand). 
+Contributions are welcome! If you find a bug or have a feature request, please (discuss features first) open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
