@@ -1,9 +1,8 @@
 Usage: gosubc validate <subcommand> [arguments]
 
-Validates the subcommand code
 Subcommands:
 
     version      Print version information
 
 Flags:
--dir
+-dir32string32Directory to validate (default: .)

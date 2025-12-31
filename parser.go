@@ -320,6 +320,7 @@ func parseParamDetails(text string) ParsedParam {
 	clean = strings.TrimPrefix(clean, ":")
 	clean = strings.TrimPrefix(clean, ",")
 	clean = strings.TrimPrefix(clean, "(")
+	clean = strings.TrimPrefix(clean, ":") // Also remove leading colon if not handled
 	clean = strings.TrimSuffix(clean, ")")
 
 	clean = strings.ReplaceAll(clean, ",", " ")

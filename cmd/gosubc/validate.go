@@ -48,7 +48,7 @@ func (c *RootCmd) NewvalidateCmd() *validateCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
+	set.StringVar(&v.dir, "dir", ".", "Directory to validate")
 
 	set.Usage = v.Usage
 

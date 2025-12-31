@@ -5,5 +5,5 @@ Subcommands:
     version      Print version information
 
 Flags:
--dir Directory to generate code for (default: .)
--man-dir Directory to generate man pages in optional
+-dir32string32Directory to generate code for (default: .)
+-man-dir32string32Directory to generate man pages in optional
