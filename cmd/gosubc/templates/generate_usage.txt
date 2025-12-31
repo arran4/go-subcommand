@@ -1,17 +1,9 @@
 Usage: gosubc generate <subcommand> [arguments]
 
-
-Generates the subcommand code
-manDir is optional, if set it will generate man pages in that directory
-
-
 Subcommands:
 
     version      Print version information
 
-
 Flags:
-
-        -dir
-
-        -manDir
+-dir Directory to generate code for (default: .)
+-man-dir Directory to generate man pages in optional

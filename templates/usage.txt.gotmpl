@@ -1,25 +1,18 @@
 Usage: {{.ProgName}} <subcommand> [arguments]
 
-{{if .SubCommandExtendedHelp}}
+{{if .SubCommandExtendedHelp -}}
 {{.SubCommandExtendedHelp}}
-{{end}}
+{{end -}}
 
 Subcommands:
-{{range .SubCommands}}
+{{range .SubCommands -}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{end}}
     version      Print version information
 
-{{if .Parameters}}
+{{if .Parameters -}}
 Flags:
 {{range .Parameters}}
-    {{- if .FlagAliases}}
-        {{- range $i, $f := .FlagAliases}}{{if $i}}, {{end}}-{{$f}}{{end}}
-    {{- else}}
-        -{{.Name}}
-    {{- end}}
-    {{- " "}}
-    {{- .Description}}
-    {{- if .Default}} (default: {{.Default}}){{end}}
+  {{- if .FlagAliases}}{{range $i, $f := .FlagAliases}}{{if $i}}, {{end}}-{{$f}}{{end}}{{else}}-{{.Name}}{{end}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
 {{end}}
 {{end}}

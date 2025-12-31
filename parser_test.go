@@ -63,6 +63,24 @@ param force (-f, default: false) Force it`,
 			},
 			wantOk: true,
 		},
+		{
+			name: "Optional Separators",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` -- description
+that can handle missing tokens`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantExtendedHelp:       "that can handle missing tokens",
+			wantOk:                 true,
+		},
+		{
+			name: "No Separator",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` description`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantOk:                 true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

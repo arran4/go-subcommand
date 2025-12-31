@@ -24,9 +24,9 @@ type closableFile struct {
 	io.Closer
 }
 
-// Generate is a subcommand `gosubc generate`
-// Generates the subcommand code
-// manDir is optional, if set it will generate man pages in that directory
+// Generate is a subcommand `gosubc generate` that generates the subcommand code
+// param dir (default: ".") Directory to generate code for
+// param manDir (--man-dir) Directory to generate man pages in (optional)
 func Generate(dir string, manDir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
