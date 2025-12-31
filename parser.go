@@ -165,9 +165,23 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
+						typeName := ""
+						switch t := p.Type.(type) {
+						case *ast.Ident:
+							typeName = t.Name
+						case *ast.SelectorExpr:
+							if ident, ok := t.X.(*ast.Ident); ok {
+								typeName = fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name)
+							} else {
+								// Fallback or panic, for now panic to discover what's wrong
+								panic(fmt.Sprintf("Unsupported selector type: %T", t.X))
+							}
+						default:
+							panic(fmt.Sprintf("Unsupported type: %T", t))
+						}
 						fp := &FunctionParameter{
 							Name: name.Name,
-							Type: p.Type.(*ast.Ident).Name,
+							Type: typeName,
 						}
 						if parsed, ok := parsedParams[name.Name]; ok {
 							fp.FlagAliases = parsed.Flags
