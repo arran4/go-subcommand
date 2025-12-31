@@ -4,6 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	{{- $hasDuration := false }}
+	{{- range .Parameters }}
+	{{- if eq .Type "time.Duration" }}
+	{{- $hasDuration = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasDuration }}
+	"time"
+	{{- end }}
 
 	"{{.ImportPath}}"
 )
@@ -36,7 +45,19 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+	{{if .ReturnsError}}
+	{{- if gt .ReturnCount 1 }}
+	if _, err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}}); err != nil {
+		return err
+	}
+	{{- else }}
+	if err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}}); err != nil {
+		return err
+	}
+	{{- end }}
+	{{else}}
 	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}})
+	{{end}}
 	return nil
 }
 
@@ -56,6 +77,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 		{{- if not $default -}}
 			{{- if eq .Type "string" }}{{ $default = "\"\"" }}
 			{{- else if eq .Type "bool" }}{{ $default = "false" }}
+			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
 			{{- else }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
@@ -68,10 +90,26 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 		{{- end -}}
 		{{- if .FlagAliases -}}
 			{{- range .FlagAliases }}
+			{{- if eq $param.Type "time.Duration" }}
+	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		set.DurationVar(&v.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+	} else {
+		set.DurationVar(&v.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+	}
+			{{- else }}
 	set.{{$typeTitle}}Var(&v.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+			{{- end }}
 			{{- end -}}
 		{{- else -}}
+		{{- if eq $param.Type "time.Duration" }}
+	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		set.DurationVar(&v.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
+	} else {
+		set.DurationVar(&v.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
+	}
+		{{- else }}
 	set.{{$typeTitle}}Var(&v.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+		{{- end }}
 		{{- end }}
 	{{end}}
 	set.Usage = v.Usage

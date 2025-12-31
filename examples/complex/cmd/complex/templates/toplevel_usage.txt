@@ -1,0 +1,12 @@
+Usage: complex toplevel <subcommand> [arguments]
+
+This command demonstrates a top level command with a string argument.
+It prints the name provided.
+Subcommands:
+nested     A nested command
+
+    version      Print version information
+
+Flags:
+
+-name, -n string   The name to greet (default: world)

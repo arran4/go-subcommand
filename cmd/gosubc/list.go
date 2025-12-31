@@ -36,7 +36,11 @@ func (c *listCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	go_subcommand.List(c.dir)
+
+	if err := go_subcommand.List(c.dir); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -53,6 +53,8 @@ type SubCommand struct {
 	ImportPath             string
 	SubCommandPackageName  string
 	Parameters             []*FunctionParameter
+	ReturnsError           bool
+	ReturnCount            int
 }
 
 func (sc *SubCommand) SubCommandSequence() string {

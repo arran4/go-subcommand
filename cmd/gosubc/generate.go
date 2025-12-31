@@ -38,7 +38,11 @@ func (c *generateCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	go_subcommand.Generate(c.dir, c.manDir)
+
+	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
+		return err
+	}
+
 	return nil
 }
 

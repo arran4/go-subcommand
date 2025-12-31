@@ -36,7 +36,11 @@ func (c *validateCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	go_subcommand.Validate(c.dir)
+
+	if err := go_subcommand.Validate(c.dir); err != nil {
+		return err
+	}
+
 	return nil
 }
 

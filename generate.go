@@ -126,6 +126,22 @@ func parse(dir string) (*DataModel, error) {
 }
 
 func generateFile(dir, fileName, templateName string, data interface{}, formatCode bool) error {
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
+		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
+	}
+
+	var content []byte
+	if formatCode {
+		formatted, err := format.Source(buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("failed to format generated code for %s: %w\n%s", fileName, err, buf.String())
+		}
+		content = formatted
+	} else {
+		content = buf.Bytes()
+	}
+
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
@@ -136,20 +152,6 @@ func generateFile(dir, fileName, templateName string, data interface{}, formatCo
 	}
 	defer f.Close()
 
-	var buf bytes.Buffer
-	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
-		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
-	}
-
-	if formatCode {
-		formatted, err := format.Source(buf.Bytes())
-		if err != nil {
-			return fmt.Errorf("failed to format generated code for %s: %w\n%s", fileName, err, buf.String())
-		}
-		_, err = f.Write(formatted)
-		return err
-	} else {
-		_, err = f.Write(buf.Bytes())
-		return err
-	}
+	_, err = f.Write(content)
+	return err
 }
