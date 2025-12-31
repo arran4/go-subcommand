@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*validateCmd)(nil)
@@ -48,7 +48,7 @@ func (c *RootCmd) NewvalidateCmd() *validateCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
+	set.StringVar(&v.dir, "dir", ".", "Directory to validate")
 
 	set.Usage = v.Usage
 

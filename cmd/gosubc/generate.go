@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*generateCmd)(nil)
@@ -14,7 +14,8 @@ type generateCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
 
-	dir    string
+	dir string
+
 	manDir string
 
 	SubCommands map[string]Cmd
@@ -49,8 +50,9 @@ func (c *RootCmd) NewgenerateCmd() *generateCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", "", "TODO: Add usage text")
-	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in")
+	set.StringVar(&v.dir, "dir", ".", "Directory to generate code for")
+
+	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 
 	set.Usage = v.Usage
 

@@ -3,3 +3,7 @@ Usage: gosubc validate <subcommand> [arguments]
 Subcommands:
 
     version      Print version information
+
+Flags:
+
+-dir string   Directory to validate (default: .)

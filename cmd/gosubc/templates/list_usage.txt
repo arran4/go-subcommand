@@ -3,3 +3,7 @@ Usage: gosubc list <subcommand> [arguments]
 Subcommands:
 
     version      Print version information
+
+Flags:
+
+-dir string   Directory to list subcommands from (default: .)

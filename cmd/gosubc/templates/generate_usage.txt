@@ -3,3 +3,9 @@ Usage: gosubc generate <subcommand> [arguments]
 Subcommands:
 
     version      Print version information
+
+Flags:
+
+-dir string       Directory to generate code for (default: .)
+
+-man-dir string   Directory to generate man pages in optional

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -155,7 +156,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok || len(subCommandSequence) == 0 {
 				continue
 			}
@@ -164,10 +165,16 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
-						params = append(params, &FunctionParameter{
+						fp := &FunctionParameter{
 							Name: name.Name,
 							Type: p.Type.(*ast.Ident).Name,
-						})
+						}
+						if parsed, ok := parsedParams[name.Name]; ok {
+							fp.FlagAliases = parsed.Flags
+							fp.Default = parsed.Default
+							fp.Description = parsed.Description
+						}
+						params = append(params, fp)
 					}
 				}
 			}
@@ -176,6 +183,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &SubCommand{
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
+				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
 				Parameters:             params,
 			})
@@ -184,11 +192,33 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 	return nil
 }
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, ok bool) {
+type ParsedParam struct {
+	Flags       []string
+	Default     string
+	Description string
+}
+
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
+	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
-	var descriptionLines []string
+	var extendedHelpLines []string
+
+	inFlagsBlock := false
+
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := scanner.Text() // Keep whitespace for indentation check
+		trimmedLine := strings.TrimSpace(line)
+
+		if trimmedLine == "" {
+			if inFlagsBlock {
+				inFlagsBlock = false
+			}
+			if len(extendedHelpLines) > 0 {
+				extendedHelpLines = append(extendedHelpLines, "")
+			}
+			continue
+		}
+
 		if strings.Contains(line, "is a subcommand `") {
 			ok = true
 			start := strings.Index(line, "`")
@@ -202,11 +232,107 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 						subCommandSequence = parts[1:]
 					}
 				}
+
+				rest := strings.TrimSpace(line[end+1:])
+				if strings.HasPrefix(rest, "that ") {
+					description = strings.TrimPrefix(rest, "that ")
+				} else if strings.HasPrefix(rest, "-- ") {
+					description = strings.TrimPrefix(rest, "-- ")
+				} else if rest != "" {
+					description = rest
+				}
+			}
+			continue
+		}
+
+		if trimmedLine == "Flags:" {
+			inFlagsBlock = true
+			continue
+		}
+
+		parsedParam := false
+		var paramLine string
+
+		if inFlagsBlock {
+			// Check if line is indented (starts with space or tab)
+			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+				paramLine = trimmedLine
+				parsedParam = true
+			} else {
+				inFlagsBlock = false
+			}
+		}
+
+		if !parsedParam {
+			if strings.HasPrefix(trimmedLine, "flag ") {
+				paramLine = strings.TrimPrefix(trimmedLine, "flag ")
+				parsedParam = true
+			} else if strings.HasPrefix(trimmedLine, "param ") {
+				paramLine = strings.TrimPrefix(trimmedLine, "param ")
+				parsedParam = true
+			}
+		}
+
+		if parsedParam {
+			re := regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+			matches := re.FindStringSubmatch(paramLine)
+			if matches != nil {
+				name := matches[1]
+				rest := matches[2]
+				params[name] = parseParamDetails(rest)
+			} else {
+				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
-			descriptionLines = append(descriptionLines, line)
+			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
-	description = strings.TrimSpace(strings.Join(descriptionLines, "\n"))
+	extendedHelp = strings.TrimSpace(strings.Join(extendedHelpLines, "\n"))
 	return
+}
+
+func parseParamDetails(text string) ParsedParam {
+	var p ParsedParam
+
+	defaultRegex := regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
+	loc := defaultRegex.FindStringSubmatchIndex(text)
+	if loc != nil {
+		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
+	}
+
+	flagRegex := regexp.MustCompile(`-[\w-]+`)
+	flagMatches := flagRegex.FindAllString(text, -1)
+
+	seenFlags := make(map[string]bool)
+	for _, f := range flagMatches {
+		stripped := strings.TrimLeft(f, "-")
+		if !seenFlags[stripped] {
+			p.Flags = append(p.Flags, stripped)
+			seenFlags[stripped] = true
+		}
+	}
+
+	clean := flagRegex.ReplaceAllString(text, "")
+	clean = defaultRegex.ReplaceAllString(clean, "")
+
+	clean = strings.ReplaceAll(clean, "()", "")
+	clean = strings.TrimSpace(clean)
+	clean = strings.TrimPrefix(clean, ":")
+	clean = strings.TrimPrefix(clean, ",")
+	clean = strings.TrimPrefix(clean, "(")
+	clean = strings.TrimPrefix(clean, ":") // Also remove leading colon if not handled
+	clean = strings.TrimSuffix(clean, ")")
+
+	clean = strings.ReplaceAll(clean, ",", " ")
+	clean = strings.ReplaceAll(clean, "(", " ")
+	clean = strings.ReplaceAll(clean, ")", " ")
+	clean = strings.Join(strings.Fields(clean), " ")
+
+	p.Description = clean
+
+	if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
+		p.Default = strings.Trim(p.Default, "\"")
+	}
+
+	return p
 }

@@ -1,7 +1,19 @@
 Usage: {{.ProgName}} <subcommand> [arguments]
 
+{{if .SubCommandExtendedHelp -}}
+{{.SubCommandExtendedHelp}}
+{{end -}}
+
 Subcommands:
-{{range .SubCommands}}
+{{range .SubCommands -}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{end}}
     version      Print version information
+
+{{if .Parameters -}}
+Flags:
+{{$max := add .MaxFlagLength 2}}
+{{- range .Parameters}}
+{{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{end}}
+{{end}}
