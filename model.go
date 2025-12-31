@@ -1,5 +1,9 @@
 package go_subcommand
 
+import (
+	"strings"
+)
+
 type DataModel struct {
 	PackageName string
 	Commands    []*Command
@@ -18,6 +22,24 @@ type FunctionParameter struct {
 	FlagAliases []string
 	Default     string
 	Description string
+}
+
+func (p *FunctionParameter) FlagString() string {
+	var parts []string
+	if len(p.FlagAliases) > 0 {
+		for _, f := range p.FlagAliases {
+			parts = append(parts, "-"+f)
+		}
+	} else {
+		parts = append(parts, "-"+p.Name)
+	}
+	flags := strings.Join(parts, ", ")
+
+	typeStr := ""
+	if p.Type != "bool" {
+		typeStr = " " + p.Type
+	}
+	return flags + typeStr
 }
 
 type SubCommand struct {
@@ -53,4 +75,15 @@ func (sc *SubCommand) HasSubcommands() bool {
 
 func (sc *SubCommand) ProgName() string {
 	return sc.Command.MainCmdName + " " + sc.SubCommandSequence()
+}
+
+func (sc *SubCommand) MaxFlagLength() int {
+	max := 0
+	for _, p := range sc.Parameters {
+		l := len(p.FlagString())
+		if l > max {
+			max = l
+		}
+	}
+	return max
 }

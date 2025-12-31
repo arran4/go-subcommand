@@ -12,9 +12,8 @@ Subcommands:
 
 {{if .Parameters -}}
 Flags:
-{{range .Parameters}}
-  {{- if .FlagAliases}}{{range $i, $f := .FlagAliases}}{{if $i}},{{printf " "}}{{end}}-{{$f}}{{end}}{{else}}-{{.Name}}{{end}}
-  {{- if ne .Type "bool"}}{{printf " "}}{{.Type}}{{end}}
-  {{- printf " "}}{{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{$max := .MaxFlagLength}}
+{{- range .Parameters}}
+{{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
 {{end}}
 {{end}}

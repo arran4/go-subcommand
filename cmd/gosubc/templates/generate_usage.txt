@@ -1,9 +1,0 @@
-Usage: gosubc generate <subcommand> [arguments]
-
-Subcommands:
-
-    version      Print version information
-
-Flags:
--dir32string32Directory to generate code for (default: .)
--man-dir32string32Directory to generate man pages in optional
