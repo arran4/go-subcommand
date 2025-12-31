@@ -62,12 +62,16 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
 
+		{{- $typeTitle := $param.Type | title -}}
+		{{- if eq $param.Type "time.Duration" -}}
+			{{- $typeTitle = "Duration" -}}
+		{{- end -}}
 		{{- if .FlagAliases -}}
 			{{- range .FlagAliases }}
-	set.{{$param.Type | title}}Var(&v.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	set.{{$typeTitle}}Var(&v.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 			{{- end -}}
 		{{- else -}}
-	set.{{$param.Type | title}}Var(&v.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+	set.{{$typeTitle}}Var(&v.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}
 	{{end}}
 	set.Usage = v.Usage
