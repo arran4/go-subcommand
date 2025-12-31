@@ -1,8 +1,0 @@
-DEBUG: ParseGoFiles called with 29 files
-DEBUG: Processing file: cmd/basic1/example1.go (importPath: github.com/arran4/go-subcommand/cmd/basic1)
-DEBUG: Processing file: cmd/basic1/main.go (importPath: github.com/arran4/go-subcommand/cmd/basic1)
-DEBUG: Processing file: cmd/basic1/root.go (importPath: github.com/arran4/go-subcommand/cmd/basic1)
-DEBUG: Processing file: cmd/basic1/templates/templates.go (importPath: github.com/arran4/go-subcommand/cmd/basic1/templates)
-DEBUG: Processing file: cmd/complex/another.go (importPath: github.com/arran4/go-subcommand/cmd/complex)
-DEBUG: Processing file: cmd/complex/main.go (importPath: github.com/arran4/go-subcommand/cmd/complex)
-DEBUG: Processing file: cmd/complex/nested.go (importPath: github.com/arran4/go-subcommand/cmd/complex)

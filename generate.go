@@ -34,6 +34,7 @@ func Generate(dir string, manDir string) error {
 		"title":   strings.Title,
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
+		"add":     func(a, b int) int { return a + b },
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
 	if err != nil {
