@@ -1,5 +1,14 @@
 Usage: gosubc list <subcommand> [arguments]
 
+
+Lists the subcommands
+
+
 Subcommands:
 
     version      Print version information
+
+
+Flags:
+
+        -dir

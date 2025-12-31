@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*listCmd)(nil)

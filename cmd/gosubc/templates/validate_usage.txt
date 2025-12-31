@@ -1,5 +1,14 @@
 Usage: gosubc validate <subcommand> [arguments]
 
+
+Validates the subcommand code
+
+
 Subcommands:
 
     version      Print version information
+
+
+Flags:
+
+        -dir

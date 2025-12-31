@@ -13,8 +13,11 @@ type Command struct {
 }
 
 type FunctionParameter struct {
-	Name string
-	Type string
+	Name        string
+	Type        string
+	FlagAliases []string
+	Default     string
+	Description string
 }
 
 type SubCommand struct {
@@ -24,6 +27,7 @@ type SubCommand struct {
 	SubCommandName         string
 	SubCommandFunctionName string
 	SubCommandDescription  string
+	SubCommandExtendedHelp string
 	ImportPath             string
 	SubCommandPackageName  string
 	Parameters             []*FunctionParameter

@@ -7,12 +7,15 @@
 {{ range .Parameters }}[{{ .Name }}] {{ end }}
 .SH DESCRIPTION
 {{ .SubCommandDescription }}
+{{ if .SubCommandExtendedHelp }}
+{{ .SubCommandExtendedHelp }}
+{{ end }}
 {{ if .Parameters }}
 .SH OPTIONS
 {{ range .Parameters }}
 .TP
-.BR {{ .Name }}
-({{ .Type }})
+.BR {{ if .FlagAliases }}{{ range $i, $f := .FlagAliases }}{{if $i}}, {{end}}\-{{$f}}{{end}}{{else}}\-{{ .Name }}{{end}}
+({{ .Type }}) {{ .Description }} {{ if .Default }}(default: {{ .Default }}){{ end }}
 {{ end }}
 {{ end }}
 .SH SEE ALSO

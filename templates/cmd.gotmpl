@@ -48,7 +48,27 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 		SubCommands: make(map[string]Cmd),
 	}
 	{{range .Parameters}}
-	set.{{.Type | title}}Var(&v.{{.Name}}, "{{.Name}}", {{if eq .Type "string"}}""{{else if eq .Type "int"}}0{{else if eq .Type "int64"}}0{{else if eq .Type "float64"}}0.0{{else if eq .Type "bool"}}false{{else}}0{{end}}, "TODO: Add usage text")
+		{{- $param := . -}}
+		{{- $desc := .Description -}}
+		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
+
+		{{- $default := .Default -}}
+		{{- if not $default -}}
+			{{- if eq .Type "string" }}{{ $default = "\"\"" }}
+			{{- else if eq .Type "bool" }}{{ $default = "false" }}
+			{{- else }}{{ $default = "0" }}{{ end -}}
+		{{- else -}}
+			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+			{{- else }}{{ $default = .Default }}{{ end -}}
+		{{- end -}}
+
+		{{- if .FlagAliases }}
+			{{- range .FlagAliases }}
+	set.{{$param.Type | title}}Var(&v.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+			{{- end }}
+		{{- else }}
+	set.{{$param.Type | title}}Var(&v.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+		{{- end }}
 	{{end}}
 	set.Usage = v.Usage
 	{{range .SubCommands}}
