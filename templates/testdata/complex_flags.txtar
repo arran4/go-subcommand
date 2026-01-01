@@ -1,0 +1,42 @@
+-- input.json --
+{
+  "MainCmdName": "flagsapp",
+  "SubCommandName": "test",
+  "Parameters": [
+    {
+      "Name": "simple",
+      "Type": "string",
+      "Description": "Simple string flag"
+    },
+    {
+      "Name": "multi-alias",
+      "Type": "bool",
+      "FlagAliases": ["m", "mu", "multi"],
+      "Default": "true",
+      "Description": "Flag with multiple aliases"
+    },
+    {
+      "Name": "no-alias",
+      "Type": "int",
+      "Default": "10",
+      "Description": "Flag without aliases"
+    },
+    {
+      "Name": "duration",
+      "Type": "duration",
+      "Default": "1s",
+      "Description": "Duration flag"
+    }
+  ]
+}
+-- output.txt --
+Usage: flagsapp test <subcommand> [arguments]
+
+
+    version      Print version information
+
+Flags:
+    -simple string       Simple string flag
+    -m, -mu, -multi      Flag with multiple aliases (default: true)
+    -no-alias int        Flag without aliases (default: 10)
+    -duration duration   Duration flag (default: 1s)
