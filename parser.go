@@ -332,9 +332,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 }
 
 var (
-	reExplicitParam  = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-	reImplicitCheck  = regexp.MustCompile(`@\d+|\.\.\.`)
-	reImplicitFormat = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
+	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 )
 
 type ParsedParam struct {
@@ -428,7 +428,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		if parsedParam {
-			matches := reExplicitParam.FindStringSubmatch(paramLine)
+			matches := reParamDefinition.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
