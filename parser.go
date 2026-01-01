@@ -183,7 +183,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			subCommands = append(subCommands, syntheticCmd)
 			for _, childName := range subCommandNames {
 				subTree := sct.SubCommands[childName]
-				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
 			}
 		}
 	}
