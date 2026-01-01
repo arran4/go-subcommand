@@ -173,6 +173,35 @@ func MyCmd(
 	}
 }
 
+func TestIssue10_MissingFlagDescriptions(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd(
+	// Output format
+	output string,
+	// Number of columns
+	columns int,
+) {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+	if !strings.Contains(usageText, "Output format") {
+		t.Errorf("Issue #10: Usage text missing description 'Output format' for flag output. Got:\n%s", usageText)
+	}
+	if !strings.Contains(usageText, "Number of columns") {
+		t.Errorf("Issue #10: Usage text missing description 'Number of columns' for flag columns. Got:\n%s", usageText)
+	}
+}
+
 func TestIssue24_FlagNamingConvention(t *testing.T) {
 	src := `package main
 // MyCmd is a subcommand ` + "`app mycmd`" + `
