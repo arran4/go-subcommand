@@ -6,6 +6,35 @@ import (
 	"unicode"
 )
 
+// ToKebabCase converts a CamelCase string to kebab-case.
+// It handles acronyms (e.g. JSONData -> json-data) and simple cases (CamelCase -> camel-case).
+func ToKebabCase(s string) string {
+	var builder strings.Builder
+	runes := []rune(s)
+	length := len(runes)
+
+	for i := 0; i < length; i++ {
+		r := runes[i]
+		if i > 0 {
+			prev := runes[i-1]
+			if unicode.IsUpper(r) {
+				// Case 1: camelCase -> camel-case
+				// If previous is lower or digit, insert hyphen
+				if unicode.IsLower(prev) || unicode.IsDigit(prev) {
+					builder.WriteRune('-')
+				} else if unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1]) {
+					// Case 2: Acronyms. JSONData -> JSON-Data.
+					// Current is Upper (D). Prev is Upper (N). Next is Lower (a).
+					// Insert hyphen before D.
+					builder.WriteRune('-')
+				}
+			}
+		}
+		builder.WriteRune(unicode.ToLower(r))
+	}
+	return builder.String()
+}
+
 // SanitizeToIdentifier converts a string into a valid Go identifier (CamelCase).
 // It handles hyphens, underscores, and other non-alphanumeric characters by
 // acting as delimiters for CamelCasing.
