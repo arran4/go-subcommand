@@ -249,39 +249,136 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							Type:     typeName,
 							IsVarArg: isVarArg,
 						}
+						// Extract details from different sources with priority
+						// Priority:
+						// 1. Flags: block in main documentation (Top)
+						// 2. Inline comment (same line) (2nd)
+						// 3. Preceding comment (line before) (3rd)
+
+						var candidates []ParsedParam
+
+						// 1. Flags block
 						if parsed, ok := parsedParams[name.Name]; ok {
-							fp.FlagAliases = parsed.Flags
-							fp.Default = parsed.Default
-							fp.Description = parsed.Description
-							fp.IsPositional = parsed.IsPositional
-							fp.PositionalArgIndex = parsed.PositionalArgIndex
-							fp.VarArgMin = parsed.VarArgMin
-							fp.VarArgMax = parsed.VarArgMax
+							candidates = append(candidates, parsed)
 						} else {
-							var commentText string
-							if p.Doc != nil {
-								commentText = p.Doc.Text()
-							}
-							if p.Comment != nil {
-								commentText += p.Comment.Text()
-							}
-							if commentText == "" {
-								// Fallback: try to find a comment on the same line from global comments
-								pLine := fset.Position(p.Pos()).Line
-								for _, cg := range f.Comments {
-									cPos := fset.Position(cg.Pos())
-									if cPos.Line == pLine {
-										commentText = cg.Text()
-										break
-									}
+							candidates = append(candidates, ParsedParam{})
+						}
+
+						// 2. Inline comment
+						var inlineComment string
+						if p.Comment != nil {
+							inlineComment = p.Comment.Text()
+						}
+						if inlineComment == "" {
+							pLine := fset.Position(p.Pos()).Line
+							for _, cg := range f.Comments {
+								cPos := fset.Position(cg.Pos())
+								if cPos.Line == pLine {
+									inlineComment = cg.Text()
+									break
 								}
 							}
+						}
+						if inlineComment != "" {
+							candidates = append(candidates, parseParamDetails(inlineComment))
+						} else {
+							candidates = append(candidates, ParsedParam{})
+						}
 
-							if commentText != "" {
-								parsed := parseParamDetails(commentText)
-								fp.FlagAliases = parsed.Flags
-								fp.Default = parsed.Default
-								fp.Description = parsed.Description
+						// 3. Preceding comment
+						var precedingComment string
+						if p.Doc != nil {
+							precedingComment = p.Doc.Text()
+						}
+						// Fallback if p.Doc is empty: look for comment ending on line-1
+						if precedingComment == "" {
+							pLine := fset.Position(p.Pos()).Line
+							for _, cg := range f.Comments {
+								cEndLine := fset.Position(cg.End()).Line
+								if cEndLine == pLine-1 {
+									precedingComment = cg.Text()
+									break
+								}
+							}
+						}
+						if precedingComment != "" {
+							candidates = append(candidates, parseParamDetails(precedingComment))
+						} else {
+							candidates = append(candidates, ParsedParam{})
+						}
+
+						// Merge Logic based on Priority
+						// We fill the 'fp' fields starting from the lowest priority (Preceding)
+						// and overwrite with higher priority if the field is present/non-empty in the higher one.
+						// EXCEPT for Description: if higher priority has description, it overwrites.
+						// But what if higher priority has NO description? Then we keep the lower one.
+
+						// Start with Preceding (3rd)
+						if len(candidates) > 2 {
+							c := candidates[2]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+						}
+
+						// Merge Inline (2nd)
+						if len(candidates) > 1 {
+							c := candidates[1]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+						}
+
+						// Merge Flags Block (Top)
+						if len(candidates) > 0 {
+							c := candidates[0]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
 							}
 						}
 
