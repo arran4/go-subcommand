@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"golang.org/x/mod/modfile"
@@ -111,7 +112,13 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 	}
 
 	var commands []*Command
-	for cmdName, cmdTree := range rootCommands.Commands {
+	var cmdNames []string
+	for cmdName := range rootCommands.Commands {
+		cmdNames = append(cmdNames, cmdName)
+	}
+	sort.Strings(cmdNames)
+	for _, cmdName := range cmdNames {
+		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &Command{
 			DataModel:   d,
 			MainCmdName: cmdName,
@@ -129,15 +136,22 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 
 func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
 	var subCommands []*SubCommand
+	var subCommandNames []string
+	for name := range sct.SubCommands {
+		subCommandNames = append(subCommandNames, name)
+	}
+	sort.Strings(subCommandNames)
 	if sct.SubCommand != nil {
 		sct.SubCommand.Command = cmd
 		sct.SubCommand.Parent = parent
 		subCommands = append(subCommands, sct.SubCommand)
-		for _, subTree := range sct.SubCommands {
+		for _, name := range subCommandNames {
+			subTree := sct.SubCommands[name]
 			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, subTree, sct.SubCommand)...)
 		}
 	} else {
-		for _, subTree := range sct.SubCommands {
+		for _, name := range subCommandNames {
+			subTree := sct.SubCommands[name]
 			subCommands = append(subCommands, collectSubCommands(cmd, subTree, parent)...)
 		}
 	}
