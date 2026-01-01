@@ -61,7 +61,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 	{{range .SubCommands -}}
-	c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandName}}Cmd()
+	c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
 	{{end}}
 	return c, nil
 }
