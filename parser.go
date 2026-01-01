@@ -111,7 +111,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 		}
 		defer f.Close()
 
-		if err := ParseGoFile(fset, importPath, f, rootCommands); err != nil {
+		if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
 			return err
 		}
 		return nil
@@ -190,11 +190,17 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 	return subCommands
 }
 
-func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree *CommandsTree) error {
-	f, err := parser.ParseFile(fset, "", file, parser.SkipObjectResolution|parser.ParseComments)
+func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reader, cmdTree *CommandsTree) error {
+	src, err := io.ReadAll(file)
 	if err != nil {
 		return err
 	}
+	f, err := parser.ParseFile(fset, filename, src, parser.SkipObjectResolution|parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+
 	// packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {
@@ -252,11 +258,46 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 							fp.PositionalArgIndex = parsed.PositionalArgIndex
 							fp.VarArgMin = parsed.VarArgMin
 							fp.VarArgMax = parsed.VarArgMax
+						} else {
+							var commentText string
+							if p.Doc != nil {
+								commentText = p.Doc.Text()
+							}
+							if p.Comment != nil {
+								commentText += p.Comment.Text()
+							}
+							if commentText == "" {
+								// Fallback: try to find a comment on the same line from global comments
+								pLine := fset.Position(p.Pos()).Line
+								for _, cg := range f.Comments {
+									cPos := fset.Position(cg.Pos())
+									if cPos.Line == pLine {
+										commentText = cg.Text()
+										break
+									}
+								}
+							}
+
+							if commentText != "" {
+								parsed := parseParamDetails(commentText)
+								fp.FlagAliases = parsed.Flags
+								fp.Default = parsed.Default
+								fp.Description = parsed.Description
+							}
 						}
+
+						if len(fp.FlagAliases) == 0 {
+							kebab := toKebabCase(name.Name)
+							if kebab != name.Name {
+								fp.FlagAliases = []string{kebab}
+							}
+						}
+
 						// If detected as VarArg in signature, force IsPositional to true
 						if fp.IsVarArg {
 							fp.IsPositional = true
 						}
+
 						params = append(params, fp)
 					}
 				}
@@ -459,4 +500,13 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	return p
+}
+
+var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+
+func toKebabCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}-${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}-${2}")
+	return strings.ToLower(snake)
 }
