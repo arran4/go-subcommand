@@ -7,6 +7,3 @@
 -- output.txt --
 Usage: minapp base <subcommand> [arguments]
 
-Subcommands:
-    help         Print this help message
-    usage        Print this usage message
