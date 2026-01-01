@@ -35,6 +35,13 @@ func Generate(dir string, manDir string) error {
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },
+		"until": func(n int) []int {
+			res := make([]int, n)
+			for i := 0; i < n; i++ {
+				res[i] = i
+			}
+			return res
+		},
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
 	if err != nil {

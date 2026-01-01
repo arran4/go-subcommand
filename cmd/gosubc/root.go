@@ -60,12 +60,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-
-	c.Commands["generate"] = c.NewgenerateCmd()
-
 	c.Commands["validate"] = c.NewvalidateCmd()
-
 	c.Commands["list"] = c.NewlistCmd()
+	c.Commands["generate"] = c.NewgenerateCmd()
 
 	return c, nil
 }
