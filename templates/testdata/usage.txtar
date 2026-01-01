@@ -70,5 +70,6 @@ Subcommands:
     version      Print version information
 
 Flags:
+
     -v       Enable verbose (default: false)
     -c int   Count items (default: 0)

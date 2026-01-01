@@ -15,6 +15,7 @@ Subcommands:
 {{if .Parameters -}}
 Flags:
 {{$max := add .MaxFlagLength 2}}
-{{- range .Parameters}}    {{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
-{{end -}}
+{{- range .Parameters}}
+    {{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- end}}
 {{end -}}

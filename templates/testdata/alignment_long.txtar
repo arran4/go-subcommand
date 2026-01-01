@@ -47,6 +47,7 @@ Subcommands:
     version      Print version information
 
 Flags:
+
     -s             Short flag (default: false)
     -long string   This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
     -another int   Another flag (default: 42)
