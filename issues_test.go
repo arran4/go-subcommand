@@ -665,15 +665,17 @@ func Child() {}
 	usageText := string(content)
 
 	// Issue 11 & 42: Help and usage should work (be visible)
-	missing := []string{}
-	expected := []string{"help", "usage"}
-	for _, exp := range expected {
-		if !strings.Contains(usageText, exp) {
-			missing = append(missing, exp)
+	// UPDATE per user request: Functionless parent subcommands (like 'nested' here) are equiv to usage/help
+	// and thus don't need to output them as subcommands.
+	present := []string{}
+	unexpected := []string{"help", "usage"}
+	for _, unexp := range unexpected {
+		if strings.Contains(usageText, unexp+" ") {
+			present = append(present, unexp)
 		}
 	}
-	if len(missing) > 0 {
-		t.Errorf("Issue 11/42: Expected nested usage text to contain %v, but they were missing.\nContent:\n%s", missing, usageText)
+	if len(present) > 0 {
+		t.Errorf("Issue 11/42: Expected nested usage text to NOT contain %v (functionless parent), but they were present.\nContent:\n%s", present, usageText)
 	}
 
 	// Issue 41/52: Version should NOT be at nested level

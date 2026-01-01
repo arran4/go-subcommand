@@ -9,8 +9,10 @@ Subcommands:
 {{- range .SubCommands}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{- end}}
+{{- if .SubCommandFunctionName }}
     help         Print this help message
     usage        Print this usage message
+{{- end}}
 {{- end}}
 
 {{- if .Parameters }}
