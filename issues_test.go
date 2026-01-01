@@ -67,6 +67,27 @@ func ListHeads() {}
 	}
 }
 
+func TestIssue41_VersionInUsageForNestedCommand(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+	if strings.Contains(usageText, "version      Print version information") {
+		t.Errorf("Issue #41: Usage text contains 'version' command which is not implemented for nested commands")
+	}
+}
+
 func TestIssue19_HyphenatedCommands_Content(t *testing.T) {
 	TestIssue33_HyphenatedCommands_Content(t)
 }
