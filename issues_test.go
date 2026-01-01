@@ -605,6 +605,9 @@ func Nested() {}
 
 // Child is a subcommand ` + "`app nested child`" + `
 func Child() {}
+
+// GrandChild is a subcommand ` + "`app nested child grandchild`" + `
+func GrandChild() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
@@ -651,6 +654,9 @@ func TestIssue11_42_52_HelpUsageVersionVisibility(t *testing.T) {
 
 // Child is a subcommand ` + "`app nested child`" + `
 func Child() {}
+
+// GrandChild is a subcommand ` + "`app nested child grandchild`" + `
+func GrandChild() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
@@ -681,5 +687,29 @@ func Child() {}
 	// Issue 41/52: Version should NOT be at nested level
 	if strings.Contains(usageText, "version      Print version information") {
 		t.Errorf("Issue 41/52: Nested usage text contains 'version' command which should only be at top level.\nContent:\n%s", usageText)
+	}
+
+	// Check child command usage (explicitly functional)
+	childUsagePath := "cmd/app/templates/child_usage.txt"
+	childContent, ok := writer.Files[childUsagePath]
+	if !ok {
+		t.Fatalf("Child usage file not found: %s", childUsagePath)
+	}
+	childUsageText := string(childContent)
+
+	// Issue 11 & 42: Help and usage SHOULD be present for normal commands
+	missing := []string{}
+	expected := []string{"help", "usage"}
+	for _, exp := range expected {
+		if !strings.Contains(childUsageText, exp+" ") {
+			missing = append(missing, exp)
+		}
+	}
+	if len(missing) > 0 {
+		keys := []string{}
+		for k := range writer.Files {
+			keys = append(keys, k)
+		}
+		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
 	}
 }
