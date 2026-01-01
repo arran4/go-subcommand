@@ -183,7 +183,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			subCommands = append(subCommands, syntheticCmd)
 			for _, childName := range subCommandNames {
 				subTree := sct.SubCommands[childName]
-					syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
 			}
 		}
 	}
@@ -199,7 +199,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 	if err != nil {
 		return err
 	}
-
 
 	// packageName := f.Name.Name
 	for _, s := range f.Decls {

@@ -180,8 +180,9 @@ func TestIssue10_MissingFlagDescriptions(t *testing.T) {
 func MyCmd(
 	// Output format
 	output string,
-	// Number of columns
-	columns int,
+	columns int, // Number of columns
+	// Verbose mode
+	verbose bool, // Enable verbose logging
 ) {}
 `
 	fs := setupProject(t, src)
@@ -194,11 +195,24 @@ func MyCmd(
 	}
 
 	usageText := string(content)
+
+	// Check "Line before"
 	if !strings.Contains(usageText, "Output format") {
-		t.Errorf("Issue #10: Usage text missing description 'Output format' for flag output. Got:\n%s", usageText)
+		t.Errorf("Issue #10: Usage text missing description 'Output format' (line before) for flag output. Got:\n%s", usageText)
 	}
+
+	// Check "Same line after"
 	if !strings.Contains(usageText, "Number of columns") {
-		t.Errorf("Issue #10: Usage text missing description 'Number of columns' for flag columns. Got:\n%s", usageText)
+		t.Errorf("Issue #10: Usage text missing description 'Number of columns' (same line) for flag columns. Got:\n%s", usageText)
+	}
+
+	// Check "Both" (Line before + Same line after)
+	// Expectation: Both descriptions should be present, likely concatenated.
+	if !strings.Contains(usageText, "Verbose mode") {
+		t.Errorf("Issue #10: Usage text missing description 'Verbose mode' (line before) for flag verbose. Got:\n%s", usageText)
+	}
+	if !strings.Contains(usageText, "Enable verbose logging") {
+		t.Errorf("Issue #10: Usage text missing description 'Enable verbose logging' (same line) for flag verbose. Got:\n%s", usageText)
 	}
 }
 
