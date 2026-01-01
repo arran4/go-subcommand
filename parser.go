@@ -295,6 +295,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						if precedingComment == "" {
 							pLine := fset.Position(p.Pos()).Line
 							for _, cg := range f.Comments {
+								// If the comment is the function's doc, ignore it
+								if s.Doc != nil && cg.Pos() == s.Doc.Pos() {
+									continue
+								}
 								cEndLine := fset.Position(cg.End()).Line
 								if cEndLine == pLine-1 {
 									precedingComment = cg.Text()
