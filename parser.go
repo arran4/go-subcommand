@@ -200,7 +200,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 		return err
 	}
 
-
 	// packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {
@@ -287,7 +286,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if len(fp.FlagAliases) == 0 {
-							kebab := toKebabCase(name.Name)
+							kebab := ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
 							}
@@ -343,9 +342,15 @@ type ParsedParam struct {
 	Description        string
 	IsPositional       bool
 	PositionalArgIndex int
+	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
 }
+
+var (
+	reExplicitParam = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
+)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -429,6 +434,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 		if parsedParam {
 			matches := reParamDefinition.FindStringSubmatch(paramLine)
+			//matches := reExplicitParam.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
@@ -437,6 +443,22 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
+			// Attempt to parse as parameter if it looks like one, even without prefix/block
+			matches := reImplicitParam.FindStringSubmatch(trimmedLine)
+			if matches != nil {
+				name := matches[1]
+				rest := matches[2]
+				details := parseParamDetails(rest)
+
+				// We only accept it as a parameter if it has explicit configuration
+				// that strongly suggests it is a parameter definition.
+				// e.g. @N for positional, or defined flags, or default value.
+				// This prevents false positives from general description text.
+				if details.IsPositional || details.IsVarArg {
+					params[name] = details
+					continue
+				}
+			}
 			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
@@ -465,6 +487,7 @@ func parseParamDetails(text string) ParsedParam {
 	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
 	if varArgRangeMatches != nil {
+		p.IsVarArg = true
 		if varArgRangeMatches[3] == "..." {
 			// Just "..." means no specific limits parsed here
 		} else {
@@ -512,11 +535,3 @@ func parseParamDetails(text string) ParsedParam {
 	return p
 }
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-
-func toKebabCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}-${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}-${2}")
-	return strings.ToLower(snake)
-}
