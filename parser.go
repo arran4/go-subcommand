@@ -193,6 +193,18 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				}
 			}
 
+			returnsError := false
+			returnCount := 0
+			if s.Type.Results != nil {
+				returnCount = len(s.Type.Results.List)
+				for _, r := range s.Type.Results.List {
+					if ident, ok := r.Type.(*ast.Ident); ok && ident.Name == "error" {
+						returnsError = true
+						break
+					}
+				}
+			}
+
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
 			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &SubCommand{
 				SubCommandFunctionName: s.Name.Name,
@@ -200,6 +212,8 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
 				Parameters:             params,
+				ReturnsError:           returnsError,
+				ReturnCount:            returnCount,
 			})
 		}
 	}

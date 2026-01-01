@@ -7,28 +7,28 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/examples/complex"
 )
 
-var _ Cmd = (*validateCmd)(nil)
+var _ Cmd = (*toplevelCmd)(nil)
 
-type validateCmd struct {
+type toplevelCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
 
-	dir string
+	name string
 
 	SubCommands map[string]Cmd
 }
 
-func (c *validateCmd) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", c)
+func (c *toplevelCmd) Usage() {
+	err := executeUsage(os.Stderr, "toplevel_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *validateCmd) Execute(args []string) error {
+func (c *toplevelCmd) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -39,24 +39,25 @@ func (c *validateCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 
-	if err := go_subcommand.Validate(c.dir); err != nil {
-		return fmt.Errorf("validate failed: %w", err)
-	}
+	complex.TopLevel(c.name)
 
 	return nil
 }
 
-func (c *RootCmd) NewvalidateCmd() *validateCmd {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &validateCmd{
+func (c *RootCmd) NewtoplevelCmd() *toplevelCmd {
+	set := flag.NewFlagSet("toplevel", flag.ContinueOnError)
+	v := &toplevelCmd{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Directory to validate")
+	set.StringVar(&v.name, "name", "world", "The name to greet")
+	set.StringVar(&v.name, "n", "world", "The name to greet")
 
 	set.Usage = v.Usage
+
+	v.SubCommands["nested"] = v.NewnestedCmd()
 
 	return v
 }
