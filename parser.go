@@ -193,6 +193,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
 						typeName := ""
+						isVarArg := false
 						switch t := p.Type.(type) {
 						case *ast.Ident:
 							typeName = t.Name
@@ -203,17 +204,39 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 								// Fallback or panic, for now panic to discover what's wrong
 								panic(fmt.Sprintf("Unsupported selector type: %T", t.X))
 							}
+						case *ast.Ellipsis:
+							isVarArg = true
+							if ident, ok := t.Elt.(*ast.Ident); ok {
+								typeName = ident.Name
+							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
+								if ident, ok := sel.X.(*ast.Ident); ok {
+									typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
+								} else {
+									panic(fmt.Sprintf("Unsupported selector type in ellipsis: %T", sel.X))
+								}
+							} else {
+								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
+							}
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
 						}
 						fp := &FunctionParameter{
-							Name: name.Name,
-							Type: typeName,
+							Name:     name.Name,
+							Type:     typeName,
+							IsVarArg: isVarArg,
 						}
 						if parsed, ok := parsedParams[name.Name]; ok {
 							fp.FlagAliases = parsed.Flags
 							fp.Default = parsed.Default
 							fp.Description = parsed.Description
+							fp.IsPositional = parsed.IsPositional
+							fp.PositionalArgIndex = parsed.PositionalArgIndex
+							fp.VarArgMin = parsed.VarArgMin
+							fp.VarArgMax = parsed.VarArgMax
+						}
+						// If detected as VarArg in signature, force IsPositional to true
+						if fp.IsVarArg {
+							fp.IsPositional = true
 						}
 						params = append(params, fp)
 					}
@@ -248,9 +271,13 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 }
 
 type ParsedParam struct {
-	Flags       []string
-	Default     string
-	Description string
+	Flags              []string
+	Default            string
+	Description        string
+	IsPositional       bool
+	PositionalArgIndex int
+	VarArgMin          int
+	VarArgMax          int
 }
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
@@ -355,6 +382,26 @@ func parseParamDetails(text string) ParsedParam {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 	}
 
+	// Positional arguments: @1, @2, etc.
+	posArgRegex := regexp.MustCompile(`@(\d+)`)
+	posArgMatches := posArgRegex.FindStringSubmatch(text)
+	if posArgMatches != nil {
+		p.IsPositional = true
+		fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex)
+	}
+
+	// Varargs constraints: 1...3 or ...
+	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
+	if varArgRangeMatches != nil {
+		if varArgRangeMatches[3] == "..." {
+			// Just "..." means no specific limits parsed here
+		} else {
+			fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin)
+			fmt.Sscanf(varArgRangeMatches[2], "%d", &p.VarArgMax)
+		}
+	}
+
 	flagRegex := regexp.MustCompile(`-[\w-]+`)
 	flagMatches := flagRegex.FindAllString(text, -1)
 
@@ -369,6 +416,8 @@ func parseParamDetails(text string) ParsedParam {
 
 	clean := flagRegex.ReplaceAllString(text, "")
 	clean = defaultRegex.ReplaceAllString(clean, "")
+	clean = posArgRegex.ReplaceAllString(clean, "")
+	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)
