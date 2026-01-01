@@ -70,7 +70,8 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 		return fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	dataModel, err := parseFS(inputFS, dir)
+	// inputFS is already rooted at the source directory, so we parse from "."
+	dataModel, err := ParseGoFiles(inputFS, ".")
 	if err != nil {
 		return err
 	}
@@ -106,6 +107,13 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 		return err
 	}
 	if manDir != "" {
+		// Use filepath.Join to avoid unused import error if path/filepath is needed elsewhere or ensure usage
+		// But wait, we imported path/filepath and it was unused.
+		// "strings" and "fmt" are used here.
+		// We used "path" for paths.
+		// Let's use filepath somewhere if we keep the import, or remove it.
+		// But manFileName construction doesn't strictly need filepath.
+
 		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
 		if err := generateFile(writer, manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
 			return err
@@ -117,60 +125,6 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 		}
 	}
 	return nil
-}
-
-func parseFS(inputFS fs.FS, dir string) (*DataModel, error) {
-	if dir == "" {
-		dir = "."
-	}
-	// dir argument here is used for constructing ParseGoFiles relative paths logic if needed,
-	// but inputFS is already rooted?
-	// ParseGoFiles takes a dir string as "root" for package logic.
-
-	var files []File
-
-	// If inputFS is os.DirFS(dir), then "." is the root.
-	// We should walk "."
-	err := fs.WalkDir(inputFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		f, err := inputFS.Open(path)
-		if err != nil {
-			return err
-		}
-		// We don't need to close fs.File immediately if we read it?
-		// ParseGoFiles takes io.Reader.
-		// But we need to close it eventually.
-		// Let's read it into memory or keep it open.
-		// Since ParseGoFiles just reads it, we can keep it open and close later.
-		// However, ParseGoFiles signature is `ParseGoFiles(dir string, files ...File)`.
-		// File struct has io.Reader.
-
-		// To suffice "closers", we can read full content to bytes.Buffer which is safer for in-memory.
-		b, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return err
-		}
-
-		files = append(files, File{
-			Path:   filepath.Join(dir, path), // Maintain original path structure expected by parser
-			Reader: bytes.NewReader(b),
-		})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ParseGoFiles(dir, files...)
-}
-
-func parse(dir string) (*DataModel, error) {
-	return parseFS(os.DirFS(dir), dir)
 }
 
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
@@ -193,7 +147,14 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 	if err := writer.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
-	filePath := path.Join(dir, fileName)
+	// Use filepath.Join here instead of path.Join to justify import if needed,
+	// but path.Join is usually preferred for logic not tied to OS.
+	// However writer.WriteFile expects OS path.
+	// OSFileWriter uses os.WriteFile.
+	// So filepath.Join is better for cross-platform.
+	// The original code used path.Join.
+	// I will switch to filepath.Join for file paths to fix unused import AND correctness.
+	filePath := filepath.Join(dir, fileName)
 
 	if err := writer.WriteFile(filePath, content, 0644); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)

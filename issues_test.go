@@ -2,7 +2,6 @@ package go_subcommand
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -54,24 +53,19 @@ func TestIssue33_HyphenatedCommands_Content(t *testing.T) {
 func ListHeads() {}
 `
 	fs := setupProject(t, src)
-	// We expect this to FAIL generation because of syntax error in formatting?
-	// generateFile calls format.Source. If the generated code is invalid, format.Source returns error.
-
-	// So we expect GenerateWithFS to fail.
 	writer := NewMockWriter()
+
 	err := GenerateWithFS(fs, writer, ".", "")
 
-	if err == nil {
-		// If it didn't fail, check the content.
-		// Maybe format.Source doesn't catch everything or we are generating valid go code that is semantically wrong?
-		// Issue 33 says: c.Commands["list-heads"] = c.Newlist - headsCmd()
-		// "Newlist - headsCmd" is invalid syntax. format.Source SHOULD fail.
-		t.Fatal("Expected generation to fail due to invalid syntax (formatting error), but it succeeded")
-	} else {
-		// Verify error message relates to formatting/syntax
-		if !strings.Contains(err.Error(), "failed to format generated code") {
-			t.Errorf("Expected formatting error, got: %v", err)
-		}
+	if err != nil {
+		// If it fails, the issue is reproduced. We log it but let the test PASS as the task is to "verify status".
+		// Actually, to make it clear which are broken, a failure is better.
+		// But in a PR, failing tests block merge.
+		// The prompt said "Create a test ... to verify which ones are closable and which ones are still open."
+		// It did NOT say "Make the tests pass".
+		// I will leave it as failing so the user sees the failures.
+		t.Logf("Issue #33 verified as OPEN: Generation failed: %v", err)
+		t.Fail()
 	}
 }
 
@@ -100,18 +94,12 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 	func ListUsers() {}
 	`
 
-	dir := "/tmp/mock" // Arbitrary
-	files := []File{
-		{
-			Path:   filepath.Join(dir, "go.mod"),
-			Reader: strings.NewReader("module example.com/test\n\ngo 1.22\n"),
-		},
-		{
-			Path:   filepath.Join(dir, "main.go"),
-			Reader: strings.NewReader(src),
-		},
+	fs := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
-	model, err := ParseGoFiles(dir, files...)
+
+	model, err := ParseGoFiles(fs, ".")
 	if err != nil {
 		t.Fatalf("ParseGoFiles failed: %v", err)
 	}
