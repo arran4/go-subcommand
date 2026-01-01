@@ -139,7 +139,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 		}
 
 		var subCommands []*SubCommand
-		subCommands = collectSubCommands(cmd, cmdTree.SubCommandTree, nil)
+		subCommands = collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
@@ -147,7 +147,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	return d, nil
 }
 
-func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
+func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
 	var subCommands []*SubCommand
 	var subCommandNames []string
 	for name := range sct.SubCommands {
@@ -160,12 +160,27 @@ func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) [
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
 			subTree := sct.SubCommands[name]
-			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, subTree, sct.SubCommand)...)
+			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, name, subTree, sct.SubCommand)...)
 		}
 	} else {
-		for _, name := range subCommandNames {
-			subTree := sct.SubCommands[name]
-			subCommands = append(subCommands, collectSubCommands(cmd, subTree, parent)...)
+		if name == "" {
+			for _, name := range subCommandNames {
+				subTree := sct.SubCommands[name]
+				subCommands = append(subCommands, collectSubCommands(cmd, name, subTree, parent)...)
+			}
+		} else {
+			// Missing intermediate node -> Synthetic command
+			syntheticCmd := &SubCommand{
+				Command:                cmd,
+				Parent:                 parent,
+				SubCommandName:         name,
+				SubCommandFunctionName: "", // Empty to indicate synthetic
+			}
+			subCommands = append(subCommands, syntheticCmd)
+			for _, childName := range subCommandNames {
+				subTree := sct.SubCommands[childName]
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+			}
 		}
 	}
 	return subCommands

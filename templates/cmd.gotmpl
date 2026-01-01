@@ -47,6 +47,7 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+	{{if .SubCommandFunctionName}}
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
 	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}}); err != nil {
@@ -59,6 +60,9 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	{{- end }}
 	{{else}}
 	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}})
+	{{end}}
+	{{else}}
+	c.Usage()
 	{{end}}
 	return nil
 }
