@@ -17,11 +17,16 @@ type Command struct {
 }
 
 type FunctionParameter struct {
-	Name        string
-	Type        string
-	FlagAliases []string
-	Default     string
-	Description string
+	Name               string
+	Type               string
+	FlagAliases        []string
+	Default            string
+	Description        string
+	IsPositional       bool
+	PositionalArgIndex int
+	IsVarArg           bool
+	VarArgMin          int
+	VarArgMax          int
 }
 
 func (p *FunctionParameter) FlagString() string {
