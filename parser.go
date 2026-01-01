@@ -183,7 +183,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			subCommands = append(subCommands, syntheticCmd)
 			for _, childName := range subCommandNames {
 				subTree := sct.SubCommands[childName]
-				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
 			}
 		}
 	}
@@ -287,7 +287,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if len(fp.FlagAliases) == 0 {
-							kebab := toKebabCase(name.Name)
+							kebab := ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
 							}
@@ -502,11 +502,3 @@ func parseParamDetails(text string) ParsedParam {
 	return p
 }
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-
-func toKebabCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}-${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}-${2}")
-	return strings.ToLower(snake)
-}

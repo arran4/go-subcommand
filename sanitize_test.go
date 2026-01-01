@@ -37,6 +37,33 @@ func TestSanitizeToIdentifier(t *testing.T) {
 	}
 }
 
+func TestToKebabCase(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"JSONData", "json-data"},
+		{"MyJSONData", "my-json-data"},
+		{"HTTPServer", "http-server"},
+		{"SimpleTest", "simple-test"},
+		{"camelCase", "camel-case"},
+		{"UserID", "user-id"},
+		{"GetURLForThing", "get-url-for-thing"},
+		{"Simple", "simple"},
+		{"ALLCAPS", "allcaps"},
+		{"StartWithDigit123", "start-with-digit123"},
+		{"123StartWithDigit", "123-start-with-digit"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := ToKebabCase(tt.input); got != tt.want {
+				t.Errorf("ToKebabCase(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNameAllocator(t *testing.T) {
 	t.Run("ReserveNames", func(t *testing.T) {
 		na := NewNameAllocator()
