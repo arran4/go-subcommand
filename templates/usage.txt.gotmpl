@@ -11,11 +11,11 @@ Subcommands:
 {{- end}}
 {{- end}}
     version      Print version information
+{{- if .Parameters }}
 
-{{if .Parameters -}}
 Flags:
 {{$max := add .MaxFlagLength 2}}
 {{- range .Parameters}}
-    {{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
-{{- end}}
-{{end -}}
+    {{ .FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- end }}
+{{- end }}
