@@ -127,6 +127,14 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 	return nil
 }
 
+// Helper to bridge legacy parse calls
+func parse(dir string) (*DataModel, error) {
+	if dir == "" {
+		dir = "."
+	}
+	return ParseGoFiles(os.DirFS(dir), ".")
+}
+
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
