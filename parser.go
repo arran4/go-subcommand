@@ -76,15 +76,37 @@ func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 	fset := token.NewFileSet()
 
-	goModPath := filepath.Join(root, "go.mod")
-	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("go.mod not found in the root of the repository: %s", goModPath)
+	var goModBytes []byte
+	var err error
+	foundGoMod := false
+
+	// Try finding go.mod in provided files
+	for _, file := range files {
+		// Use file.Path to check if it's go.mod
+		// We expect file.Path to be relative to root or absolute.
+		// If provided via walk, it matches.
+		if filepath.Base(file.Path) == "go.mod" {
+			goModBytes, err = ioutil.ReadAll(file.Reader)
+			if err != nil {
+				return nil, err
+			}
+			foundGoMod = true
+			break
+		}
 	}
 
-	goModBytes, err := ioutil.ReadFile(goModPath)
-	if err != nil {
-		return nil, err
+	if !foundGoMod {
+		// Fallback to disk check
+		goModPath := filepath.Join(root, "go.mod")
+		if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("go.mod not found in the root of the repository: %s", goModPath)
+		}
+		goModBytes, err = ioutil.ReadFile(goModPath)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	modPath := modfile.ModulePath(goModBytes)
 
 	rootCommands := &CommandsTree{
@@ -92,15 +114,33 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 		PackagePath: modPath,
 	}
 	for _, file := range files {
+		if filepath.Base(file.Path) == "go.mod" {
+			continue
+		}
 		rel, err := filepath.Rel(root, file.Path)
 		if err != nil {
-			return nil, err
+			// If filepath.Rel fails (e.g. absolute vs relative), handle gracefully?
+			// For in-memory files, we might be flexible.
+			// Try to use file.Path directly if it looks relative?
+			rel = file.Path
 		}
 		dir := filepath.Dir(rel)
 		if dir == "." {
 			dir = ""
 		}
 		importPath := path.Join(modPath, dir)
+
+		// For ParseGoFile, we need to read the file again.
+		// BUT `file.Reader` might have been consumed if it was go.mod (but checked above).
+		// For .go files, we haven't read them yet in the loop.
+		// However, ParseGoFile takes io.Reader.
+		// If `files` were created with `ioutil.NopCloser(bytes.NewReader(b))`, we can read it.
+		// But if `files` came from `os.Open`, and we passed it to ParseGoFiles...
+		// In `parseFS`, we read to buffer, so it is safe.
+		// In `ParseGoFiles` signature, `files` contains Readers.
+		// Wait, `ioutil.ReadAll` consumes the reader.
+		// If we iterated `files` to find `go.mod` and read it, `file.Reader` is empty for that file.
+		// That's fine for `go.mod`, we don't parse it as Go file.
 
 		if err := ParseGoFile(fset, importPath, file.Reader, rootCommands); err != nil {
 			return nil, err
