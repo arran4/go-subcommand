@@ -321,3 +321,34 @@ func MyCmd(id int, name string, files ...string) {}
 		t.Errorf("Usage string incorrect format: %s", usage)
 	}
 }
+
+func TestIssue42_MissingHelpUsageInGuide(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// Check subcommand usage
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+	missing := []string{}
+	expected := []string{"help", "usage"}
+
+	for _, exp := range expected {
+		if !strings.Contains(usageText, exp) {
+			missing = append(missing, exp)
+		}
+	}
+
+	if len(missing) > 0 {
+		t.Errorf("Expected usage text to contain %v, but they were missing. Content:\n%s", missing, usageText)
+	}
+}
