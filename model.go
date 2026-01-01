@@ -22,9 +22,9 @@ type FunctionParameter struct {
 	FlagAliases        []string
 	Default            string
 	Description        string
-	IsVarArg           bool
 	IsPositional       bool
 	PositionalArgIndex int
+	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
 }
@@ -60,6 +60,7 @@ type SubCommand struct {
 	Parent                 *SubCommand
 	SubCommands            []*SubCommand
 	SubCommandName         string
+	SubCommandStructName   string
 	SubCommandFunctionName string
 	SubCommandDescription  string
 	SubCommandExtendedHelp string

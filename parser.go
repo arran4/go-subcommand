@@ -138,8 +138,9 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 			PackagePath: rootCommands.PackagePath,
 		}
 
+		allocator := NewNameAllocator()
 		var subCommands []*SubCommand
-		subCommands = collectSubCommands(cmd, cmdTree.SubCommandTree, nil)
+		subCommands = collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
@@ -147,7 +148,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	return d, nil
 }
 
-func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
+func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand, allocator *NameAllocator) []*SubCommand {
 	var subCommands []*SubCommand
 	var subCommandNames []string
 	for name := range sct.SubCommands {
@@ -157,15 +158,33 @@ func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) [
 	if sct.SubCommand != nil {
 		sct.SubCommand.Command = cmd
 		sct.SubCommand.Parent = parent
+		// Allocate unique struct name
+		sct.SubCommand.SubCommandStructName = allocator.Allocate(sct.SubCommand.SubCommandName)
+
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
 			subTree := sct.SubCommands[name]
-			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, subTree, sct.SubCommand)...)
+			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, name, subTree, sct.SubCommand, allocator)...)
 		}
 	} else {
-		for _, name := range subCommandNames {
-			subTree := sct.SubCommands[name]
-			subCommands = append(subCommands, collectSubCommands(cmd, subTree, parent)...)
+		if name == "" {
+			for _, name := range subCommandNames {
+				subTree := sct.SubCommands[name]
+				subCommands = append(subCommands, collectSubCommands(cmd, name, subTree, parent, allocator)...)
+			}
+		} else {
+			// Missing intermediate node -> Synthetic command
+			syntheticCmd := &SubCommand{
+				Command:                cmd,
+				Parent:                 parent,
+				SubCommandName:         name,
+				SubCommandFunctionName: "", // Empty to indicate synthetic
+			}
+			subCommands = append(subCommands, syntheticCmd)
+			for _, childName := range subCommandNames {
+				subTree := sct.SubCommands[childName]
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+			}
 		}
 	}
 	return subCommands
@@ -302,9 +321,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
-				Parameters:             params,
-				ReturnsError:           returnsError,
-				ReturnCount:            returnCount,
+				// SubCommandStructName is assigned during collection
+				Parameters:   params,
+				ReturnsError: returnsError,
+				ReturnCount:  returnCount,
 			})
 		}
 	}
@@ -423,6 +443,26 @@ func parseParamDetails(text string) ParsedParam {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 	}
 
+	// Positional arguments: @1, @2, etc.
+	posArgRegex := regexp.MustCompile(`@(\d+)`)
+	posArgMatches := posArgRegex.FindStringSubmatch(text)
+	if posArgMatches != nil {
+		p.IsPositional = true
+		fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex)
+	}
+
+	// Varargs constraints: 1...3 or ...
+	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
+	if varArgRangeMatches != nil {
+		if varArgRangeMatches[3] == "..." {
+			// Just "..." means no specific limits parsed here
+		} else {
+			fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin)
+			fmt.Sscanf(varArgRangeMatches[2], "%d", &p.VarArgMax)
+		}
+	}
+
 	flagRegex := regexp.MustCompile(`-[\w-]+`)
 	flagMatches := flagRegex.FindAllString(text, -1)
 
@@ -437,6 +477,8 @@ func parseParamDetails(text string) ParsedParam {
 
 	clean := flagRegex.ReplaceAllString(text, "")
 	clean = defaultRegex.ReplaceAllString(clean, "")
+	clean = posArgRegex.ReplaceAllString(clean, "")
+	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)

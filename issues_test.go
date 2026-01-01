@@ -67,6 +67,27 @@ func ListHeads() {}
 	}
 }
 
+func TestIssue41_VersionInUsageForNestedCommand(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+	if strings.Contains(usageText, "version      Print version information") {
+		t.Errorf("Issue #41: Usage text contains 'version' command which is not implemented for nested commands")
+	}
+}
+
 func TestIssue19_HyphenatedCommands_Content(t *testing.T) {
 	TestIssue33_HyphenatedCommands_Content(t)
 }
@@ -236,6 +257,7 @@ func MyCmd() {}
 func TestIssue17_NonFlaggedArguments(t *testing.T) {
 	src := `package main
 // MyCmd is a subcommand ` + "`app mycmd`" + `
+// filename: @1 Filename to process
 func MyCmd(filename string) {}
 `
 	fs := setupProject(t, src)
@@ -248,7 +270,85 @@ func MyCmd(filename string) {}
 	}
 
 	if strings.Contains(string(content), "-filename") {
-		t.Log("Argument 'filename' treated as flag. Issue #17 is about supporting it as positional arg.")
-		t.Fail()
+		t.Errorf("Argument 'filename' treated as flag. Should be positional.")
+	}
+	if !strings.Contains(string(content), "<filename>") {
+		t.Errorf("Usage string missing positional arg <filename>")
+	}
+}
+
+func TestPositionalArgsAndVarArgs(t *testing.T) {
+	src := `package main
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+// id: @1 ID
+// name: @2 Name
+// files: 1...3 Files
+func MyCmd(id int, name string, files ...string) {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	cmdPath := "cmd/app/mycmd.go"
+	content, ok := writer.Files[cmdPath]
+	if !ok {
+		t.Fatalf("Generated command file not found: %s", cmdPath)
+	}
+
+	code := string(content)
+	if strings.Contains(code, "set.IntVar(&v.id") {
+		t.Errorf("Positional arg 'id' generated as flag")
+	}
+	if !strings.Contains(code, "strconv.Atoi(argVal)") {
+		t.Errorf("Missing int conversion for positional arg")
+	}
+	if !strings.Contains(code, "expected at least 2 positional arguments") {
+		t.Errorf("Missing positional count validation")
+	}
+	if !strings.Contains(code, "expected at least 1 arguments for files") {
+		t.Errorf("Missing vararg min validation")
+	}
+	if !strings.Contains(code, "expected at most 3 arguments for files") {
+		t.Errorf("Missing vararg max validation")
+	}
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	usageContent, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+	usage := string(usageContent)
+	if !strings.Contains(usage, "<id> <name> [files...]") {
+		t.Errorf("Usage string incorrect format: %s", usage)
+	}
+}
+
+func TestIssue42_MissingHelpUsageInGuide(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// Check subcommand usage
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+	missing := []string{}
+	expected := []string{"help", "usage"}
+
+	for _, exp := range expected {
+		if !strings.Contains(usageText, exp) {
+			missing = append(missing, exp)
+		}
+	}
+
+	if len(missing) > 0 {
+		t.Errorf("Expected usage text to contain %v, but they were missing. Content:\n%s", missing, usageText)
 	}
 }

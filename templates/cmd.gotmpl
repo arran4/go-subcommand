@@ -7,10 +7,19 @@ import (
 	"fmt"
 	"os"
 	{{- $hasDuration := false }}
+	{{- $hasStrconv := false }}
 	{{- range .Parameters }}
 	{{- if eq .Type "time.Duration" }}
 	{{- $hasDuration = true }}
 	{{- end }}
+	{{- if .IsPositional }}
+		{{- if or (eq .Type "int") (eq .Type "bool") }}
+		{{- $hasStrconv = true }}
+		{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasStrconv }}
+	"strconv"
 	{{- end }}
 	{{- if $hasDuration }}
 	"time"
@@ -19,25 +28,29 @@ import (
 	"{{.ImportPath}}"
 )
 
-var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
+var _ Cmd = (*{{.SubCommandStructName}})(nil)
 
-type {{.SubCommandName}}Cmd struct {
-	{{if .Parent}}*{{.Parent.SubCommandName}}Cmd{{else}}*RootCmd{{end}}
+type {{.SubCommandStructName}} struct {
+	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
 	{{range .Parameters}}
+	{{- if .IsVarArg}}
+	{{.Name}} []{{.Type}}
+	{{- else}}
 	{{.Name}} {{.Type}}
+	{{- end}}
 	{{end}}
 	SubCommands map[string]Cmd
 }
 
-func (c *{{.SubCommandName}}Cmd) Usage() {
+func (c *{{.SubCommandStructName}}) Usage() {
 	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
+func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -47,30 +60,120 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+	remainingArgs := c.Flags.Args()
+	{{- $posArgs := 0 }}
+	{{- range .Parameters }}
+		{{- if .IsPositional }}
+			{{- if not .IsVarArg }}
+				{{- $posArgs = add $posArgs 1 }}
+			{{- end }}
+		{{- end }}
+	{{- end }}
+
+	{{- if gt $posArgs 0 }}
+	if len(remainingArgs) < {{$posArgs}} {
+		return fmt.Errorf("expected at least {{$posArgs}} positional arguments, got %d", len(remainingArgs))
+	}
+	{{- end }}
+
+	{{- range .Parameters }}
+		{{- if .IsPositional }}
+			{{- if .IsVarArg }}
+	// Handle vararg {{.Name}}
+	{
+		varArgStart := {{if .PositionalArgIndex}}{{.PositionalArgIndex | add -1}}{{else}}{{$posArgs}}{{end}}
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		{{- if gt .VarArgMin 0}}
+		if len(varArgs) < {{.VarArgMin}} {
+			return fmt.Errorf("expected at least {{.VarArgMin}} arguments for {{.Name}}, got %d", len(varArgs))
+		}
+		{{- end }}
+		{{- if gt .VarArgMax 0}}
+		if len(varArgs) > {{.VarArgMax}} {
+			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
+		}
+		{{- end }}
+		{{- if eq .Type "string" }}
+		c.{{.Name}} = varArgs
+		{{- else if eq .Type "int" }}
+		for _, arg := range varArgs {
+			i, err := strconv.Atoi(arg)
+			if err != nil {
+				return fmt.Errorf("invalid integer argument for {{.Name}}: %s", arg)
+			}
+			c.{{.Name}} = append(c.{{.Name}}, i)
+		}
+		{{- else }}
+		// TODO: Implement parsing for vararg type {{.Type}}
+		{{- end }}
+	}
+			{{- else }}
+	// Handle positional argument {{.Name}}
+	{
+		argIndex := {{.PositionalArgIndex | add -1}}
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			{{- if eq .Type "string" }}
+			c.{{.Name}} = argVal
+			{{- else if eq .Type "int" }}
+			i, err := strconv.Atoi(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid integer argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = i
+			{{- else if eq .Type "bool" }}
+			b, err := strconv.ParseBool(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid boolean argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = b
+			{{- else if eq .Type "time.Duration" }}
+			d, err := time.ParseDuration(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid duration argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = d
+			{{- else }}
+			// TODO: Implement parsing for positional type {{.Type}}
+			{{- end }}
+		}
+	}
+			{{- end }}
+		{{- end }}
+	{{- end }}
+
+	{{if .SubCommandFunctionName}}
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}}); err != nil {
+	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 	}
 	{{- else }}
-	if err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}}); err != nil {
+	if err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 	}
 	{{- end }}
 	{{else}}
-	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{end}})
+	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+	{{end}}
+	{{else}}
+	c.Usage()
 	{{end}}
 	return nil
 }
 
-func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {
+func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) New{{.SubCommandStructName}}() *{{.SubCommandStructName}} {
 	set := flag.NewFlagSet("{{.SubCommandName | lower}}", flag.ContinueOnError)
-	v := &{{.SubCommandName}}Cmd{
-		{{if .Parent}}{{.Parent.SubCommandName}}Cmd: c,{{else}}RootCmd: c,{{end}}
+	v := &{{.SubCommandStructName}}{
+		{{if .Parent}}{{.Parent.SubCommandStructName}}: c,{{else}}RootCmd: c,{{end}}
 		Flags:   set,
 		SubCommands: make(map[string]Cmd),
 	}
 	{{range .Parameters}}
+		{{- if not .IsPositional }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -113,10 +216,11 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 	set.{{$typeTitle}}Var(&v.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}
 		{{- end }}
+		{{- end }}
 	{{end}}
 	set.Usage = v.Usage
 	{{range .SubCommands}}
-	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandName}}Cmd()
+	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
 	{{end}}
 	return v
 }
