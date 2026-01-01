@@ -411,9 +411,6 @@ func Child() {}
 func TestIssue11_42_52_HelpUsageVersionVisibility(t *testing.T) {
 	src := `package main
 
-// Nested is a subcommand ` + "`app nested`" + `
-func Nested() {}
-
 // Child is a subcommand ` + "`app nested child`" + `
 func Child() {}
 `
