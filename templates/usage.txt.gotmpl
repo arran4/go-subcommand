@@ -6,9 +6,10 @@ Usage: {{.ProgName}} <subcommand> [arguments]
 
 {{if .SubCommands}}
 Subcommands:
-{{range .SubCommands}}    {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
-{{end -}}
-{{end}}
+{{- range .SubCommands}}
+    {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
+{{- end}}
+{{- end}}
     version      Print version information
 
 {{if .Parameters -}}

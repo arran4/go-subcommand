@@ -44,7 +44,6 @@ Usage: myapp align <subcommand> [arguments]
 Subcommands:
     short-cmd  Short description
     very-long-subcommand-name-here Description for long subcommand
-
     version      Print version information
 
 Flags:
