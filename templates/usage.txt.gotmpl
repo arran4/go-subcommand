@@ -6,14 +6,16 @@ Usage: {{.ProgName}} <subcommand> [arguments]
 
 {{if .SubCommands}}
 Subcommands:
-{{range .SubCommands}}    {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
-{{end -}}
-{{end}}
+{{- range .SubCommands}}
+    {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
+{{- end}}
+{{- end}}
     version      Print version information
+{{- if .Parameters }}
 
-{{if .Parameters -}}
 Flags:
 {{$max := add .MaxFlagLength 2}}
-{{- range .Parameters}}    {{.FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
-{{end}}
-{{end}}
+{{- range .Parameters}}
+    {{ .FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- end }}
+{{- end }}

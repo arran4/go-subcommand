@@ -1,0 +1,15 @@
+-- input.json --
+{
+  "MainCmdName": "helpapp",
+  "SubCommandName": "info",
+  "SubCommandDescription": "Info command",
+  "SubCommandExtendedHelp": "This is extended help text.\nIt spans multiple lines.\nUseful for providing examples or detailed usage instructions."
+}
+-- output.txt --
+Usage: helpapp info <subcommand> [arguments]
+
+This is extended help text.
+It spans multiple lines.
+Useful for providing examples or detailed usage instructions.
+
+    version      Print version information

@@ -1,0 +1,11 @@
+-- input.json --
+{
+  "MainCmdName": "minapp",
+  "SubCommandName": "base",
+  "SubCommandDescription": "Minimal command"
+}
+-- output.txt --
+Usage: minapp base <subcommand> [arguments]
+
+
+    version      Print version information

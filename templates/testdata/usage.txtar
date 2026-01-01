@@ -1,0 +1,75 @@
+-- input.json --
+{
+  "MainCmdName": "myapp",
+  "PackagePath": "",
+  "Parent": null,
+  "SubCommands": [
+    {
+      "Parent": null,
+      "SubCommands": null,
+      "SubCommandName": "bar",
+      "SubCommandFunctionName": "",
+      "SubCommandDescription": "Bar command",
+      "SubCommandExtendedHelp": "",
+      "ImportPath": "",
+      "SubCommandPackageName": "",
+      "Parameters": null,
+      "ReturnsError": false,
+      "ReturnCount": 0
+    },
+    {
+      "Parent": null,
+      "SubCommands": null,
+      "SubCommandName": "baz",
+      "SubCommandFunctionName": "",
+      "SubCommandDescription": "Baz command",
+      "SubCommandExtendedHelp": "",
+      "ImportPath": "",
+      "SubCommandPackageName": "",
+      "Parameters": null,
+      "ReturnsError": false,
+      "ReturnCount": 0
+    }
+  ],
+  "SubCommandName": "foo",
+  "SubCommandFunctionName": "",
+  "SubCommandDescription": "",
+  "SubCommandExtendedHelp": "",
+  "ImportPath": "",
+  "SubCommandPackageName": "",
+  "Parameters": [
+    {
+      "Name": "verbose",
+      "Type": "bool",
+      "FlagAliases": [
+        "v"
+      ],
+      "Default": "false",
+      "Description": "Enable verbose"
+    },
+    {
+      "Name": "count",
+      "Type": "int",
+      "FlagAliases": [
+        "c"
+      ],
+      "Default": "0",
+      "Description": "Count items"
+    }
+  ],
+  "ReturnsError": false,
+  "ReturnCount": 0
+}
+-- output.txt --
+Usage: myapp foo <subcommand> [arguments]
+
+
+Subcommands:
+    bar        Bar command
+    baz        Baz command
+    version      Print version information
+
+Flags:
+
+    -v       Enable verbose (default: false)
+    -c int   Count items (default: 0)
