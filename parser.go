@@ -138,8 +138,9 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 			PackagePath: rootCommands.PackagePath,
 		}
 
+		allocator := NewNameAllocator()
 		var subCommands []*SubCommand
-		subCommands = collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil)
+		subCommands = collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
@@ -147,7 +148,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	return d, nil
 }
 
-func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
+func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand, allocator *NameAllocator) []*SubCommand {
 	var subCommands []*SubCommand
 	var subCommandNames []string
 	for name := range sct.SubCommands {
@@ -157,16 +158,19 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 	if sct.SubCommand != nil {
 		sct.SubCommand.Command = cmd
 		sct.SubCommand.Parent = parent
+		// Allocate unique struct name
+		sct.SubCommand.SubCommandStructName = allocator.Allocate(sct.SubCommand.SubCommandName)
+
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
 			subTree := sct.SubCommands[name]
-			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, name, subTree, sct.SubCommand)...)
+			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, name, subTree, sct.SubCommand, allocator)...)
 		}
 	} else {
 		if name == "" {
 			for _, name := range subCommandNames {
 				subTree := sct.SubCommands[name]
-				subCommands = append(subCommands, collectSubCommands(cmd, name, subTree, parent)...)
+				subCommands = append(subCommands, collectSubCommands(cmd, name, subTree, parent, allocator)...)
 			}
 		} else {
 			// Missing intermediate node -> Synthetic command
@@ -253,9 +257,10 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
-				Parameters:             params,
-				ReturnsError:           returnsError,
-				ReturnCount:            returnCount,
+				// SubCommandStructName is assigned during collection
+				Parameters:   params,
+				ReturnsError: returnsError,
+				ReturnCount:  returnCount,
 			})
 		}
 	}
