@@ -11,4 +11,6 @@ Usage: helpapp info <subcommand> [arguments]
 This is extended help text.
 It spans multiple lines.
 Useful for providing examples or detailed usage instructions.
-
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message

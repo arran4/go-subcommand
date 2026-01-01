@@ -63,10 +63,11 @@
 -- output.txt --
 Usage: myapp foo <subcommand> [arguments]
 
-
 Subcommands:
     bar        Bar command
     baz        Baz command
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
 

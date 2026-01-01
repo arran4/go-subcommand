@@ -32,11 +32,13 @@
 -- output.txt --
 Usage: flagsapp test <subcommand> [arguments]
 
-
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
 
-    -simple string       Simple string flag
-    -m, -mu, -multi      Flag with multiple aliases (default: true)
-    -no-alias int        Flag without aliases (default: 10)
-    -duration duration   Duration flag (default: 1s)
+    --simple string       Simple string flag
+    -m, --mu, --multi     Flag with multiple aliases (default: true)
+    --no-alias int        Flag without aliases (default: 10)
+    --duration duration   Duration flag (default: 1s)
