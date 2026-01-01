@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // ToKebabCase converts a CamelCase string to kebab-case.
@@ -58,8 +59,11 @@ func SanitizeToIdentifier(name string) string {
 
 	res := builder.String()
 	// Ensure it doesn't start with a digit
-	if len(res) > 0 && unicode.IsDigit(rune(res[0])) {
-		res = "Cmd" + res
+	if len(res) > 0 {
+		r, _ := utf8.DecodeRuneInString(res)
+		if unicode.IsDigit(r) {
+			res = "Cmd" + res
+		}
 	}
 	// Fallback for empty result
 	if len(res) == 0 {
