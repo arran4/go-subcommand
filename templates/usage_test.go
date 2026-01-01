@@ -2,20 +2,25 @@ package templates
 
 import (
 	"bytes"
-	"os"
+	"embed"
+	"encoding/json"
 	"strings"
 	"testing"
 	"text/template"
 
 	"github.com/arran4/go-subcommand"
+	"golang.org/x/tools/txtar"
 )
 
+//go:embed usage.txt.gotmpl testdata/*.txtar
+var templatesFS embed.FS
+
 func TestUsageTemplate(t *testing.T) {
-	tmplBytes, err := os.ReadFile("usage.txt.gotmpl")
+	// Parse the template
+	tmplContent, err := templatesFS.ReadFile("usage.txt.gotmpl")
 	if err != nil {
-		t.Fatalf("failed to read template file: %v", err)
+		t.Fatalf("failed to read usage.txt.gotmpl: %v", err)
 	}
-	tmplStr := string(tmplBytes)
 
 	funcs := template.FuncMap{
 		"lower":   strings.ToLower,
@@ -25,50 +30,60 @@ func TestUsageTemplate(t *testing.T) {
 		"add":     func(a, b int) int { return a + b },
 	}
 
-	tmpl, err := template.New("usage").Funcs(funcs).Parse(tmplStr)
+	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
 
-	cmd := &go_subcommand.Command{
-		MainCmdName: "myapp",
-	}
-	subCmd := &go_subcommand.SubCommand{
-		Command:        cmd,
-		SubCommandName: "foo",
-		Parameters: []*go_subcommand.FunctionParameter{
-			{Name: "verbose", Type: "bool", Description: "Enable verbose", Default: "false", FlagAliases: []string{"v"}},
-			{Name: "count", Type: "int", Description: "Count items", Default: "0", FlagAliases: []string{"c"}},
-		},
-		SubCommands: []*go_subcommand.SubCommand{
-			{SubCommandName: "bar", SubCommandDescription: "Bar command"},
-			{SubCommandName: "baz", SubCommandDescription: "Baz command"},
-		},
+	// Iterate over txtar files
+	dirEntries, err := templatesFS.ReadDir("testdata")
+	if err != nil {
+		t.Fatalf("failed to read testdata dir: %v", err)
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, subCmd); err != nil {
-		t.Fatalf("failed to execute template: %v", err)
-	}
+	for _, entry := range dirEntries {
+		if !strings.HasSuffix(entry.Name(), ".txtar") {
+			continue
+		}
+		t.Run(entry.Name(), func(t *testing.T) {
+			content, err := templatesFS.ReadFile("testdata/" + entry.Name())
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", entry.Name(), err)
+			}
 
-	output := buf.String()
+			archive := txtar.Parse(content)
+			var inputData []byte
+			var expectedOutput []byte
 
-	// Check Subcommands section
-	// Expecting indentation 4 spaces, no empty lines between items.
-	// Empty line before version is acceptable/expected.
-	expectedSubcommands := `Subcommands:
-    bar        Bar command
-    baz        Baz command`
+			for _, f := range archive.Files {
+				if f.Name == "input.json" {
+					inputData = f.Data
+				} else if f.Name == "output.txt" {
+					expectedOutput = f.Data
+				}
+			}
 
-	if !strings.Contains(output, expectedSubcommands) {
-		t.Errorf("Expected subcommands section:\n%q\nGot:\n%q", expectedSubcommands, output)
-	}
+			if inputData == nil {
+				t.Fatalf("input.json not found in %s", entry.Name())
+			}
 
-	expectedFlags := `Flags:
-    -v       Enable verbose (default: false)
-    -c int   Count items (default: 0)`
+			var subCmd go_subcommand.SubCommand
+			if err := json.Unmarshal(inputData, &subCmd); err != nil {
+				t.Fatalf("failed to unmarshal input.json: %v", err)
+			}
 
-	if !strings.Contains(output, expectedFlags) {
-		t.Errorf("Expected flags section:\n%q\nGot:\n%q", expectedFlags, output)
+			// When unmarshalling, the embedded pointer *Command might be created but empty if no fields for it were in JSON?
+			// But we saw MainCmdName in JSON.
+			// Let's verify `ProgName()` uses it correctly.
+
+			var buf bytes.Buffer
+			if err := tmpl.Execute(&buf, &subCmd); err != nil {
+				t.Fatalf("failed to execute template: %v", err)
+			}
+
+			if !bytes.Equal(buf.Bytes(), expectedOutput) {
+				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
+			}
+		})
 	}
 }
