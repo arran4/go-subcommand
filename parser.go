@@ -183,7 +183,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			subCommands = append(subCommands, syntheticCmd)
 			for _, childName := range subCommandNames {
 				subTree := sct.SubCommands[childName]
-				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
 			}
 		}
 	}
@@ -331,6 +331,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 	return nil
 }
 
+var (
+	reExplicitParam  = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitCheck  = regexp.MustCompile(`@\d+|\.\.\.`)
+	reImplicitFormat = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+)
+
 type ParsedParam struct {
 	Flags              []string
 	Default            string
@@ -413,12 +419,16 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			} else if strings.HasPrefix(trimmedLine, "param ") {
 				paramLine = strings.TrimPrefix(trimmedLine, "param ")
 				parsedParam = true
+			} else if matches := reImplicitFormat.FindStringSubmatch(trimmedLine); matches != nil {
+				if reImplicitCheck.MatchString(matches[2]) {
+					paramLine = trimmedLine
+					parsedParam = true
+				}
 			}
 		}
 
 		if parsedParam {
-			re := regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-			matches := re.FindStringSubmatch(paramLine)
+			matches := reExplicitParam.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
