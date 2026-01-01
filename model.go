@@ -28,10 +28,18 @@ func (p *FunctionParameter) FlagString() string {
 	var parts []string
 	if len(p.FlagAliases) > 0 {
 		for _, f := range p.FlagAliases {
-			parts = append(parts, "-"+f)
+			prefix := "-"
+			if len(f) > 1 {
+				prefix = "--"
+			}
+			parts = append(parts, prefix+f)
 		}
 	} else {
-		parts = append(parts, "-"+p.Name)
+		prefix := "-"
+		if len(p.Name) > 1 {
+			prefix = "--"
+		}
+		parts = append(parts, prefix+p.Name)
 	}
 	flags := strings.Join(parts, ", ")
 
