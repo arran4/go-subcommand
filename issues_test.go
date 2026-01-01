@@ -217,6 +217,160 @@ func MyCmd(
 	// But let's just assert the winner is there.
 }
 
+func TestFlagDescriptionPriority_Exhaustive(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		expected string
+	}{
+		{
+			name: "All 3 Present -> Flags Block Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+// Flags:
+//   verbose: Top Priority
+func Cmd(
+	// Preceding Priority
+	verbose bool, // Inline Priority
+) {}
+`,
+			expected: "Top Priority",
+		},
+		{
+			name: "Flags + Inline -> Flags Block Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+// Flags:
+//   verbose: Top Priority
+func Cmd(
+	verbose bool, // Inline Priority
+) {}
+`,
+			expected: "Top Priority",
+		},
+		{
+			name: "Flags + Preceding -> Flags Block Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+// Flags:
+//   verbose: Top Priority
+func Cmd(
+	// Preceding Priority
+	verbose bool,
+) {}
+`,
+			expected: "Top Priority",
+		},
+		{
+			name: "Inline + Preceding -> Inline Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+func Cmd(
+	// Preceding Priority
+	verbose bool, // Inline Priority
+) {}
+`,
+			expected: "Inline Priority",
+		},
+		{
+			name: "Only Flags -> Flags Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+// Flags:
+//   verbose: Top Priority
+func Cmd(verbose bool) {}
+`,
+			expected: "Top Priority",
+		},
+		{
+			name: "Only Inline -> Inline Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+func Cmd(
+	verbose bool, // Inline Priority
+) {}
+`,
+			expected: "Inline Priority",
+		},
+		{
+			name: "Only Preceding -> Preceding Wins",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+func Cmd(
+	// Preceding Priority
+	verbose bool,
+) {}
+`,
+			expected: "Preceding Priority",
+		},
+		{
+			name: "None -> Empty",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+func Cmd(verbose bool) {}
+`,
+			expected: "",
+		},
+		{
+			name: "Flags Block Empty Description -> Inline Fallback",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+// Flags:
+//   verbose: --verbose
+func Cmd(
+	verbose bool, // Inline Priority
+) {}
+`,
+			expected: "Inline Priority",
+		},
+		{
+			name: "Inline Empty -> Preceding Fallback",
+			src: `package main
+// Cmd is a subcommand ` + "`app cmd`" + `
+func Cmd(
+	// Preceding Priority
+	verbose bool,
+) {}
+`,
+			expected: "Preceding Priority",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := setupProject(t, tt.src)
+			writer := runGenerateInMemory(t, fs)
+
+			usagePath := "cmd/app/templates/cmd_usage.txt"
+			content, ok := writer.Files[usagePath]
+			if !ok {
+				t.Fatalf("Usage file not found: %s", usagePath)
+			}
+			usageText := string(content)
+
+			if tt.expected == "" {
+				if !strings.Contains(usageText, "--verbose") {
+					t.Errorf("Expected usage to contain --verbose")
+				}
+			} else {
+				if !strings.Contains(usageText, tt.expected) {
+					t.Errorf("Expected description '%s', got usage:\n%s", tt.expected, usageText)
+				}
+				if strings.Contains(tt.src, "Preceding Priority") && tt.expected != "Preceding Priority" {
+					if strings.Contains(usageText, "Preceding Priority") {
+						t.Errorf("Lower priority 'Preceding Priority' leaked into usage:\n%s", usageText)
+					}
+				}
+				if strings.Contains(tt.src, "Inline Priority") && tt.expected != "Inline Priority" {
+					if strings.Contains(usageText, "Inline Priority") {
+						t.Errorf("Lower priority 'Inline Priority' leaked into usage:\n%s", usageText)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestPriorityFlagDescriptions(t *testing.T) {
 	src := `package main
 
