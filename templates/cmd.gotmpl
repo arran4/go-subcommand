@@ -28,10 +28,10 @@ import (
 	"{{.ImportPath}}"
 )
 
-var _ Cmd = (*{{.SubCommandName}}Cmd)(nil)
+var _ Cmd = (*{{.SubCommandStructName}})(nil)
 
-type {{.SubCommandName}}Cmd struct {
-	{{if .Parent}}*{{.Parent.SubCommandName}}Cmd{{else}}*RootCmd{{end}}
+type {{.SubCommandStructName}} struct {
+	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
 	{{range .Parameters}}
 	{{- if .IsVarArg}}
@@ -43,14 +43,14 @@ type {{.SubCommandName}}Cmd struct {
 	SubCommands map[string]Cmd
 }
 
-func (c *{{.SubCommandName}}Cmd) Usage() {
+func (c *{{.SubCommandStructName}}) Usage() {
 	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
+func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -145,6 +145,7 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 		{{- end }}
 	{{- end }}
 
+	{{if .SubCommandFunctionName}}
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
 	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
@@ -158,13 +159,16 @@ func (c *{{.SubCommandName}}Cmd) Execute(args []string) error {
 	{{else}}
 	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 	{{end}}
+	{{else}}
+	c.Usage()
+	{{end}}
 	return nil
 }
 
-func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{{.SubCommandName}}Cmd() *{{.SubCommandName}}Cmd {
+func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) New{{.SubCommandStructName}}() *{{.SubCommandStructName}} {
 	set := flag.NewFlagSet("{{.SubCommandName | lower}}", flag.ContinueOnError)
-	v := &{{.SubCommandName}}Cmd{
-		{{if .Parent}}{{.Parent.SubCommandName}}Cmd: c,{{else}}RootCmd: c,{{end}}
+	v := &{{.SubCommandStructName}}{
+		{{if .Parent}}{{.Parent.SubCommandStructName}}: c,{{else}}RootCmd: c,{{end}}
 		Flags:   set,
 		SubCommands: make(map[string]Cmd),
 	}
@@ -216,7 +220,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandName}}Cmd{{else}}RootCmd{{end}}) New{
 	{{end}}
 	set.Usage = v.Usage
 	{{range .SubCommands}}
-	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandName}}Cmd()
+	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
 	{{end}}
 	return v
 }
