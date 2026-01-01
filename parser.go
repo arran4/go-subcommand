@@ -183,7 +183,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			subCommands = append(subCommands, syntheticCmd)
 			for _, childName := range subCommandNames {
 				subTree := sct.SubCommands[childName]
-				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd)...)
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
 			}
 		}
 	}
@@ -337,9 +337,15 @@ type ParsedParam struct {
 	Description        string
 	IsPositional       bool
 	PositionalArgIndex int
+	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
 }
+
+var (
+	reExplicitParam = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
+)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -417,8 +423,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		if parsedParam {
-			re := regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-			matches := re.FindStringSubmatch(paramLine)
+			matches := reExplicitParam.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
@@ -427,6 +432,22 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
+			// Attempt to parse as parameter if it looks like one, even without prefix/block
+			matches := reImplicitParam.FindStringSubmatch(trimmedLine)
+			if matches != nil {
+				name := matches[1]
+				rest := matches[2]
+				details := parseParamDetails(rest)
+
+				// We only accept it as a parameter if it has explicit configuration
+				// that strongly suggests it is a parameter definition.
+				// e.g. @N for positional, or defined flags, or default value.
+				// This prevents false positives from general description text.
+				if details.IsPositional || details.IsVarArg {
+					params[name] = details
+					continue
+				}
+			}
 			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
@@ -455,6 +476,7 @@ func parseParamDetails(text string) ParsedParam {
 	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
 	if varArgRangeMatches != nil {
+		p.IsVarArg = true
 		if varArgRangeMatches[3] == "..." {
 			// Just "..." means no specific limits parsed here
 		} else {
