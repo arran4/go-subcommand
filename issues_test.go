@@ -173,6 +173,57 @@ func MyCmd(
 	}
 }
 
+func TestIssue10_FlagDescriptionPriorities(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+// Flags:
+//   verbose: --verbose P1_Verbose
+func MyCmd(
+	// P3_Verbose
+	verbose bool, // P2_Verbose
+	// P3_Force
+	force bool, // P2_Force
+	// P3_Output
+	output string,
+) {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+
+	usageText := string(content)
+
+	// Case 1: All 3 sources present. Expected: Priority 1 (Flags block).
+	if !strings.Contains(usageText, "P1_Verbose") {
+		t.Errorf("Issue #10: 'verbose' flag missing P1 description. Got:\n%s", usageText)
+	}
+	if strings.Contains(usageText, "P2_Verbose") {
+		t.Errorf("Issue #10: 'verbose' flag should NOT contain P2 description. Got:\n%s", usageText)
+	}
+	if strings.Contains(usageText, "P3_Verbose") {
+		t.Errorf("Issue #10: 'verbose' flag should NOT contain P3 description. Got:\n%s", usageText)
+	}
+
+	// Case 2: Inline (P2) and Preceding (P3). Expected: Priority 2 (Inline).
+	if !strings.Contains(usageText, "P2_Force") {
+		t.Errorf("Issue #10: 'force' flag missing P2 description (Inline). Got:\n%s", usageText)
+	}
+	if strings.Contains(usageText, "P3_Force") {
+		t.Errorf("Issue #10: 'force' flag should NOT contain P3 description. Got:\n%s", usageText)
+	}
+
+	// Case 3: Only Preceding (P3). Expected: Priority 3 (Preceding).
+	if !strings.Contains(usageText, "P3_Output") {
+		t.Errorf("Issue #10: 'output' flag missing P3 description (Preceding). Got:\n%s", usageText)
+	}
+}
+
 func TestIssue24_FlagNamingConvention(t *testing.T) {
 	src := `package main
 // MyCmd is a subcommand ` + "`app mycmd`" + `
