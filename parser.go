@@ -7,8 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
-	"os"
+	"io/fs"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -17,11 +16,6 @@ import (
 
 	"golang.org/x/mod/modfile"
 )
-
-type File struct {
-	Path   string
-	Reader io.Reader
-}
 
 type SubCommandTree struct {
 	SubCommands map[string]*SubCommandTree
@@ -73,28 +67,37 @@ func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 	}
 }
 
-func ParseGoFiles(root string, files ...File) (*DataModel, error) {
+// ParseGoFiles parses the Go files in the provided filesystem to build the command model.
+// It expects a go.mod file at the root of the filesystem (or root directory).
+func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	fset := token.NewFileSet()
 
-	goModPath := filepath.Join(root, "go.mod")
-	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("go.mod not found in the root of the repository: %s", goModPath)
+	// Read go.mod from FS
+	goModBytes, err := fs.ReadFile(fsys, filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil, fmt.Errorf("go.mod not found in the root of the repository: %w", err)
 	}
 
-	goModBytes, err := ioutil.ReadFile(goModPath)
-	if err != nil {
-		return nil, err
-	}
 	modPath := modfile.ModulePath(goModBytes)
 
 	rootCommands := &CommandsTree{
 		Commands:    map[string]*CommandTree{},
 		PackagePath: modPath,
 	}
-	for _, file := range files {
-		rel, err := filepath.Rel(root, file.Path)
+
+	// Walk the FS
+	err = fs.WalkDir(fsys, root, func(pathStr string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, err
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(pathStr, ".go") {
+			return nil
+		}
+
+		// Calculate import path
+		rel, err := filepath.Rel(root, pathStr)
+		if err != nil {
+			rel = pathStr // Fallback
 		}
 		dir := filepath.Dir(rel)
 		if dir == "." {
@@ -102,9 +105,19 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 		}
 		importPath := path.Join(modPath, dir)
 
-		if err := ParseGoFile(fset, importPath, file.Reader, rootCommands); err != nil {
-			return nil, err
+		f, err := fsys.Open(pathStr)
+		if err != nil {
+			return err
 		}
+		defer f.Close()
+
+		if err := ParseGoFile(fset, importPath, f, rootCommands); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	d := &DataModel{

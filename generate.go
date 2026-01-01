@@ -24,10 +24,32 @@ type closableFile struct {
 	io.Closer
 }
 
+// FileWriter interface allows mocking file system writes
+type FileWriter interface {
+	WriteFile(path string, content []byte, perm os.FileMode) error
+	MkdirAll(path string, perm os.FileMode) error
+}
+
+// OSFileWriter implements FileWriter using os package
+type OSFileWriter struct{}
+
+func (w *OSFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
+	return os.WriteFile(path, content, perm)
+}
+
+func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+
 // Generate is a subcommand `gosubc generate` that generates the subcommand code
 // param dir (default: ".") Directory to generate code for
 // param manDir (--man-dir) Directory to generate man pages in (optional)
 func Generate(dir string, manDir string) error {
+	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir)
+}
+
+// GenerateWithFS generates code using provided FS and Writer
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string) error {
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
 		"lower":   strings.ToLower,
@@ -48,7 +70,8 @@ func Generate(dir string, manDir string) error {
 		return fmt.Errorf("error parsing templates: %w", err)
 	}
 
-	dataModel, err := parse(dir)
+	// inputFS is already rooted at the source directory, so we parse from "."
+	dataModel, err := ParseGoFiles(inputFS, ".")
 	if err != nil {
 		return err
 	}
@@ -57,18 +80,18 @@ func Generate(dir string, manDir string) error {
 	}
 	for _, cmd := range dataModel.Commands {
 		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
-		if err := generateFile(cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
+		if err := generateFile(writer, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
+		if err := generateFile(writer, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
 		cmdTemplatesDir := path.Join(cmdOutDir, "templates")
-		if err := generateFile(cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
+		if err := generateFile(writer, cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
 		for _, subCmd := range cmd.SubCommands {
-			if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
+			if err := generateSubCommandFiles(writer, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
 		}
@@ -76,63 +99,36 @@ func Generate(dir string, manDir string) error {
 	return nil
 }
 
-func generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
-	if err := generateFile(cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
+func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
+	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
-	if err := generateFile(cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
+	if err := generateFile(writer, cmdTemplatesDir, subCmd.SubCommandName+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
 	}
 	if manDir != "" {
 		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
-		if err := generateFile(manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
+		if err := generateFile(writer, manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
 			return err
 		}
 	}
 	for _, s := range subCmd.SubCommands {
-		if err := generateSubCommandFiles(cmdOutDir, cmdTemplatesDir, manDir, s); err != nil {
+		if err := generateSubCommandFiles(writer, cmdOutDir, cmdTemplatesDir, manDir, s); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// Helper to bridge legacy parse calls
 func parse(dir string) (*DataModel, error) {
 	if dir == "" {
 		dir = "."
 	}
-	var files []File
-	var closers []io.Closer
-	defer func() {
-		for _, c := range closers {
-			c.Close()
-		}
-	}()
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		files = append(files, File{
-			Path:   path,
-			Reader: f,
-		})
-		closers = append(closers, f)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ParseGoFiles(dir, files...)
+	return ParseGoFiles(os.DirFS(dir), ".")
 }
 
-func generateFile(dir, fileName, templateName string, data interface{}, formatCode bool) error {
+func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
 		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
@@ -149,16 +145,15 @@ func generateFile(dir, fileName, templateName string, data interface{}, formatCo
 		content = buf.Bytes()
 	}
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := writer.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
-	filePath := path.Join(dir, fileName)
-	f, err := os.Create(filePath)
-	if err != nil {
+
+	// Use filepath.Join for file paths as it is OS-aware, which is appropriate for FileWriter
+	filePath := filepath.Join(dir, fileName)
+
+	if err := writer.WriteFile(filePath, content, 0644); err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
-	defer f.Close()
-
-	_, err = f.Write(content)
-	return err
+	return nil
 }

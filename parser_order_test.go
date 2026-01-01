@@ -1,21 +1,15 @@
 package go_subcommand
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestParseGoFiles_Order(t *testing.T) {
-	tmpDir := t.TempDir()
-	goModPath := filepath.Join(tmpDir, "go.mod")
-	if err := os.WriteFile(goModPath, []byte("module example.com/test\n\ngo 1.22\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	mainGoPath := filepath.Join(tmpDir, "main.go")
-	mainGoContent := `
+	// In-memory FS
+	fsys := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`
 package main
 
 // CmdA is a subcommand ` + "`app cmd-a`" + `
@@ -26,18 +20,13 @@ func CmdB() {}
 
 // CmdC is a subcommand ` + "`app cmd-c`" + `
 func CmdC() {}
-`
+`)},
+	}
 
 	// Run multiple times to detect instability
 	for i := 0; i < 20; i++ {
-		files := []File{
-			{
-				Path:   mainGoPath,
-				Reader: strings.NewReader(mainGoContent),
-			},
-		}
-
-		model, err := ParseGoFiles(tmpDir, files...)
+		// Use ParseGoFiles directly with FS
+		model, err := ParseGoFiles(fsys, ".")
 		if err != nil {
 			t.Fatalf("ParseGoFiles failed: %v", err)
 		}
