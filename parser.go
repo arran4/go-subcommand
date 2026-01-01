@@ -178,6 +178,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 				Command:                cmd,
 				Parent:                 parent,
 				SubCommandName:         name,
+				SubCommandStructName:   allocator.Allocate(name),
 				SubCommandFunctionName: "", // Empty to indicate synthetic
 			}
 			subCommands = append(subCommands, syntheticCmd)

@@ -44,10 +44,11 @@ Usage: myapp align <subcommand> [arguments]
 Subcommands:
     short-cmd  Short description
     very-long-subcommand-name-here Description for long subcommand
-    version      Print version information
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
 
-    -s             Short flag (default: false)
-    -long string   This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
-    -another int   Another flag (default: 42)
+    -s              Short flag (default: false)
+    --long string   This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
+    --another int   Another flag (default: 42)

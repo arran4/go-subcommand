@@ -72,6 +72,9 @@ func TestIssue41_VersionInUsageForNestedCommand(t *testing.T) {
 
 // MyCmd is a subcommand ` + "`app mycmd`" + `
 func MyCmd() {}
+
+// Child is a subcommand ` + "`app mycmd child`" + `
+func Child() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
@@ -565,6 +568,9 @@ func TestIssue42_MissingHelpUsageInGuide(t *testing.T) {
 
 // MyCmd is a subcommand ` + "`app mycmd`" + `
 func MyCmd() {}
+
+// Child is a subcommand ` + "`app mycmd child`" + `
+func Child() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
@@ -596,6 +602,9 @@ func TestIssue11_RootLevelHelpUsageVersion(t *testing.T) {
 
 // Nested is a subcommand ` + "`app nested`" + `
 func Nested() {}
+
+// Child is a subcommand ` + "`app nested child`" + `
+func Child() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
@@ -640,8 +649,8 @@ func Nested() {}
 func TestIssue11_42_52_HelpUsageVersionVisibility(t *testing.T) {
 	src := `package main
 
-// Nested is a subcommand ` + "`app nested`" + `
-func Nested() {}
+// Child is a subcommand ` + "`app nested child`" + `
+func Child() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)

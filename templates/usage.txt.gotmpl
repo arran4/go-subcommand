@@ -4,13 +4,15 @@ Usage: {{.ProgName}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} 
 {{.SubCommandExtendedHelp}}
 {{end -}}
 
-{{if .SubCommands}}
+{{- if .SubCommands}}
 Subcommands:
 {{- range .SubCommands}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{- end}}
+    help         Print this help message
+    usage        Print this usage message
 {{- end}}
-    version      Print version information
+
 {{- if .Parameters }}
 
 Flags:

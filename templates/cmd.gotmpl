@@ -222,5 +222,21 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{range .SubCommands}}
 	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
 	{{end}}
+	{{- if .SubCommands }}
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	{{- end }}
 	return v
 }

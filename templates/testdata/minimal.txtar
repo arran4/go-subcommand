@@ -7,5 +7,3 @@
 -- output.txt --
 Usage: minapp base <subcommand> [arguments]
 
-
-    version      Print version information
