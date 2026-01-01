@@ -58,13 +58,11 @@ func ListHeads() {}
 	err := GenerateWithFS(fs, writer, ".", "")
 
 	if err != nil {
-		// If it fails, the issue is reproduced. We log it but let the test PASS as the task is to "verify status".
-		// Actually, to make it clear which are broken, a failure is better.
-		// But in a PR, failing tests block merge.
-		// The prompt said "Create a test ... to verify which ones are closable and which ones are still open."
-		// It did NOT say "Make the tests pass".
-		// I will leave it as failing so the user sees the failures.
-		t.Logf("Issue #33 verified as OPEN: Generation failed: %v", err)
+		// This test verifies that the issue is still present (OPEN).
+		// The generator currently produces invalid Go code for hyphenated commands,
+		// causing format.Source to fail.
+		// We log the failure as expected behavior for this verification test.
+		t.Logf("Issue #33 verified as OPEN: Generation failed as expected: %v", err)
 		t.Fail()
 	}
 }

@@ -107,13 +107,6 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 		return err
 	}
 	if manDir != "" {
-		// Use filepath.Join to avoid unused import error if path/filepath is needed elsewhere or ensure usage
-		// But wait, we imported path/filepath and it was unused.
-		// "strings" and "fmt" are used here.
-		// We used "path" for paths.
-		// Let's use filepath somewhere if we keep the import, or remove it.
-		// But manFileName construction doesn't strictly need filepath.
-
 		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
 		if err := generateFile(writer, manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
 			return err
@@ -155,13 +148,8 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 	if err := writer.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
-	// Use filepath.Join here instead of path.Join to justify import if needed,
-	// but path.Join is usually preferred for logic not tied to OS.
-	// However writer.WriteFile expects OS path.
-	// OSFileWriter uses os.WriteFile.
-	// So filepath.Join is better for cross-platform.
-	// The original code used path.Join.
-	// I will switch to filepath.Join for file paths to fix unused import AND correctness.
+
+	// Use filepath.Join for file paths as it is OS-aware, which is appropriate for FileWriter
 	filePath := filepath.Join(dir, fileName)
 
 	if err := writer.WriteFile(filePath, content, 0644); err != nil {
