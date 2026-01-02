@@ -13,6 +13,13 @@
       "Type": "bool",
       "FlagAliases": ["v"],
       "Description": "Enable verbose output"
+    },
+    {
+      "Name": "files",
+      "Type": "string",
+      "IsPositional": true,
+      "IsVarArg": true,
+      "Description": "Input files"
     }
   ]
 }
@@ -35,8 +42,9 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags *flag.FlagSet
-	verbose bool
+	Flags       *flag.FlagSet
+	verbose     bool
+	files       []string
 	SubCommands map[string]Cmd
 }
 
@@ -58,7 +66,18 @@ func (c *MyCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
-	mypkg.MyCmdFunc(c.verbose)
+	// Handle vararg files
+	{
+		varArgStart := 0
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		c.files = varArgs
+	}
+
+	mypkg.MyCmdFunc(c.verbose, c.files...)
+
 	return nil
 }
 
@@ -69,7 +88,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
+
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage
+
 	return v
 }

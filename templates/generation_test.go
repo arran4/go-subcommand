@@ -13,7 +13,7 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
-//go:embed testdata/go/*.txtar
+//go:embed testdata/*.go.txtar
 var goTemplatesFS embed.FS
 
 //go:embed *.gotmpl
@@ -42,17 +42,17 @@ func TestGoTemplates(t *testing.T) {
 	}
 
 	// Iterate over txtar files
-	dirEntries, err := goTemplatesFS.ReadDir("testdata/go")
+	dirEntries, err := goTemplatesFS.ReadDir("testdata")
 	if err != nil {
-		t.Fatalf("failed to read testdata/go dir: %v", err)
+		t.Fatalf("failed to read testdata dir: %v", err)
 	}
 
 	for _, entry := range dirEntries {
-		if !strings.HasSuffix(entry.Name(), ".txtar") {
+		if !strings.HasSuffix(entry.Name(), ".go.txtar") {
 			continue
 		}
 		t.Run(entry.Name(), func(t *testing.T) {
-			content, err := goTemplatesFS.ReadFile("testdata/go/" + entry.Name())
+			content, err := goTemplatesFS.ReadFile("testdata/" + entry.Name())
 			if err != nil {
 				t.Fatalf("failed to read %s: %v", entry.Name(), err)
 			}

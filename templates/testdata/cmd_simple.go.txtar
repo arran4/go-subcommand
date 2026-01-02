@@ -9,13 +9,6 @@
   "ImportPath": "example.com/mypkg",
   "Parameters": [
     {
-      "Name": "filename",
-      "Type": "string",
-      "IsPositional": true,
-      "PositionalArgIndex": 1,
-      "Description": "Input filename"
-    },
-    {
       "Name": "verbose",
       "Type": "bool",
       "FlagAliases": ["v"],
@@ -42,9 +35,8 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags *flag.FlagSet
-	filename string
-	verbose bool
+	Flags       *flag.FlagSet
+	verbose     bool
 	SubCommands map[string]Cmd
 }
 
@@ -66,18 +58,9 @@ func (c *MyCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
-	if len(remainingArgs) < 1 {
-		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
-	}
-	// Handle positional argument filename
-	{
-		argIndex := 0
-		if argIndex >= 0 && argIndex < len(remainingArgs) {
-			argVal := remainingArgs[argIndex]
-			c.filename = argVal
-		}
-	}
-	mypkg.MyCmdFunc(c.filename, c.verbose)
+
+	mypkg.MyCmdFunc(c.verbose)
+
 	return nil
 }
 
@@ -88,7 +71,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
+
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage
+
 	return v
 }

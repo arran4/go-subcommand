@@ -9,17 +9,17 @@
   "ImportPath": "example.com/mypkg",
   "Parameters": [
     {
+      "Name": "filename",
+      "Type": "string",
+      "IsPositional": true,
+      "PositionalArgIndex": 1,
+      "Description": "Input filename"
+    },
+    {
       "Name": "verbose",
       "Type": "bool",
       "FlagAliases": ["v"],
       "Description": "Enable verbose output"
-    },
-    {
-      "Name": "files",
-      "Type": "string",
-      "IsPositional": true,
-      "IsVarArg": true,
-      "Description": "Input files"
     }
   ]
 }
@@ -42,9 +42,9 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags *flag.FlagSet
-	verbose bool
-	files []string
+	Flags       *flag.FlagSet
+	filename    string
+	verbose     bool
 	SubCommands map[string]Cmd
 }
 
@@ -66,16 +66,20 @@ func (c *MyCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
-	// Handle vararg files
-	{
-		varArgStart := 0
-		if varArgStart > len(remainingArgs) {
-			varArgStart = len(remainingArgs)
-		}
-		varArgs := remainingArgs[varArgStart:]
-		c.files = varArgs
+	if len(remainingArgs) < 1 {
+		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
 	}
-	mypkg.MyCmdFunc(c.verbose, c.files...)
+	// Handle positional argument filename
+	{
+		argIndex := 0
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			c.filename = argVal
+		}
+	}
+
+	mypkg.MyCmdFunc(c.filename, c.verbose)
+
 	return nil
 }
 
@@ -86,7 +90,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
+
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage
+
 	return v
 }

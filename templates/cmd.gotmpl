@@ -33,13 +33,9 @@ var _ Cmd = (*{{.SubCommandStructName}})(nil)
 type {{.SubCommandStructName}} struct {
 	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
-	{{range .Parameters}}
-	{{- if .IsVarArg}}
-	{{.Name}} []{{.Type}}
-	{{- else}}
-	{{.Name}} {{.Type}}
+	{{- range .Parameters}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
 	{{- end}}
-	{{end}}
 	SubCommands map[string]Cmd
 }
 
@@ -158,7 +154,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{else}}
 	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
-	{{end}}
+	{{end -}}
 	{{else}}
 	c.Usage()
 	{{end}}
@@ -172,7 +168,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 		Flags:   set,
 		SubCommands: make(map[string]Cmd),
 	}
-	{{range .Parameters}}
+	{{- range .Parameters}}
 		{{- if not .IsPositional }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
@@ -217,7 +213,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 		{{- end }}
 		{{- end }}
 		{{- end }}
-	{{end}}
+	{{- end}}
 	set.Usage = v.Usage
 	{{range .SubCommands}}
 	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
