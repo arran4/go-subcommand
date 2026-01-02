@@ -61,7 +61,7 @@
   "ReturnCount": 0
 }
 -- output.txt --
-Usage: myapp foo <subcommand> [arguments]
+Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
     bar        Bar command

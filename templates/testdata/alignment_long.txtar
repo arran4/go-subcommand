@@ -38,7 +38,7 @@
   ]
 }
 -- output.txt --
-Usage: myapp align <subcommand> [arguments]
+Usage: myapp align [flags...] <subcommand>
 
 Subcommands:
     short-cmd  Short description
