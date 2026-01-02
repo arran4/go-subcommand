@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Reference on Go Subcommand</title><link>https://arran4.github.io/go-subcommand/docs/reference/</link><description>Recent content in Reference on Go Subcommand</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://arran4.github.io/go-subcommand/docs/reference/index.xml" rel="self" type="application/rss+xml"/><item><title>CLI Reference</title><link>https://arran4.github.io/go-subcommand/docs/reference/cli-reference/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://arran4.github.io/go-subcommand/docs/reference/cli-reference/</guid><description>&lt;h1 id="cli-reference"&gt;CLI Reference&lt;a class="anchor" href="#cli-reference"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;The &lt;code&gt;gosubc&lt;/code&gt; tool has the following commands:&lt;/p&gt;
+&lt;h2 id="generate"&gt;&lt;code&gt;generate&lt;/code&gt;&lt;a class="anchor" href="#generate"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Generates the Go code for your CLI.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gosubc generate &lt;span style="color:#f92672"&gt;[&lt;/span&gt;flags&lt;span style="color:#f92672"&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;Flags:&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;--dir &amp;lt;path&amp;gt;&lt;/code&gt;: The project root directory containing &lt;code&gt;go.mod&lt;/code&gt;. Defaults to &lt;code&gt;.&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--man-dir &amp;lt;path&amp;gt;&lt;/code&gt;: Directory to generate Unix man pages in. If omitted, no man pages are generated.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="list"&gt;&lt;code&gt;list&lt;/code&gt;&lt;a class="anchor" href="#list"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Lists all identified subcommands in the project. Useful for debugging parsing.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;gosubc list &lt;span style="color:#f92672"&gt;[&lt;/span&gt;flags&lt;span style="color:#f92672"&gt;]&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;Flags:&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;--dir &amp;lt;path&amp;gt;&lt;/code&gt;: The project root directory.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="validate"&gt;&lt;code&gt;validate&lt;/code&gt;&lt;a class="anchor" href="#validate"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Validates subcommand definitions for conflicts or errors.&lt;/p&gt;</description></item></channel></rss>
