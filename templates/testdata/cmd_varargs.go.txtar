@@ -42,9 +42,9 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags *flag.FlagSet
-	verbose bool
-	files []string
+	Flags       *flag.FlagSet
+	verbose     bool
+	files       []string
 	SubCommands map[string]Cmd
 }
 
