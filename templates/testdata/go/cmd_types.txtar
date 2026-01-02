@@ -50,13 +50,9 @@ var _ Cmd = (*MyCmd)(nil)
 type MyCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
-
 	timeout time.Duration
-
 	count int
-
 	config string
-
 	SubCommands map[string]Cmd
 }
 
@@ -78,9 +74,7 @@ func (c *MyCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
-
 	mypkg.MyCmdFunc(c.timeout, c.count, c.config)
-
 	return nil
 }
 
@@ -99,9 +93,7 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	}
 
 	set.IntVar(&v.count, "count", 3, "Retry count")
-
 	set.StringVar(&v.config, "config", "config.yaml", "Config file")
-
 	set.Usage = v.Usage
 
 	return v

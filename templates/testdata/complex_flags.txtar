@@ -32,10 +32,7 @@
 -- output.txt --
 Usage: flagsapp test <subcommand> [arguments]
 
-
-
 Flags:
-
     --simple string       Simple string flag
     -m, --mu, --multi     Flag with multiple aliases (default: true)
     --no-alias int        Flag without aliases (default: 10)

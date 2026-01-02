@@ -43,11 +43,8 @@ var _ Cmd = (*MyCmd)(nil)
 type MyCmd struct {
 	*RootCmd
 	Flags *flag.FlagSet
-
 	verbose bool
-
 	files []string
-
 	SubCommands map[string]Cmd
 }
 
@@ -78,9 +75,7 @@ func (c *MyCmd) Execute(args []string) error {
 		varArgs := remainingArgs[varArgStart:]
 		c.files = varArgs
 	}
-
 	mypkg.MyCmdFunc(c.verbose, c.files...)
-
 	return nil
 }
 
@@ -91,10 +86,7 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
-
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
-
 	set.Usage = v.Usage
-
 	return v
 }

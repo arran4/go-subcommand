@@ -63,12 +63,10 @@
 -- output.txt --
 Usage: myapp foo <subcommand> [arguments]
 
-
 Subcommands:
     bar        Bar command
     baz        Baz command
 
 Flags:
-
     -v       Enable verbose (default: false)
     -c int   Count items (default: 0)

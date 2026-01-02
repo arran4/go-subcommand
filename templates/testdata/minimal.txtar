@@ -6,4 +6,3 @@
 }
 -- output.txt --
 Usage: minapp base <subcommand> [arguments]
-

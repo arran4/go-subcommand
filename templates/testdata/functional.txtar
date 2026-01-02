@@ -63,7 +63,6 @@
 -- output.txt --
 Usage: myapp foo <subcommand> [arguments]
 
-
 Subcommands:
     bar        Bar command
     baz        Baz command
@@ -71,6 +70,5 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-
     -v       Enable verbose (default: false)
     -c int   Count items (default: 0)
