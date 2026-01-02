@@ -18,13 +18,12 @@ Subcommands:
 
 {{- if .Parameters }}
 
-Flags:
-{{$max := add .MaxFlagLength 2 -}}
+Flags:{{$max := add .MaxFlagLength 2 -}}
 {{- range .Parameters}}
-{{- if not .IsPositional -}}
-{{printf "\n"}}    {{ .FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
-{{- end }}
-{{- end }}
+{{- if not .IsPositional }}
+{{printf "\n    %-*s %s" $max .FlagString .Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- end}}
+{{- end}}
 {{- end }}
 
 {{- $hasPositional := false }}
@@ -35,6 +34,7 @@ Flags:
 {{- end }}
 
 {{- if $hasPositional }}
+
 Positional Arguments:
 {{- range .Parameters }}
 {{- if .IsPositional }}
