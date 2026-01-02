@@ -18,15 +18,3 @@ func SimpleError(fail bool) error {
 	fmt.Println("SimpleError success")
 	return nil
 }
-
-// MultipleReturns is a subcommand `returns multiple`
-// Returns a value and an error. The value is ignored by the generator, but the error is checked.
-// Flags:
-//   fail: --fail -f (default: false) Make the command fail
-func MultipleReturns(fail bool) (int, error) {
-	if fail {
-		return 0, errors.New("multiple returns error occurred")
-	}
-	fmt.Println("MultipleReturns success")
-	return 42, nil
-}
