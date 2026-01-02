@@ -1,9 +1,11 @@
 Usage: {{.ProgName}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}} <subcommand> [arguments]
-{{if .SubCommandExtendedHelp}}
+
+{{- if .SubCommandExtendedHelp}}
 {{.SubCommandExtendedHelp}}
-{{end}}
+{{- end}}
 
 {{- if .SubCommands}}
+
 Subcommands:
 {{- range .SubCommands}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
@@ -15,11 +17,12 @@ Subcommands:
 {{- end}}
 
 {{- if .Parameters }}
+
 Flags:
-{{$max := add .MaxFlagLength 2}}
+{{$max := add .MaxFlagLength 2 -}}
 {{- range .Parameters}}
-{{- if not .IsPositional }}
-    {{ .FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- if not .IsPositional -}}
+{{printf "\n"}}    {{ .FlagString | printf "%-*s" $max}} {{.Description}}{{if .Default}} (default: {{.Default}}){{end}}
 {{- end }}
 {{- end }}
 {{- end }}
