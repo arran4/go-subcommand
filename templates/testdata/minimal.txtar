@@ -5,4 +5,4 @@
   "SubCommandDescription": "Minimal command"
 }
 -- output.txt --
-Usage: minapp base <subcommand> [arguments]
+Usage: minapp base

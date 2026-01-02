@@ -30,7 +30,7 @@
   ]
 }
 -- output.txt --
-Usage: flagsapp test <subcommand> [arguments]
+Usage: flagsapp test [flags...]
 
 Flags:
     --simple string       Simple string flag

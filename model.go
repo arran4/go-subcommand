@@ -14,6 +14,12 @@ type Command struct {
 	MainCmdName string
 	SubCommands []*SubCommand
 	PackagePath string
+	Description  string
+	ExtendedHelp string
+	FunctionName string
+	Parameters   []*FunctionParameter
+	ReturnsError bool
+	ReturnCount  int
 }
 
 type FunctionParameter struct {

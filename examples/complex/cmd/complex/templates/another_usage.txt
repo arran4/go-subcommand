@@ -2,7 +2,5 @@ Usage: complex another <subcommand> [arguments]
 
 This command demonstrates using a duration parameter.
 
-    version      Print version information
-
 Flags:
-    -wait, -w time.Duration   How long to wait (default: 1s)
+    --wait, -w time.Duration   How long to wait (default: 1s)

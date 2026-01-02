@@ -41,6 +41,12 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
+	FunctionName string
+	Parameters   []*FunctionParameter
+	ReturnsError bool
+	ReturnCount  int
+	Description  string
+	ExtendedHelp string
 }
 
 type CommandsTree struct {
@@ -133,9 +139,15 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &Command{
-			DataModel:   d,
-			MainCmdName: cmdName,
-			PackagePath: rootCommands.PackagePath,
+			DataModel:    d,
+			MainCmdName:  cmdName,
+			PackagePath:  rootCommands.PackagePath,
+			FunctionName: cmdTree.FunctionName,
+			Parameters:   cmdTree.Parameters,
+			ReturnsError: cmdTree.ReturnsError,
+			ReturnCount:  cmdTree.ReturnCount,
+			Description:  cmdTree.Description,
+			ExtendedHelp: cmdTree.ExtendedHelp,
 		}
 
 		allocator := NewNameAllocator()
@@ -209,7 +221,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
-			if !ok || len(subCommandSequence) == 0 {
+			if !ok {
 				continue
 			}
 
@@ -420,6 +432,24 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				if returnCount > 1 {
 					return fmt.Errorf("function %s has multiple return values, which is not implemented yet", s.Name.Name)
 				}
+			}
+
+			if len(subCommandSequence) == 0 {
+				ct, ok := cmdTree.Commands[cmdName]
+				if !ok {
+					ct = &CommandTree{
+						CommandName:    cmdName,
+						SubCommandTree: NewSubCommandTree(nil),
+					}
+					cmdTree.Commands[cmdName] = ct
+				}
+				ct.FunctionName = s.Name.Name
+				ct.Parameters = params
+				ct.ReturnsError = returnsError
+				ct.ReturnCount = returnCount
+				ct.Description = description
+				ct.ExtendedHelp = extendedHelp
+				continue
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
