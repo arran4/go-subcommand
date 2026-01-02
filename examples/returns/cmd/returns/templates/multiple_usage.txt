@@ -1,0 +1,6 @@
+Usage: returns multiple <subcommand> [arguments]
+
+Returns a value and an error. The value is ignored by the generator, but the error is checked.
+
+Flags:
+    --fail, -f   Make the command fail (default: false)

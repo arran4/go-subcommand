@@ -1,0 +1,6 @@
+Usage: returns simple <subcommand> [arguments]
+
+Returns a simple error if the flag is set.
+
+Flags:
+    --fail, -f   Make the command fail (default: false)
