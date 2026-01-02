@@ -18,9 +18,10 @@ Subcommands:
 
 {{- if .Parameters }}
 
-Flags:{{$max := add .MaxFlagLength 2 -}}
+Flags:
+{{$max := add .MaxFlagLength 2 -}}
 {{- range .Parameters}}
-{{- if not .IsPositional }}
+{{- if not .IsPositional -}}
 {{printf "\n    %-*s %s" $max .FlagString .Description}}{{if .Default}} (default: {{.Default}}){{end}}
 {{- end}}
 {{- end}}
