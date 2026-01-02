@@ -10,25 +10,23 @@ import (
 	"github.com/arran4/go-subcommand/examples/complex"
 )
 
-var _ Cmd = (*toplevelCmd)(nil)
+var _ Cmd = (*Toplevel)(nil)
 
-type toplevelCmd struct {
+type Toplevel struct {
 	*RootCmd
-	Flags *flag.FlagSet
-
-	name string
-
+	Flags       *flag.FlagSet
+	name        string
 	SubCommands map[string]Cmd
 }
 
-func (c *toplevelCmd) Usage() {
+func (c *Toplevel) Usage() {
 	err := executeUsage(os.Stderr, "toplevel_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *toplevelCmd) Execute(args []string) error {
+func (c *Toplevel) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -44,9 +42,9 @@ func (c *toplevelCmd) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewtoplevelCmd() *toplevelCmd {
+func (c *RootCmd) NewToplevel() *Toplevel {
 	set := flag.NewFlagSet("toplevel", flag.ContinueOnError)
-	v := &toplevelCmd{
+	v := &Toplevel{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
@@ -54,10 +52,23 @@ func (c *RootCmd) NewtoplevelCmd() *toplevelCmd {
 
 	set.StringVar(&v.name, "name", "world", "The name to greet")
 	set.StringVar(&v.name, "n", "world", "The name to greet")
-
 	set.Usage = v.Usage
 
-	v.SubCommands["nested"] = v.NewnestedCmd()
+	v.SubCommands["nested"] = v.NewNested()
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }
