@@ -1,0 +1,40 @@
+baseURL = "https://arran4.github.io/go-subcommand/"
+languageCode = "en-us"
+title = "Go Subcommand"
+theme = "book"
+
+[params]
+  # (Optional, default light) Sets color theme: light, dark, auto.
+  # Theme 'auto' switches between dark and light modes based on browser/OS preferences
+  BookTheme = 'auto'
+
+  # (Optional, default true) Controls table of contents visibility on right side of pages.
+  # Start and end levels can be controlled with markup like:
+  # <!--mc..
+  # Table of Contents
+  # ..mc-->
+  # .
+  BookToC = true
+
+  # (Optional, default none) Set the path to a logo for the book. If the logo is
+  # /static/logo.png then the path would be 'logo.png'
+  # BookLogo = 'logo.png'
+
+  # (Optional, default none) Set the path to a favicon for the book. If the favicon is
+  # /static/favicon.png then the path would be 'favicon.png'
+  # BookFavicon = 'favicon.png'
+
+  # (Optional, default none) Set the path to a comment provider.
+  # BookComments = ''
+
+  # (Optional, default none) Set the path to a search provider.
+  # BookSearch = ''
+
+  # (Optional, default none) Set the path to a service worker.
+  # BookServiceWorker = ''
+
+  # (Optional, default none) Set the path to a manifest.
+  # BookManifest = ''
+
+  # (Optional, default none) Set the path to a translation provider.
+  # BookTranslation = ''
