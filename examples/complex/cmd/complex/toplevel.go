@@ -36,11 +36,6 @@ func (c *Toplevel) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	remainingArgs := c.Flags.Args()
-	// Avoid unused variable warning
-	if len(remainingArgs) == 0 {
-		_ = remainingArgs
-	}
 
 	complex.TopLevel(c.name)
 
