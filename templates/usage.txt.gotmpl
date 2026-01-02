@@ -1,8 +1,7 @@
 Usage: {{.ProgName}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}} <subcommand> [arguments]
-
-{{if .SubCommandExtendedHelp -}}
+{{if .SubCommandExtendedHelp}}
 {{.SubCommandExtendedHelp}}
-{{end -}}
+{{end}}
 
 {{- if .SubCommands}}
 Subcommands:
@@ -16,7 +15,6 @@ Subcommands:
 {{- end}}
 
 {{- if .Parameters }}
-
 Flags:
 {{$max := add .MaxFlagLength 2}}
 {{- range .Parameters}}
@@ -34,7 +32,6 @@ Flags:
 {{- end }}
 
 {{- if $hasPositional }}
-
 Positional Arguments:
 {{- range .Parameters }}
 {{- if .IsPositional }}

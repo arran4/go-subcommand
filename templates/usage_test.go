@@ -42,7 +42,7 @@ func TestUsageTemplate(t *testing.T) {
 	}
 
 	for _, entry := range dirEntries {
-		if !strings.HasSuffix(entry.Name(), ".txtar") {
+		if !strings.HasSuffix(entry.Name(), ".txtar") || strings.HasSuffix(entry.Name(), ".go.txtar") {
 			continue
 		}
 		t.Run(entry.Name(), func(t *testing.T) {
