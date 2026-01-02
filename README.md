@@ -9,7 +9,8 @@
 - **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
 - **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
 - **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
-- **Easy to Use:** Get started quickly with a simple `go generate` command.
+- **Parameter Auto-Mapping:** Automatically maps CLI flags, positional arguments, and variadic arguments to function parameters.
+- **Rich Syntax Support:** Supports custom flag names, default values, and description overrides via comments.
 - **Man Page Generation:** Automatically generate Unix man pages for your CLI.
 
 ## Installation
@@ -22,13 +23,11 @@ go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 
 ## Getting Started
 
-Using `go-subcommand` is as easy as adding a comment to your Go functions.
-
 ### 1. Define Your Commands
 
-Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// MyFunction is a subcommand \`my-app my-command\``.
+Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// FunctionName is a subcommand 'root-command sub-command...'`.
 
-For example, create a file named `main.go`:
+Example `main.go`:
 
 ```go
 package main
@@ -44,11 +43,10 @@ func PrintHelloWorld() {
 
 ### 2. Add a `generate.go` File
 
-Create a file named `generate.go` in the same directory and add one of the following `go:generate` directives.
+Create a file named `generate.go` in the same directory (package `main`).
 
-**Option 1: Simple Command**
-
-This is the easiest option and is recommended for most use cases. It requires `gosubc` to be installed on your system.
+**Option 1: Standard (Recommended)**
+Use this if `gosubc` is installed in your system PATH.
 
 ```go
 package main
@@ -56,9 +54,8 @@ package main
 //go:generate gosubc generate
 ```
 
-**Option 2: Conditional Command**
-
-This version is more robust and will use `gosubc` if it's in your `PATH`, otherwise it will fall back to using `go run`. This is useful for projects where contributors may not have `gosubc` installed.
+**Option 2: Robust (Recommended for teams)**
+This version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
 
 ```go
 package main
@@ -76,20 +73,6 @@ go generate
 
 This will create a `cmd/my-app` directory containing the generated CLI code.
 
-#### Man Page Generation (Optional)
-
-You can optionally generate unix man pages by providing the `--man-dir` flag:
-
-```bash
-gosubc generate --man-dir path/to/man/pages
-```
-
-Or in your `go:generate` directive:
-
-```go
-//go:generate gosubc generate --man-dir ./man
-```
-
 ### 4. Run Your New CLI
 
 You can now run your newly generated CLI:
@@ -98,95 +81,172 @@ You can now run your newly generated CLI:
 go run ./cmd/my-app hello
 ```
 
-You should see the output:
-
+Output:
 ```
 Hello, World!
 ```
 
+## Comment Syntax Guide
+
+`go-subcommand` uses a specific comment syntax to configure your CLI.
+
+### Subcommand Definition
+
+The primary directive defines where the command lives in the CLI hierarchy:
+
+```go
+// FuncName is a subcommand `root-cmd parent child`
+```
+
+### Description & Extended Help
+
+*   **Short Description:** The text immediately following the subcommand definition (or prefixed with `that ` or `-- `) becomes the short description used in usage lists.
+*   **Extended Help:** Any subsequent lines that do not look like parameter definitions are treated as extended help text, displayed when the user requests help for that specific command.
+
+```go
+// MyFunc is a subcommand `app cmd` -- Does something cool
+//
+// This is the extended help text. It can span multiple lines
+// and provide detailed usage examples or explanations.
+```
+
+### Parameter Configuration
+
+Function parameters are automatically mapped to CLI flags. You can customize them using comments. `go-subcommand` looks for configuration in three places, in this priority order (highest to lowest):
+
+1.  **`Flags:` Block:** A dedicated block in the main function documentation.
+2.  **Inline Comments:** Comments on the same line as the parameter definition.
+3.  **Preceding Comments:** Comments on the line immediately before the parameter.
+
+#### The `Flags:` Block
+
+This is the cleanest way to define multiple parameters. It must be an indented block following a line containing just `Flags:`.
+
+```go
+// MyFunc is a subcommand `app cmd`
+//
+// Flags:
+//   username: --username -u (default: "guest") The user to greet
+//   count:    --count -c    (default: 1)       Number of times
+func MyFunc(username string, count int) { ... }
+```
+
+#### Syntax Reference
+
+Inside a `Flags:` block or inline/preceding comments, you can use the following syntax tokens to configure a parameter:
+
+*   **Flags:** `-f`, `--flag`. One or more flag aliases.
+*   **Default Value:** `default: value` or `default: "value"`.
+*   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
+*   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
+*   **Description:** Any remaining text is treated as the parameter description.
+
+### Supported Types
+
+The following Go types are supported for function parameters:
+
+*   `string`: (Default)
+*   `int`: Parsed as an integer.
+*   `bool`: Parsed as a boolean flag (no value required, e.g., `--verbose`).
+*   `time.Duration`: Parsed using `time.ParseDuration` (e.g., `10s`, `1h`).
+*   `error`: (Return value only) Your function can return an `error`, which will be propagated to the CLI exit code.
+
 ## Advanced Usage
 
-### Subcommands
+### Positional Arguments
 
-You can create nested subcommands by extending the command path in the comment:
-
-```go
-// PrintUser is a subcommand `my-app users get`
-// This command retrieves and prints a user's information.
-func PrintUser(username string) {
-    fmt.Printf("Fetching user: %s\n", username)
-}
-```
-
-### Parameters
-
-`go-subcommand` automatically maps function parameters to command-line arguments:
+To accept positional arguments instead of flags, use the `@N` syntax.
 
 ```go
-// CreateUser is a subcommand `my-app users create`
-// Creates a new user with the given username and email.
-func CreateUser(username string, email string) {
-    fmt.Printf("Creating user %s with email %s\n", username, email)
+// Greet is a subcommand `app greet`
+//
+// Flags:
+//   name: @1 The name to greet
+func Greet(name string) {
+    fmt.Printf("Hello, %s!\n", name)
 }
 ```
+Usage: `app greet John`
 
-After running `go generate`, you can use the new command like this:
+### Variadic Arguments
+
+To accept a variable number of arguments, use a slice parameter and mark it with `...`.
+
+```go
+// ProcessFiles is a subcommand `app process`
+//
+// Flags:
+//   files: ... List of files to process
+func ProcessFiles(files ...string) {
+    for _, file := range files {
+        fmt.Println("Processing", file)
+    }
+}
+```
+Usage: `app process file1.txt file2.txt file3.txt`
+
+### Custom Flags
+
+You can define custom short and long flags.
+
+```go
+// Serve is a subcommand `app serve`
+//
+// Flags:
+//   port: -p --port (default: 8080) Port to listen on
+func Serve(port int) { ... }
+```
+
+### Nesting Commands
+
+Nesting is implicit based on the command path string.
+
+```go
+// Root command: `app`
+// Child: `app users`
+// Grandchild: `app users create`
+
+// CreateUser is a subcommand `app users create`
+func CreateUser(...) { ... }
+
+// ListUsers is a subcommand `app users list`
+func ListUsers(...) { ... }
+```
+
+### Man Page Generation
+
+To generate man pages, pass the `--man-dir` flag to `gosubc`.
 
 ```bash
-go run ./cmd/my-app users create --username "JohnDoe" --email "john.doe@example.com"
+gosubc generate --man-dir ./man
 ```
+
+This will generate standard Unix man pages in the specified directory, using the descriptions and extended help text from your comments.
 
 ## CLI Reference
 
-The `gosubc` tool provides several commands to help manage your CLI project.
+### `gosubc generate`
 
-### `generate`
+Generates the Go code for your CLI.
 
-Generates the CLI code based on the found subcommand comments.
+*   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
+*   `--man-dir <path>`: Directory to write man pages to.
 
-```bash
-gosubc generate [flags]
-```
+### `gosubc list`
 
-**Flags:**
+Lists all detected subcommands.
 
-- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
-- `--man-dir <path>`: Directory to generate Unix man pages in. If omitted, man pages are not generated.
+*   `--dir <path>`: Root directory.
 
-### `list`
+### `gosubc validate`
 
-Lists all identified subcommands in the project. This is useful for debugging or verifying that `gosubc` is correctly parsing your comments.
+Validates subcommand definitions for errors or conflicts.
 
-```bash
-gosubc list [flags]
-```
-
-**Flags:**
-
-- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
-
-### `validate`
-
-Validates the subcommand definitions to ensure there are no conflicts or errors.
-
-```bash
-gosubc validate [flags]
-```
-
-**Flags:**
-
-- `--dir <path>`: The project root directory containing `go.mod`. Defaults to the current directory.
-
-## Examples
-
-Check the `examples/` directory for working examples:
-
-- [`examples/basic1`](examples/basic1): A simple example with basic subcommands.
-- [`examples/complex`](examples/complex): A more complex example showing nested commands and parameters.
+*   `--dir <path>`: Root directory.
 
 ## Contributing
 
-Contributions are welcome! If you find a bug or have a feature request, please (discuss features first) open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
+Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
 
 ## License
 
