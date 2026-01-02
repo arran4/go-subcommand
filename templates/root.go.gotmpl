@@ -97,7 +97,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-
 	{{- range .Parameters}}
 		{{- if not .IsPositional }}
 		{{$param := .}}
@@ -144,7 +143,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		{{- end }}
 		{{- end }}
 	{{- end}}
-
 	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
@@ -284,7 +282,6 @@ func (c *RootCmd) Execute(args []string) error {
 	return nil
 
 	{{- else}}
-
 	if len(args) < 1 {
 		c.Usage()
 		return nil
