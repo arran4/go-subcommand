@@ -419,12 +419,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			returnsError := false
 			returnCount := 0
 			if s.Type.Results != nil {
-				returnCount = len(s.Type.Results.List)
 				for _, r := range s.Type.Results.List {
+					if len(r.Names) > 0 {
+						returnCount += len(r.Names)
+					} else {
+						returnCount++
+					}
 					if ident, ok := r.Type.(*ast.Ident); ok && ident.Name == "error" {
 						returnsError = true
-						break
 					}
+				}
+				if returnCount > 1 {
+					return fmt.Errorf("function %s has multiple return values, which is not implemented yet", s.Name.Name)
 				}
 			}
 
