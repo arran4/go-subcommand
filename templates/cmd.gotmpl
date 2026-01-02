@@ -57,6 +57,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
+	{{- if .SubCommandFunctionName }}
+		// Avoid unused variable warning
+		if len(remainingArgs) == 0 {
+			_ = remainingArgs
+		}
+	{{- end}}
 	{{- $posArgs := 0 }}
 	{{- range .Parameters }}
 		{{- if .IsPositional }}

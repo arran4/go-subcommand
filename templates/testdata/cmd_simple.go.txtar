@@ -58,6 +58,10 @@ func (c *MyCmd) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 	remainingArgs := c.Flags.Args()
+	// Avoid unused variable warning
+	if len(remainingArgs) == 0 {
+		_ = remainingArgs
+	}
 
 	mypkg.MyCmdFunc(c.verbose)
 

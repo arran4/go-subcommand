@@ -11,25 +11,23 @@ import (
 	"github.com/arran4/go-subcommand/examples/complex"
 )
 
-var _ Cmd = (*anotherCmd)(nil)
+var _ Cmd = (*Another)(nil)
 
-type anotherCmd struct {
+type Another struct {
 	*RootCmd
-	Flags *flag.FlagSet
-
-	wait time.Duration
-
+	Flags       *flag.FlagSet
+	wait        time.Duration
 	SubCommands map[string]Cmd
 }
 
-func (c *anotherCmd) Usage() {
+func (c *Another) Usage() {
 	err := executeUsage(os.Stderr, "another_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *anotherCmd) Execute(args []string) error {
+func (c *Another) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -39,15 +37,20 @@ func (c *anotherCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
+	remainingArgs := c.Flags.Args()
+	// Avoid unused variable warning
+	if len(remainingArgs) == 0 {
+		_ = remainingArgs
+	}
 
 	complex.Another(c.wait)
 
 	return nil
 }
 
-func (c *RootCmd) NewanotherCmd() *anotherCmd {
+func (c *RootCmd) NewAnother() *Another {
 	set := flag.NewFlagSet("another", flag.ContinueOnError)
-	v := &anotherCmd{
+	v := &Another{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
@@ -63,7 +66,6 @@ func (c *RootCmd) NewanotherCmd() *anotherCmd {
 	} else {
 		set.DurationVar(&v.wait, "w", 0, "How long to wait")
 	}
-
 	set.Usage = v.Usage
 
 	return v

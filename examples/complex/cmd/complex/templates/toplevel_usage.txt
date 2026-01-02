@@ -5,8 +5,8 @@ It prints the name provided.
 
 Subcommands:
     nested     A nested command
-
-    version      Print version information
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
-    -name, -n string   The name to greet (default: world)
+    --name, -n string   The name to greet (default: world)

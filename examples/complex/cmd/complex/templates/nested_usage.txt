@@ -3,8 +3,6 @@ Usage: complex toplevel nested <subcommand> [arguments]
 This command demonstrates a nested command under 'toplevel'.
 It takes an integer and a boolean.
 
-    version      Print version information
-
 Flags:
-    -count, -c int   Number of times to repeat (default: 1)
-    -verbose, -v     Enable verbose output (default: false)
+    --count, -c int   Number of times to repeat (default: 1)
+    --verbose, -v     Enable verbose output (default: false)
