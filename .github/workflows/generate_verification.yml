@@ -63,6 +63,28 @@ jobs:
           go build ./cmd/...
           cd ../..
 
+      - name: Verify (Vet & Lint)
+        run: |
+          go vet ./...
+
+          # Vet examples
+          cd examples/basic1
+          go vet ./...
+          cd ../..
+
+          cd examples/complex
+          go vet ./...
+          cd ../..
+
+          cd examples/returns
+          go vet ./...
+          cd ../..
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+
       - name: Check for changes
         id: check_changes
         run: |
