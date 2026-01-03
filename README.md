@@ -213,6 +213,25 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
+### Parent Flags (Inheritance)
+
+Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to update the parent's state (like global verbosity or configuration).
+
+Use the `parent-flag: <param_name>` directive.
+
+```go
+// Parent is a subcommand `app parent`
+// Flags:
+//   verbose: -v --verbose
+func Parent(verbose bool) { ... }
+
+// Child is a subcommand `app parent child`
+// parent-flag: verbose
+func Child(verbose bool) {
+    // verbose parameter here maps to Parent's verbose variable
+}
+```
+
 ### Man Page Generation
 
 To generate man pages, pass the `--man-dir` flag to `gosubc`.

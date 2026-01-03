@@ -713,3 +713,36 @@ func GrandChild() {}
 		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
 	}
 }
+
+func TestIssue50_ParentFlag(t *testing.T) {
+	src := `package main
+
+// Parent is a subcommand ` + "`app parent`" + `
+// flag: verbose --verbose -v "Verbosity level"
+func Parent(verbose bool) {}
+
+// Child is a subcommand ` + "`app parent child`" + `
+// parent-flag: verbose
+func Child(verbose bool) {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	childPath := "cmd/app/child.go"
+	content, ok := writer.Files[childPath]
+	if !ok {
+		t.Fatalf("Generated child file not found: %s", childPath)
+	}
+	code := string(content)
+
+	// Verify Child struct does NOT have 'verbose' field
+	if strings.Contains(code, "\tverbose bool") {
+		t.Errorf("Child struct should not contain 'verbose' field (FromParent)")
+	}
+
+	// Verify flag registration exists and points to parent variable (v.verbose -> v.Parent.verbose via embedding)
+	// Since Child embeds *Parent, v.verbose is valid.
+	if !strings.Contains(code, `set.BoolVar(&v.verbose, "verbose", false, "Verbosity level")`) {
+		t.Errorf("Child command should register 'verbose' flag pointing to embedded field")
+	}
+}
