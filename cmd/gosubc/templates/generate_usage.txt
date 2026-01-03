@@ -1,5 +1,5 @@
 Usage: gosubc generate [flags...]
 
 Flags:
-    --dir string       Directory to generate code for (default: .)
+    --dir string       Project root directory containing go.mod (default: .)
     --man-dir string   Directory to generate man pages in optional

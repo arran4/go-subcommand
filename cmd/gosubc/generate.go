@@ -101,7 +101,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Directory to generate code for")
+	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 	set.Usage = v.Usage
