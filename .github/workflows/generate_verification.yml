@@ -42,7 +42,12 @@ jobs:
         run: |
           find . -name "go.mod" -exec dirname {} \; | while read dir; do
             echo "Building in $dir"
-            (cd "$dir" && go build ./...)
+            if [ "$dir" = "." ]; then
+              go build .
+              go build ./cmd/gosubc
+            else
+              (cd "$dir" && go build ./...)
+            fi
           done
 
       - name: Check for changes
