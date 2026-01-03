@@ -45,6 +45,13 @@ func (c *{{.SubCommandStructName}}) Usage() {
 	}
 }
 
+func (c *{{.SubCommandStructName}}) UsageRecursive() {
+	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage_recursive.txt", c)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
@@ -306,6 +313,12 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{- if .SubCommands }}
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},
@@ -313,6 +326,12 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},

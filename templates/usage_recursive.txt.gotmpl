@@ -1,0 +1,34 @@
+{{- define "subcommands" -}}
+{{- range .SubCommands}}
+    {{.SubCommandSequence | printf "%-40s"}} {{.SubCommandDescription}}
+{{- if .SubCommands}}
+{{- template "subcommands" . }}
+{{- end}}
+{{- end}}
+{{- end -}}
+{{- $hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end -}}
+Usage: {{.ProgName}}{{if $hasFlags}} [flags...]{{end}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}}{{if .SubCommands}} <subcommand>{{end}}
+{{if .SubCommandExtendedHelp}}
+{{.SubCommandExtendedHelp}}
+{{end}}{{if .SubCommands}}
+Subcommands:
+{{- template "subcommands" . }}
+{{- if .SubCommandFunctionName }}
+    help                                     Print this help message
+    usage                                    Print this usage message
+{{- end}}
+{{end}}{{$hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end}}{{if $hasFlags}}
+Flags:{{$max := add .MaxFlagLength 2 -}}
+{{- range .Parameters}}
+{{- if not .IsPositional -}}
+{{printf "\n    %-*s %s" $max .FlagString .Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{- end}}
+{{- end}}
+{{end}}{{$hasPositional := false}}{{range .Parameters}}{{if .IsPositional}}{{$hasPositional = true}}{{end}}{{end}}{{if $hasPositional}}
+Positional Arguments:
+{{- range .Parameters}}
+{{- if .IsPositional}}
+    {{ .Name | printf "%-10s"}} {{.Description}}
+{{- end}}
+{{- end}}
+{{end}}

@@ -142,6 +142,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 			DataModel:    d,
 			MainCmdName:  cmdName,
 			PackagePath:  rootCommands.PackagePath,
+			ImportPath:   rootCommands.PackagePath, // Root command logic usually in root package
 			FunctionName: cmdTree.FunctionName,
 			Parameters:   cmdTree.Parameters,
 			ReturnsError: cmdTree.ReturnsError,

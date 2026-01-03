@@ -14,6 +14,7 @@ type Command struct {
 	MainCmdName  string
 	SubCommands  []*SubCommand
 	PackagePath  string
+	ImportPath   string
 	Description  string
 	ExtendedHelp string
 	FunctionName string

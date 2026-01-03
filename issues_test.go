@@ -712,3 +712,60 @@ func GrandChild() {}
 		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
 	}
 }
+
+func TestIssue67_DeepFlag(t *testing.T) {
+	src := `package main
+
+// Root is a subcommand ` + "`app`" + `
+func Root() {}
+
+// Child is a subcommand ` + "`app child`" + `
+func Child() {}
+
+// GrandChild is a subcommand ` + "`app child grandchild`" + `
+func GrandChild() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// 1. Verify RootCmd supports UsageRecursive logic (or equivalent in Execute)
+	// We check if the generated root.go contains logic to handle "-deep"
+	rootPath := "cmd/app/root.go"
+	rootContent, ok := writer.Files[rootPath]
+	if !ok {
+		t.Fatalf("Root file not found: %s", rootPath)
+	}
+	rootCode := string(rootContent)
+
+	if !strings.Contains(rootCode, "-deep") {
+		t.Errorf("RootCmd does not check for '-deep' flag")
+	}
+
+	// 2. Verify SubCommand supports UsageRecursive
+	childPath := "cmd/app/child.go"
+	childContent, ok := writer.Files[childPath]
+	if !ok {
+		t.Fatalf("Child file not found: %s", childPath)
+	}
+	childCode := string(childContent)
+
+	if !strings.Contains(childCode, "-deep") {
+		t.Errorf("SubCommand does not check for '-deep' flag")
+	}
+	if !strings.Contains(childCode, "UsageRecursive()") {
+		t.Errorf("SubCommand does not have UsageRecursive() method")
+	}
+
+	// 3. Verify existence of recursive usage templates
+	recursiveUsagePath := "cmd/app/templates/child_usage_recursive.txt"
+	content, ok := writer.Files[recursiveUsagePath]
+	if !ok {
+		t.Errorf("Recursive usage file not found: %s", recursiveUsagePath)
+	} else {
+		// Check content includes grandchild
+		usageText := string(content)
+		if !strings.Contains(usageText, "child grandchild") {
+			t.Errorf("Recursive usage text does not contain grandchild:\n%s", usageText)
+		}
+	}
+}
