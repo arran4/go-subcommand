@@ -89,7 +89,7 @@ func (c *RootCmd) NewValidate() *Validate {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Directory to validate")
+	set.StringVar(&v.dir, "dir", ".", "Path to the root directory of the project to validate")
 	set.Usage = v.Usage
 
 	return v

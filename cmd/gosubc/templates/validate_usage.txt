@@ -1,4 +1,4 @@
 Usage: gosubc validate [flags...]
 
 Flags:
-    --dir string   Directory to validate (default: .)
+    --dir string   Path to the root directory of the project to validate (default: .)

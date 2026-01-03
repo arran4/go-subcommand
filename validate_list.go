@@ -5,7 +5,7 @@ import (
 )
 
 // Validate is a subcommand `gosubc validate` that validates the subcommand code
-// param dir (default: ".") Directory to validate
+// param dir (default: ".") Path to the root directory of the project to validate
 func Validate(dir string) error {
 	_, err := parse(dir)
 	if err != nil {
