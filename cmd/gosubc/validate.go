@@ -89,7 +89,7 @@ func (c *RootCmd) NewValidate() *Validate {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Directory to validate")
+	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 	set.Usage = v.Usage
 
 	return v

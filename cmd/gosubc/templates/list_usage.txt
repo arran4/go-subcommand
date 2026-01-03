@@ -1,4 +1,4 @@
 Usage: gosubc list [flags...]
 
 Flags:
-    --dir string   Directory to list subcommands from (default: .)
+    --dir string   The project root directory containing go.mod (default: .)
