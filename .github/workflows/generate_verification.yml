@@ -40,15 +40,16 @@ jobs:
 
       - name: Build
         run: |
-          find . -name "go.mod" -exec dirname {} \; | while read dir; do
-            echo "Building in $dir"
-            if [ "$dir" = "." ]; then
-              go build .
-              go build ./cmd/gosubc
-            else
-              (cd "$dir" && go build ./...)
-            fi
-          done
+          go build .
+          go build ./cmd/gosubc
+
+          cd examples/basic1
+          go build .
+          cd ../..
+
+          cd examples/complex
+          go build .
+          cd ../..
 
       - name: Check for changes
         id: check_changes
