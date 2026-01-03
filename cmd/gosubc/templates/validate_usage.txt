@@ -1,9 +1,4 @@
-Usage: gosubc validate <subcommand> [arguments]
-
-
-    version      Print version information
+Usage: gosubc validate [flags...]
 
 Flags:
-    -dir string   Directory to validate (default: .)
-
-
+    --dir string   Directory to validate (default: .)

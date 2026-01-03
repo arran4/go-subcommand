@@ -6,39 +6,84 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*generateCmd)(nil)
+var _ Cmd = (*Generate)(nil)
 
-type generateCmd struct {
+type Generate struct {
 	*RootCmd
-	Flags *flag.FlagSet
-
-	dir string
-
-	manDir string
-
+	Flags       *flag.FlagSet
+	dir         string
+	manDir      string
 	SubCommands map[string]Cmd
 }
 
-func (c *generateCmd) Usage() {
+func (c *Generate) Usage() {
 	err := executeUsage(os.Stderr, "generate_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *generateCmd) Execute(args []string) error {
+func (c *Generate) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	var remainingArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			value := ""
+			hasValue := false
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+
+			case "dir":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.dir = value
+
+			case "manDir", "man-dir":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.manDir = value
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
 	}
 
 	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
@@ -48,9 +93,9 @@ func (c *generateCmd) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewgenerateCmd() *generateCmd {
+func (c *RootCmd) NewGenerate() *Generate {
 	set := flag.NewFlagSet("generate", flag.ContinueOnError)
-	v := &generateCmd{
+	v := &Generate{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
@@ -59,7 +104,6 @@ func (c *RootCmd) NewgenerateCmd() *generateCmd {
 	set.StringVar(&v.dir, "dir", ".", "Directory to generate code for")
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
-
 	set.Usage = v.Usage
 
 	return v

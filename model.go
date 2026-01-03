@@ -11,9 +11,9 @@ type DataModel struct {
 
 type Command struct {
 	*DataModel
-	MainCmdName string
-	SubCommands []*SubCommand
-	PackagePath string
+	MainCmdName  string
+	SubCommands  []*SubCommand
+	PackagePath  string
 	Description  string
 	ExtendedHelp string
 	FunctionName string

@@ -149,9 +149,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 		{{- end }}
 	{{- end }}
-	{{- if or (gt $posArgs 0) $hasVarArg }}
-	remainingArgs := c.Flags.Args()
-	{{- end }}
+
 
 	{{- if gt $posArgs 0 }}
 	if len(remainingArgs) < {{$posArgs}} {

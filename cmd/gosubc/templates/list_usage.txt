@@ -1,9 +1,4 @@
-Usage: gosubc list <subcommand> [arguments]
-
-
-    version      Print version information
+Usage: gosubc list [flags...]
 
 Flags:
-    -dir string   Directory to list subcommands from (default: .)
-
-
+    --dir string   Directory to list subcommands from (default: .)

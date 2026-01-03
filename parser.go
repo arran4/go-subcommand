@@ -672,4 +672,3 @@ func parseParamDetails(text string) ParsedParam {
 
 	return p
 }
-

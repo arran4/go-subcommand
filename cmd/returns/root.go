@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
+	"github.com/arran4/go-subcommand/cmd/returns/templates"
 )
 
 type Cmd interface {
@@ -73,9 +73,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	c.Commands["generate"] = c.NewGenerate()
-	c.Commands["list"] = c.NewList()
-	c.Commands["validate"] = c.NewValidate()
+	c.Commands["simple"] = c.NewSimple()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			c.Usage()

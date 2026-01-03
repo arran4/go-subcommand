@@ -45,7 +45,6 @@ func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	return writer
 }
 
-
 func TestIssue33_HyphenatedCommands_Content(t *testing.T) {
 	src := `package main
 
@@ -117,7 +116,7 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 	`
 
 	fs := fstest.MapFS{
-		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"go.mod":  &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
