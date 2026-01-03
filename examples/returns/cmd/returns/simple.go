@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/arran4/go-subcommand/examples/returns"
 )
@@ -32,9 +34,45 @@ func (c *Simple) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	var remainingArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			value := ""
+			hasValue := false
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+
+			case "fail", "f":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.fail = b
+				} else {
+					c.fail = true
+				}
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
 	}
 
 	if err := returns.SimpleError(c.fail); err != nil {

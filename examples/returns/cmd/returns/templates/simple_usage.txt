@@ -1,4 +1,4 @@
-Usage: returns simple <subcommand> [arguments]
+Usage: returns simple [flags...]
 
 Returns a simple error if the flag is set.
 

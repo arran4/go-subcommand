@@ -59,14 +59,24 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			break
 		}
 		if strings.HasPrefix(arg, "-") {
+			{{- $hasFlags := false }}
+			{{- range .Parameters }}
+			{{- if not .IsPositional }}
+			{{- $hasFlags = true }}
+			{{- end }}
+			{{- end }}
 			name := arg
+			{{- if $hasFlags }}
 			value := ""
 			hasValue := false
+			{{- end }}
 			if strings.Contains(arg, "=") {
 				parts := strings.SplitN(arg, "=", 2)
 				name = parts[0]
+				{{- if $hasFlags }}
 				value = parts[1]
 				hasValue = true
+				{{- end }}
 			}
 			trimmedName := strings.TrimLeft(name, "-")
 			switch trimmedName {

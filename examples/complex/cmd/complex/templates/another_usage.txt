@@ -1,4 +1,4 @@
-Usage: complex another <subcommand> [arguments]
+Usage: complex another [flags...]
 
 This command demonstrates using a duration parameter.
 

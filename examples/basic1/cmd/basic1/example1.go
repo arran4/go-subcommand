@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/arran4/go-subcommand/examples/basic1"
 )
@@ -31,9 +32,30 @@ func (c *Example1) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	var remainingArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
 	}
 
 	basic1.ExampleCmd1()
