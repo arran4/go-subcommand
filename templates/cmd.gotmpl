@@ -38,15 +38,20 @@ type {{.SubCommandStructName}} struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageData{{.SubCommandStructName}} struct {
+	*{{.SubCommandStructName}}
+	Recursive bool
+}
+
 func (c *{{.SubCommandStructName}}) Usage() {
-	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", c)
+	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", UsageData{{.SubCommandStructName}}{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *{{.SubCommandStructName}}) UsageRecursive() {
-	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage_recursive.txt", c)
+	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", UsageData{{.SubCommandStructName}}{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}

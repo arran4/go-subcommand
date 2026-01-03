@@ -1,0 +1,31 @@
+-- go.mod --
+module example.com/test
+
+go 1.25.3
+-- main.go --
+package main
+
+// Root is a subcommand `app`
+func Root() {}
+
+// Child is a subcommand `app child`
+// Flags:
+//   verbose: --verbose Verbose output
+func Child(verbose bool) {}
+
+// GrandChild is a subcommand `app child grandchild`
+func GrandChild() {}
+-- templates/child_usage.txt --
+Usage: app child [flags...] <subcommand>
+
+Subcommands:
+{{if .Recursive}}
+    app child grandchild                     Child
+{{else}}
+    grandchild Child
+{{end}}
+    help         Print this help message
+    usage        Print this usage message
+
+Flags:
+    --verbose Verbose output

@@ -756,16 +756,19 @@ func GrandChild() {}
 		t.Errorf("SubCommand does not have UsageRecursive() method")
 	}
 
-	// 3. Verify existence of recursive usage templates
-	recursiveUsagePath := "cmd/app/templates/child_usage_recursive.txt"
-	content, ok := writer.Files[recursiveUsagePath]
+	// 3. Verify existence of combined usage template with toggle
+	usagePath := "cmd/app/templates/child_usage.txt"
+	content, ok := writer.Files[usagePath]
 	if !ok {
-		t.Errorf("Recursive usage file not found: %s", recursiveUsagePath)
+		t.Errorf("Usage file not found: %s", usagePath)
 	} else {
-		// Check content includes grandchild
+		// Check content includes toggle and grandchild
 		usageText := string(content)
+		if !strings.Contains(usageText, "{{if .Recursive}}") {
+			t.Errorf("Usage text does not contain Recursive toggle:\n%s", usageText)
+		}
 		if !strings.Contains(usageText, "child grandchild") {
-			t.Errorf("Recursive usage text does not contain grandchild:\n%s", usageText)
+			t.Errorf("Usage text does not contain recursive grandchild info:\n%s", usageText)
 		}
 	}
 }

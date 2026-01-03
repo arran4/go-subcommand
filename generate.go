@@ -106,9 +106,6 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 	if err := generateFile(writer, cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
 	}
-	if err := generateFile(writer, cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage_recursive.txt", "usage_recursive.txt.gotmpl", subCmd, false); err != nil {
-		return err
-	}
 	if manDir != "" {
 		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
 		if err := generateFile(writer, manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {

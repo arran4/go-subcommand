@@ -1,12 +1,24 @@
+{{- define "subcommands_recursive" -}}
+{{- range .SubCommands}}
+    {{.SubCommandSequence | printf "%-40s"}} {{.SubCommandDescription}}
+{{- if .SubCommands}}
+{{- template "subcommands_recursive" . }}
+{{- end}}
+{{- end}}
+{{- end -}}
 {{- $hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end -}}
 Usage: {{.ProgName}}{{if $hasFlags}} [flags...]{{end}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}}{{if .SubCommands}} <subcommand>{{end}}
 {{if .SubCommandExtendedHelp}}
 {{.SubCommandExtendedHelp}}
 {{end}}{{if .SubCommands}}
 Subcommands:
+{{ "{{" }}if .Recursive{{ "}}" }}
+{{- template "subcommands_recursive" . }}
+{{ "{{" }}else{{ "}}" }}
 {{- range .SubCommands}}
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{- end}}
+{{ "{{" }}end{{ "}}" }}
 {{- if .SubCommandFunctionName }}
     help         Print this help message
     usage        Print this usage message
