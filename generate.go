@@ -91,7 +91,27 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 			return err
 		}
 		for _, subCmd := range cmd.SubCommands {
+			if err := checkCollisions(cmd.SubCommands); err != nil {
+				return err
+			}
 			if err := generateSubCommandFiles(writer, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func checkCollisions(subCommands []*SubCommand) error {
+	seen := make(map[string]string)
+	for _, sc := range subCommands {
+		lower := strings.ToLower(sc.SubCommandName)
+		if existing, ok := seen[lower]; ok {
+			return fmt.Errorf("subcommand name collision detected: '%s' conflicts with '%s' (case-insensitive)", sc.SubCommandName, existing)
+		}
+		seen[lower] = sc.SubCommandName
+		if len(sc.SubCommands) > 0 {
+			if err := checkCollisions(sc.SubCommands); err != nil {
 				return err
 			}
 		}

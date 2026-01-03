@@ -772,3 +772,23 @@ func GrandChild() {}
 		}
 	}
 }
+
+func TestIssue67_CollisionCheck(t *testing.T) {
+	src := `package main
+
+// Foo is a subcommand ` + "`app Foo`" + `
+func Foo() {}
+
+// foo is a subcommand ` + "`app foo`" + `
+func foo() {}
+`
+	fs := setupProject(t, src)
+	writer := NewMockWriter()
+
+	err := GenerateWithFS(fs, writer, ".", "")
+	if err == nil {
+		t.Error("Expected collision error for 'Foo' vs 'foo', but got nil")
+	} else if !strings.Contains(err.Error(), "collision detected") {
+		t.Errorf("Expected collision error message, got: %v", err)
+	}
+}
