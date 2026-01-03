@@ -65,7 +65,9 @@ jobs:
 
       - name: Verify (Vet & Lint)
         run: |
-          go vet ./...
+          go vet .
+          go vet ./cmd/gosubc
+          go vet ./templates
 
           # Vet examples
           cd examples/basic1
