@@ -472,6 +472,7 @@ var (
 	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	reIsASubcommand   = regexp.MustCompile(`is\s+a\s+subcommand\s+` + "`")
 )
 
 type ParsedParam struct {
@@ -511,7 +512,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if strings.Contains(line, "is a subcommand `") {
+		if reIsASubcommand.MatchString(line) {
 			ok = true
 			start := strings.Index(line, "`")
 			end := strings.LastIndex(line, "`")
@@ -558,9 +559,11 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		if !parsedParam {
 			if strings.HasPrefix(trimmedLine, "flag ") {
 				paramLine = strings.TrimPrefix(trimmedLine, "flag ")
+				paramLine = strings.TrimSpace(paramLine)
 				parsedParam = true
 			} else if strings.HasPrefix(trimmedLine, "param ") {
 				paramLine = strings.TrimPrefix(trimmedLine, "param ")
+				paramLine = strings.TrimSpace(paramLine)
 				parsedParam = true
 			} else if matches := reImplicitFormat.FindStringSubmatch(trimmedLine); matches != nil {
 				if reImplicitCheck.MatchString(matches[2]) {
