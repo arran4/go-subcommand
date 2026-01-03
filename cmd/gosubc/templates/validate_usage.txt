@@ -1,4 +1,4 @@
 Usage: gosubc validate [flags...]
 
 Flags:
-    --dir string   Directory to validate (default: .)
+    --dir string   The project root directory containing go.mod (default: .)
