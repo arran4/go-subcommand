@@ -39,7 +39,11 @@ jobs:
         run: gosubc generate
 
       - name: Build
-        run: go build ./...
+        run: |
+          find . -name "go.mod" -exec dirname {} \; | while read dir; do
+            echo "Building in $dir"
+            (cd "$dir" && go build ./...)
+          done
 
       - name: Check for changes
         id: check_changes
