@@ -147,6 +147,19 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
+	{{- if not .Parameters }}
+	_ = remainingArgs
+	{{- else }}
+	{{- $hasUsedArgs := false }}
+	{{- range .Parameters }}
+	{{- if .IsPositional }}
+	{{- $hasUsedArgs = true }}
+	{{- end }}
+	{{- end }}
+	{{- if not $hasUsedArgs }}
+	_ = remainingArgs
+	{{- end }}
+	{{- end }}
 
 	{{- $posArgs := 0 }}
 	{{- $hasVarArg := false }}

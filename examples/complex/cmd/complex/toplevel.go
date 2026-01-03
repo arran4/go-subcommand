@@ -73,6 +73,7 @@ func (c *Toplevel) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
+	_ = remainingArgs
 
 	complex.TopLevel(c.name)
 

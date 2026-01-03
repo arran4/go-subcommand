@@ -90,6 +90,7 @@ func (c *Nested) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
+	_ = remainingArgs
 
 	complex.Nested(c.count, c.verbose)
 

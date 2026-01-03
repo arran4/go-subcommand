@@ -57,6 +57,7 @@ func (c *Example1) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
+	_ = remainingArgs
 
 	basic1.ExampleCmd1()
 

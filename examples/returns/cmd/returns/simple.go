@@ -74,6 +74,7 @@ func (c *Simple) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
+	_ = remainingArgs
 
 	if err := returns.SimpleError(c.fail); err != nil {
 		return fmt.Errorf("simple failed: %w", err)
