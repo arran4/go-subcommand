@@ -32,7 +32,9 @@ jobs:
 
       - name: Clean generated files
         run: |
-          rm -rf cmd/gosubc/*.go
+          # Clean generated Go files in cmd/gosubc (preserving directory structure if needed)
+          rm -f cmd/gosubc/*.go
+          # Clean generated templates directory
           rm -rf cmd/gosubc/templates
 
       - name: Run generation
@@ -73,3 +75,4 @@ jobs:
           body: "This PR updates the generated code to match the current generator logic."
           branch: "update-generated-code"
           delete-branch: true
+          base: main
