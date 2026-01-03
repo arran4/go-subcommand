@@ -712,3 +712,36 @@ func GrandChild() {}
 		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
 	}
 }
+
+func TestIssue81_WhitespaceInDefinitions(t *testing.T) {
+	src := `package main
+
+// MyCmd   is a    subcommand    ` + "`app   mycmd`" + `
+// Flags:
+//   verbose:   --verbose    Verbose   mode
+func MyCmd(
+	verbose bool,
+) {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		// If the command wasn't parsed at all, the usage file won't exist.
+		// We expect this to happen currently due to strict "is a subcommand" check.
+		t.Logf("Usage file not found: %s (Expected failure for Issue 81)", usagePath)
+        // We want the test to fail so we can fix it.
+        t.Fail()
+        return
+	}
+	usageText := string(content)
+
+	if !strings.Contains(usageText, "--verbose") {
+		t.Errorf("Expected usage to contain --verbose despite extra whitespace")
+	}
+    if !strings.Contains(usageText, "Verbose mode") {
+		t.Errorf("Expected usage to contain 'Verbose mode' despite extra whitespace")
+	}
+}
