@@ -125,6 +125,10 @@ func (c *RootCmd) Execute(args []string) error {
 		c.Usage()
 		return nil
 	}
+	if args[0] == "-h" || args[0] == "--help" {
+		c.Usage()
+		return nil
+	}
 	cmd, ok := c.Commands[args[0]]
 	if !ok {
 		c.Usage()

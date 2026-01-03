@@ -712,3 +712,37 @@ func GrandChild() {}
 		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
 	}
 }
+
+func TestIssue86_RootHelpFlag(t *testing.T) {
+	src := `package main
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	rootPath := "cmd/app/root.go"
+	content, ok := writer.Files[rootPath]
+	if !ok {
+		t.Fatalf("Root file not found: %s", rootPath)
+	}
+
+	code := string(content)
+
+	// Issue 86: "unknown command: --help" when running root command with --help.
+	// This happens because when there is no root function, it expects args[0] to be a command.
+	// We want to ensure that generated code handles -h and --help gracefully.
+
+	// We look for logic that checks for help flags before looking up commands.
+	// Or logic that parses flags.
+
+	// The fix should likely introduce something like:
+	// if args[0] == "-h" || args[0] == "--help" { ... }
+
+	hasHelpCheck := strings.Contains(code, `args[0] == "-h"`) || strings.Contains(code, `args[0] == "--help"`) || strings.Contains(code, `c.FlagSet.Parse(args)`)
+
+	if !hasHelpCheck {
+		t.Errorf("Issue #86: Generated RootCmd.Execute does not appear to check for help flags (-h, --help) or parse flags when no root function is defined.\nCode snippet:\n%s", code)
+	}
+}
