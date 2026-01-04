@@ -10,8 +10,9 @@
 Usage: {{.ProgName}}{{if $hasFlags}} [flags...]{{end}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}}{{if .SubCommands}} <subcommand>{{end}}
 {{if .SubCommandExtendedHelp}}
 {{.SubCommandExtendedHelp}}
-{{end}}{{if .SubCommands}}
+{{end}}{{if or .SubCommands .SubCommandFunctionName}}
 Subcommands:
+{{- if .SubCommands}}
 {{ "{{" }}if .Recursive{{ "}}" }}
 {{- template "subcommands_recursive" . }}
 {{ "{{" }}else{{ "}}" }}
@@ -19,11 +20,12 @@ Subcommands:
     {{.SubCommandName | printf "%-10s"}} {{.SubCommandDescription}}
 {{- end}}
 {{ "{{" }}end{{ "}}" }}
+{{- end}}
 {{- if .SubCommandFunctionName }}
     help         Print this help message
     usage        Print this usage message
 {{- end}}
-{{end}}{{$hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end}}{{if $hasFlags}}
+{{end}}{{/* End Subcommands block */}}{{$hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end}}{{if $hasFlags}}
 Flags:{{$max := add .MaxFlagLength 2 -}}
 {{- range .Parameters}}
 {{- if not .IsPositional -}}
