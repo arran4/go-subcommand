@@ -23,6 +23,10 @@
 -- output.txt --
 Usage: myapp leaf [flags...] <file>
 
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
+
 Flags:
     -f              Force action (default: false)
 
