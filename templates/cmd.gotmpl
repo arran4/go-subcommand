@@ -63,11 +63,21 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
+	{{- $needsRemainingArgs := false }}
+	{{- range .Parameters }}
+	{{- if or .IsPositional .IsVarArg }}
+	{{- $needsRemainingArgs = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $needsRemainingArgs }}
 	var remainingArgs []string
+	{{- end }}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
+			{{- if $needsRemainingArgs }}
 			remainingArgs = append(remainingArgs, args[i+1:]...)
+			{{- end }}
 			break
 		}
 		if strings.HasPrefix(arg, "-") {
@@ -145,9 +155,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			default:
 				return fmt.Errorf("unknown flag: %s", name)
 			}
-		} else {
+		}{{ if $needsRemainingArgs }} else {
 			remainingArgs = append(remainingArgs, arg)
-		}
+		}{{ end }}
 	}
 
 	{{- $posArgs := 0 }}
