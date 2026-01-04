@@ -7,6 +7,7 @@
   "SubCommandDescription": "My command description",
   "SubCommandPackageName": "mypkg",
   "ImportPath": "example.com/mypkg",
+  "UsageFileName": "mycmd_usage.txt",
   "Parameters": [
     {
       "Name": "filename",
