@@ -20,8 +20,20 @@ type Toplevel struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataToplevel struct {
+	*Toplevel
+	Recursive bool
+}
+
 func (c *Toplevel) Usage() {
-	err := executeUsage(os.Stderr, "toplevel_usage.txt", c)
+	err := executeUsage(os.Stderr, "toplevel_usage.txt", UsageDataToplevel{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Toplevel) UsageRecursive() {
+	err := executeUsage(os.Stderr, "toplevel_usage.txt", UsageDataToplevel{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -73,7 +85,6 @@ func (c *Toplevel) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
-	_ = remainingArgs
 
 	complex.TopLevel(c.name)
 
@@ -96,6 +107,12 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},
@@ -103,6 +120,12 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},

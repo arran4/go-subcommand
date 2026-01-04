@@ -64,6 +64,15 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) UsageRecursive() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	c.FlagSet.PrintDefaults()
+	fmt.Fprintln(os.Stderr, "  Commands:")
+	fmt.Fprintf(os.Stderr, "    %s\n", "another")
+	fmt.Fprintf(os.Stderr, "    %s\n", "toplevel")
+	fmt.Fprintf(os.Stderr, "    %s\n", "toplevel nested")
+}
+
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
@@ -77,6 +86,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["toplevel"] = c.NewToplevel()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
 			c.Usage()
 			return nil
 		},
@@ -84,6 +99,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.Commands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
 			c.Usage()
 			return nil
 		},
@@ -103,6 +124,10 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	if len(args) < 1 {
+		c.Usage()
+		return nil
+	}
+	if args[0] == "-h" || args[0] == "--help" {
 		c.Usage()
 		return nil
 	}

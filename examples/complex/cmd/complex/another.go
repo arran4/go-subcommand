@@ -21,8 +21,20 @@ type Another struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataAnother struct {
+	*Another
+	Recursive bool
+}
+
 func (c *Another) Usage() {
-	err := executeUsage(os.Stderr, "another_usage.txt", c)
+	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Another) UsageRecursive() {
+	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -78,7 +90,6 @@ func (c *Another) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
-	_ = remainingArgs
 
 	complex.Another(c.wait)
 

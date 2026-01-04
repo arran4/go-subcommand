@@ -20,8 +20,20 @@ type Validate struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataValidate struct {
+	*Validate
+	Recursive bool
+}
+
 func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", c)
+	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Validate) UsageRecursive() {
+	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}

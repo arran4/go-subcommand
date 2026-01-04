@@ -6,3 +6,4 @@ It takes an integer and a boolean.
 Flags:
     --count, -c int   Number of times to repeat (default: 1)
     --verbose, -v     Enable verbose output (default: false)
+

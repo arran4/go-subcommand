@@ -2,3 +2,4 @@ Usage: gosubc list [flags...]
 
 Flags:
     --dir string   The project root directory containing go.mod (default: .)
+

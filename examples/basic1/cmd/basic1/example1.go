@@ -19,8 +19,20 @@ type Example1 struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataExample1 struct {
+	*Example1
+	Recursive bool
+}
+
 func (c *Example1) Usage() {
-	err := executeUsage(os.Stderr, "example1_usage.txt", c)
+	err := executeUsage(os.Stderr, "example1_usage.txt", UsageDataExample1{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Example1) UsageRecursive() {
+	err := executeUsage(os.Stderr, "example1_usage.txt", UsageDataExample1{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -57,7 +69,6 @@ func (c *Example1) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
-	_ = remainingArgs
 
 	basic1.ExampleCmd1()
 
