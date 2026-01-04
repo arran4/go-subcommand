@@ -44,14 +44,14 @@ type UsageData{{.SubCommandStructName}} struct {
 }
 
 func (c *{{.SubCommandStructName}}) Usage() {
-	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", UsageData{{.SubCommandStructName}}{c, false})
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *{{.SubCommandStructName}}) UsageRecursive() {
-	err := executeUsage(os.Stderr, "{{.SubCommandName | lower}}_usage.txt", UsageData{{.SubCommandStructName}}{c, true})
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}

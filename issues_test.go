@@ -773,7 +773,7 @@ func GrandChild() {}
 	}
 }
 
-func TestIssue67_CollisionCheck(t *testing.T) {
+func TestIssue67_CollisionMitigation(t *testing.T) {
 	src := `package main
 
 // Foo is a subcommand ` + "`app Foo`" + `
@@ -783,12 +783,26 @@ func Foo() {}
 func foo() {}
 `
 	fs := setupProject(t, src)
-	writer := NewMockWriter()
+	writer := runGenerateInMemory(t, fs)
 
-	err := GenerateWithFS(fs, writer, ".", "")
-	if err == nil {
-		t.Error("Expected collision error for 'Foo' vs 'foo', but got nil")
-	} else if !strings.Contains(err.Error(), "collision detected") {
-		t.Errorf("Expected collision error message, got: %v", err)
+	// We expect NO error now, but distinct filenames.
+	// Since order is alphabetical, Foo comes before foo?
+	// But they are in a map (SubCommands map in parser).
+	// But Generate sorts them. sort.Strings(cmdNames).
+	// Foo < foo (ASCII 'F' is 70, 'f' is 102).
+	// So Foo is processed first -> "foo_usage.txt".
+	// foo is processed second -> "foo_1_usage.txt".
+
+	fooUsage := "cmd/app/templates/foo_usage.txt"
+	foo1Usage := "cmd/app/templates/foo_1_usage.txt"
+
+	_, ok1 := writer.Files[fooUsage]
+	_, ok2 := writer.Files[foo1Usage]
+
+	if !ok1 {
+		t.Errorf("Expected %s to exist", fooUsage)
+	}
+	if !ok2 {
+		t.Errorf("Expected %s to exist (mitigation for collision)", foo1Usage)
 	}
 }

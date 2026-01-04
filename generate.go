@@ -91,9 +91,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 			return err
 		}
 		for _, subCmd := range cmd.SubCommands {
-			if err := checkCollisions(cmd.SubCommands); err != nil {
-				return err
-			}
+			assignUsageFileNames(cmd.SubCommands)
 			if err := generateSubCommandFiles(writer, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
@@ -102,28 +100,29 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 	return nil
 }
 
-func checkCollisions(subCommands []*SubCommand) error {
-	seen := make(map[string]string)
+func assignUsageFileNames(subCommands []*SubCommand) {
+	seen := make(map[string]int)
 	for _, sc := range subCommands {
 		lower := strings.ToLower(sc.SubCommandName)
-		if existing, ok := seen[lower]; ok {
-			return fmt.Errorf("subcommand name collision detected: '%s' conflicts with '%s' (case-insensitive)", sc.SubCommandName, existing)
+		count := seen[lower]
+		seen[lower]++
+		suffix := ""
+		if count > 0 {
+			suffix = fmt.Sprintf("_%d", count)
 		}
-		seen[lower] = sc.SubCommandName
+		sc.UsageFileName = fmt.Sprintf("%s%s_usage.txt", lower, suffix)
+
 		if len(sc.SubCommands) > 0 {
-			if err := checkCollisions(sc.SubCommands); err != nil {
-				return err
-			}
+			assignUsageFileNames(sc.SubCommands)
 		}
 	}
-	return nil
 }
 
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
 	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
 		return err
 	}
-	if err := generateFile(writer, cmdTemplatesDir, strings.ToLower(subCmd.SubCommandName)+"_usage.txt", "usage.txt.gotmpl", subCmd, false); err != nil {
+	if err := generateFile(writer, cmdTemplatesDir, subCmd.UsageFileName, "usage.txt.gotmpl", subCmd, false); err != nil {
 		return err
 	}
 	if manDir != "" {

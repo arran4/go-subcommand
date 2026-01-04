@@ -73,6 +73,7 @@ type SubCommand struct {
 	SubCommandExtendedHelp string
 	ImportPath             string
 	SubCommandPackageName  string
+	UsageFileName          string
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int
