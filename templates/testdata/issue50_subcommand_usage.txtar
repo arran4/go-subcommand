@@ -1,0 +1,25 @@
+-- input.json --
+{
+  "MainCmdName": "myapp",
+  "SubCommandName": "sub1",
+  "SubCommandStructName": "Sub1",
+  "SubCommandFunctionName": "Sub1Func",
+  "SubCommandDescription": "Sub1 command description",
+  "Parameters": [
+    {
+      "Name": "force",
+      "Type": "bool",
+      "FlagAliases": ["f"],
+      "Description": "Force execution"
+    }
+  ]
+}
+-- output.txt --
+Usage: myapp sub1 [flags...]
+
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
+
+Flags:
+    -f   Force execution
