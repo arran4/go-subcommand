@@ -116,7 +116,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		{{- if not .IsPositional }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
-		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
 
 		{{- $default := .Default -}}
 		{{- if not $default -}}
@@ -310,6 +309,10 @@ func (c *RootCmd) Execute(args []string) error {
 
 	{{- else}}
 	if len(args) < 1 {
+		c.Usage()
+		return nil
+	}
+	if args[0] == "-h" || args[0] == "--help" {
 		c.Usage()
 		return nil
 	}

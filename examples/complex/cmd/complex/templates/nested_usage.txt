@@ -1,4 +1,4 @@
-Usage: complex toplevel nested <subcommand> [arguments]
+Usage: complex toplevel nested [flags...]
 
 This command demonstrates a nested command under 'toplevel'.
 It takes an integer and a boolean.
