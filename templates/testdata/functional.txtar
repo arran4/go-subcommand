@@ -64,8 +64,13 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
+{{if .Recursive}}
+    bar                                      Bar command
+    baz                                      Baz command
+{{else}}
     bar        Bar command
     baz        Baz command
+{{end}}
     help         Print this help message
     usage        Print this usage message
 

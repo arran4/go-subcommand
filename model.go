@@ -14,6 +14,7 @@ type Command struct {
 	MainCmdName  string
 	SubCommands  []*SubCommand
 	PackagePath  string
+	ImportPath   string
 	Description  string
 	ExtendedHelp string
 	FunctionName string
@@ -72,6 +73,7 @@ type SubCommand struct {
 	SubCommandExtendedHelp string
 	ImportPath             string
 	SubCommandPackageName  string
+	UsageFileName          string
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int

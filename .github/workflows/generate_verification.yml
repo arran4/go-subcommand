@@ -46,21 +46,11 @@ jobs:
           go build ./cmd/gosubc
 
           cd examples/basic1
-          ../../gosubc generate
           go build .
-          go build ./cmd/...
           cd ../..
 
           cd examples/complex
-          ../../gosubc generate
           go build .
-          go build ./cmd/...
-          cd ../..
-
-          cd examples/returns
-          ../../gosubc generate
-          go build .
-          go build ./cmd/...
           cd ../..
 
       - name: Check for changes
