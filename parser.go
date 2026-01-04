@@ -41,6 +41,12 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
+	FunctionName string
+	Parameters   []*FunctionParameter
+	ReturnsError bool
+	ReturnCount  int
+	Description  string
+	ExtendedHelp string
 }
 
 type CommandsTree struct {
@@ -133,9 +139,16 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &Command{
-			DataModel:   d,
-			MainCmdName: cmdName,
-			PackagePath: rootCommands.PackagePath,
+			DataModel:    d,
+			MainCmdName:  cmdName,
+			PackagePath:  rootCommands.PackagePath,
+			ImportPath:   rootCommands.PackagePath, // Root command logic usually in root package
+			FunctionName: cmdTree.FunctionName,
+			Parameters:   cmdTree.Parameters,
+			ReturnsError: cmdTree.ReturnsError,
+			ReturnCount:  cmdTree.ReturnCount,
+			Description:  cmdTree.Description,
+			ExtendedHelp: cmdTree.ExtendedHelp,
 		}
 
 		allocator := NewNameAllocator()
@@ -209,7 +222,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
-			if !ok || len(subCommandSequence) == 0 {
+			if !ok {
 				continue
 			}
 
@@ -407,13 +420,37 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			returnsError := false
 			returnCount := 0
 			if s.Type.Results != nil {
-				returnCount = len(s.Type.Results.List)
 				for _, r := range s.Type.Results.List {
+					if len(r.Names) > 0 {
+						returnCount += len(r.Names)
+					} else {
+						returnCount++
+					}
 					if ident, ok := r.Type.(*ast.Ident); ok && ident.Name == "error" {
 						returnsError = true
-						break
 					}
 				}
+				if returnCount > 1 {
+					return fmt.Errorf("function %s has multiple return values, which is not implemented yet", s.Name.Name)
+				}
+			}
+
+			if len(subCommandSequence) == 0 {
+				ct, ok := cmdTree.Commands[cmdName]
+				if !ok {
+					ct = &CommandTree{
+						CommandName:    cmdName,
+						SubCommandTree: NewSubCommandTree(nil),
+					}
+					cmdTree.Commands[cmdName] = ct
+				}
+				ct.FunctionName = s.Name.Name
+				ct.Parameters = params
+				ct.ReturnsError = returnsError
+				ct.ReturnCount = returnCount
+				ct.Description = description
+				ct.ExtendedHelp = extendedHelp
+				continue
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
@@ -636,4 +673,3 @@ func parseParamDetails(text string) ParsedParam {
 
 	return p
 }
-

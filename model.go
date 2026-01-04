@@ -11,9 +11,16 @@ type DataModel struct {
 
 type Command struct {
 	*DataModel
-	MainCmdName string
-	SubCommands []*SubCommand
-	PackagePath string
+	MainCmdName  string
+	SubCommands  []*SubCommand
+	PackagePath  string
+	ImportPath   string
+	Description  string
+	ExtendedHelp string
+	FunctionName string
+	Parameters   []*FunctionParameter
+	ReturnsError bool
+	ReturnCount  int
 }
 
 type FunctionParameter struct {
@@ -66,6 +73,7 @@ type SubCommand struct {
 	SubCommandExtendedHelp string
 	ImportPath             string
 	SubCommandPackageName  string
+	UsageFileName          string
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int

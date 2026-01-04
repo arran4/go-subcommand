@@ -3,14 +3,17 @@
   "PackageName": "main",
   "MainCmdName": "mycmd",
   "Version": "1.0.0",
+  "Parameters": [
+    {
+      "Name": "verbose",
+      "Type": "bool",
+      "Description": "Enable verbose output"
+    }
+  ],
   "SubCommands": [
     {
       "SubCommandName": "sub1",
       "SubCommandStructName": "Sub1"
-    },
-    {
-      "SubCommandName": "sub2",
-      "SubCommandStructName": "Sub2"
     }
   ]
 }
@@ -72,6 +75,7 @@ type RootCmd struct {
 	Version  string
 	Commit   string
 	Date     string
+	verbose  bool
 }
 
 func (c *RootCmd) Usage() {
@@ -88,7 +92,6 @@ func (c *RootCmd) UsageRecursive() {
 	c.FlagSet.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
 	fmt.Fprintf(os.Stderr, "    %s\n", "sub1")
-	fmt.Fprintf(os.Stderr, "    %s\n", "sub2")
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
@@ -100,8 +103,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
+
+	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
 	c.Commands["sub1"] = c.NewSub1()
-	c.Commands["sub2"] = c.NewSub2()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {

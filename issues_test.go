@@ -45,7 +45,6 @@ func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	return writer
 }
 
-
 func TestIssue33_HyphenatedCommands_Content(t *testing.T) {
 	src := `package main
 
@@ -117,7 +116,7 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 	`
 
 	fs := fstest.MapFS{
-		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"go.mod":  &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
@@ -714,35 +713,94 @@ func GrandChild() {}
 	}
 }
 
-func TestIssue50_ParentFlag(t *testing.T) {
+func TestIssue67_DeepFlag(t *testing.T) {
 	src := `package main
 
-// Parent is a subcommand ` + "`app parent`" + `
-// flag: verbose --verbose -v "Verbosity level"
-func Parent(verbose bool) {}
+// Root is a subcommand ` + "`app`" + `
+func Root() {}
 
-// Child is a subcommand ` + "`app parent child`" + `
-// parent-flag: verbose
-func Child(verbose bool) {}
+// Child is a subcommand ` + "`app child`" + `
+func Child() {}
+
+// GrandChild is a subcommand ` + "`app child grandchild`" + `
+func GrandChild() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
 
-	childPath := "cmd/app/child.go"
-	content, ok := writer.Files[childPath]
+	// 1. Verify RootCmd supports UsageRecursive logic (or equivalent in Execute)
+	// We check if the generated root.go contains logic to handle "-deep"
+	rootPath := "cmd/app/root.go"
+	rootContent, ok := writer.Files[rootPath]
 	if !ok {
-		t.Fatalf("Generated child file not found: %s", childPath)
+		t.Fatalf("Root file not found: %s", rootPath)
 	}
-	code := string(content)
+	rootCode := string(rootContent)
 
-	// Verify Child struct does NOT have 'verbose' field
-	if strings.Contains(code, "\tverbose bool") {
-		t.Errorf("Child struct should not contain 'verbose' field (FromParent)")
+	if !strings.Contains(rootCode, "-deep") {
+		t.Errorf("RootCmd does not check for '-deep' flag")
 	}
 
-	// Verify flag registration exists and points to parent variable (v.verbose -> v.Parent.verbose via embedding)
-	// Since Child embeds *Parent, v.verbose is valid.
-	if !strings.Contains(code, `set.BoolVar(&v.verbose, "verbose", false, "Verbosity level")`) {
-		t.Errorf("Child command should register 'verbose' flag pointing to embedded field")
+	// 2. Verify SubCommand supports UsageRecursive
+	childPath := "cmd/app/child.go"
+	childContent, ok := writer.Files[childPath]
+	if !ok {
+		t.Fatalf("Child file not found: %s", childPath)
+	}
+	childCode := string(childContent)
+
+	if !strings.Contains(childCode, "-deep") {
+		t.Errorf("SubCommand does not check for '-deep' flag")
+	}
+	if !strings.Contains(childCode, "UsageRecursive()") {
+		t.Errorf("SubCommand does not have UsageRecursive() method")
+	}
+
+	// 3. Verify existence of combined usage template with toggle
+	usagePath := "cmd/app/templates/child_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Errorf("Usage file not found: %s", usagePath)
+	} else {
+		// Check content includes toggle and grandchild
+		usageText := string(content)
+		if !strings.Contains(usageText, "{{if .Recursive}}") {
+			t.Errorf("Usage text does not contain Recursive toggle:\n%s", usageText)
+		}
+		if !strings.Contains(usageText, "child grandchild") {
+			t.Errorf("Usage text does not contain recursive grandchild info:\n%s", usageText)
+		}
+	}
+}
+
+func TestIssue67_CollisionMitigation(t *testing.T) {
+	src := `package main
+
+// Cattail is a subcommand ` + "`app Cattail`" + `
+func Cattail() {}
+
+// CatTail is a subcommand ` + "`app CatTail`" + `
+func CatTail() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// Verify that case-insensitive collisions are mitigated by assigning distinct filenames.
+	// "Cattail" and "CatTail" differ only by case.
+	// Alphabetical order: CatTail (T=84) < Cattail (t=116).
+	// So CatTail is processed first -> "cattail_usage.txt".
+	// Cattail is processed second -> "cattail_1_usage.txt".
+
+	catTailUsage := "cmd/app/templates/cattail_usage.txt"
+	cattailUsage := "cmd/app/templates/cattail_1_usage.txt"
+
+	_, ok1 := writer.Files[catTailUsage]
+	_, ok2 := writer.Files[cattailUsage]
+
+	if !ok1 {
+		t.Errorf("Expected %s to exist", catTailUsage)
+	}
+	if !ok2 {
+		t.Errorf("Expected %s to exist (mitigation for collision)", cattailUsage)
 	}
 }

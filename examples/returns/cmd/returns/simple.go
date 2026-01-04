@@ -7,25 +7,26 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arran4/go-subcommand/examples/basic1"
+	"github.com/arran4/go-subcommand/examples/returns"
 )
 
-var _ Cmd = (*Example1)(nil)
+var _ Cmd = (*Simple)(nil)
 
-type Example1 struct {
+type Simple struct {
 	*RootCmd
 	Flags       *flag.FlagSet
+	fail        bool
 	SubCommands map[string]Cmd
 }
 
-func (c *Example1) Usage() {
-	err := executeUsage(os.Stderr, "example1_usage.txt", c)
+func (c *Simple) Usage() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Example1) Execute(args []string) error {
+func (c *Simple) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -36,18 +37,23 @@ func (c *Example1) Execute(args []string) error {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
 
-	basic1.ExampleCmd1()
+	if err := returns.SimpleError(c.fail); err != nil {
+		return fmt.Errorf("simple failed: %w", err)
+	}
 
 	return nil
 }
 
-func (c *RootCmd) NewExample1() *Example1 {
-	set := flag.NewFlagSet("example1", flag.ContinueOnError)
-	v := &Example1{
+func (c *RootCmd) NewSimple() *Simple {
+	set := flag.NewFlagSet("simple", flag.ContinueOnError)
+	v := &Simple{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
+
+	set.BoolVar(&v.fail, "fail", false, "Make the command fail")
+	set.BoolVar(&v.fail, "f", false, "Make the command fail")
 	set.Usage = v.Usage
 
 	return v

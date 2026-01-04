@@ -1,22 +1,3 @@
--- input.json --
-{
-  "PackageName": "main",
-  "MainCmdName": "mycmd",
-  "Version": "1.0.0",
-  "SubCommands": [
-    {
-      "SubCommandName": "sub1",
-      "SubCommandStructName": "Sub1"
-    },
-    {
-      "SubCommandName": "sub2",
-      "SubCommandStructName": "Sub2"
-    }
-  ]
-}
--- template_name --
-root.go.gotmpl
--- output.go --
 package main
 
 import (
@@ -25,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"/cmd/mycmd/templates"
+	"github.com/arran4/go-subcommand/examples/returns/cmd/returns/templates"
 )
 
 type Cmd interface {
@@ -83,14 +64,6 @@ func (c *RootCmd) Usage() {
 	}
 }
 
-func (c *RootCmd) UsageRecursive() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.FlagSet.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	fmt.Fprintf(os.Stderr, "    %s\n", "sub1")
-	fmt.Fprintf(os.Stderr, "    %s\n", "sub2")
-}
-
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
@@ -100,16 +73,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	c.Commands["sub1"] = c.NewSub1()
-	c.Commands["sub2"] = c.NewSub2()
+	c.Commands["simple"] = c.NewSimple()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
-				}
-			}
 			c.Usage()
 			return nil
 		},
@@ -117,12 +83,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.Commands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
-				}
-			}
 			c.Usage()
 			return nil
 		},
@@ -141,18 +101,14 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) error {
-	if err := c.FlagSet.Parse(args); err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
-	}
-	remainingArgs := c.FlagSet.Args()
-	if len(remainingArgs) < 1 {
+	if len(args) < 1 {
 		c.Usage()
 		return nil
 	}
-	cmd, ok := c.Commands[remainingArgs[0]]
+	cmd, ok := c.Commands[args[0]]
 	if !ok {
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
-	return cmd.Execute(remainingArgs[1:])
+	return cmd.Execute(args[1:])
 }

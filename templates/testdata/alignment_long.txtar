@@ -38,11 +38,16 @@
   ]
 }
 -- output.txt --
-Usage: myapp align <subcommand> [arguments]
+Usage: myapp align [flags...] <subcommand>
 
 Subcommands:
+{{if .Recursive}}
+    short-cmd                                Short description
+    very-long-subcommand-name-here           Description for long subcommand
+{{else}}
     short-cmd  Short description
     very-long-subcommand-name-here Description for long subcommand
+{{end}}
 
 Flags:
     -s              Short flag (default: false)

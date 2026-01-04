@@ -14,6 +14,19 @@ type Cmd interface {
 	Usage()
 }
 
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
 type UserError struct {
 	Err error
 	Msg string
@@ -60,9 +73,31 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	c.Commands["toplevel"] = c.NewtoplevelCmd()
-	c.Commands["another"] = c.NewanotherCmd()
-
+	c.Commands["another"] = c.NewAnother()
+	c.Commands["toplevel"] = c.NewToplevel()
+	c.Commands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			c.Usage()
+			return nil
+		},
+		UsageFunc: c.Usage,
+	}
+	c.Commands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			c.Usage()
+			return nil
+		},
+		UsageFunc: c.Usage,
+	}
+	c.Commands["version"] = &InternalCommand{
+		Exec: func(args []string) error {
+			fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+			return nil
+		},
+		UsageFunc: func() {
+			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+		},
+	}
 	return c, nil
 }
 
