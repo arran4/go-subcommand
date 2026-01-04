@@ -776,33 +776,31 @@ func GrandChild() {}
 func TestIssue67_CollisionMitigation(t *testing.T) {
 	src := `package main
 
-// Foo is a subcommand ` + "`app Foo`" + `
-func Foo() {}
+// Cattail is a subcommand ` + "`app Cattail`" + `
+func Cattail() {}
 
-// foo is a subcommand ` + "`app foo`" + `
-func foo() {}
+// CatTail is a subcommand ` + "`app CatTail`" + `
+func CatTail() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
 
 	// We expect NO error now, but distinct filenames.
-	// Since order is alphabetical, Foo comes before foo?
-	// But they are in a map (SubCommands map in parser).
-	// But Generate sorts them. sort.Strings(cmdNames).
-	// Foo < foo (ASCII 'F' is 70, 'f' is 102).
-	// So Foo is processed first -> "foo_usage.txt".
-	// foo is processed second -> "foo_1_usage.txt".
+	// "Cattail" and "CatTail" differ only by case.
+	// Alphabetical order: CatTail (T=84) < Cattail (t=116).
+	// So CatTail is processed first -> "cattail_usage.txt".
+	// Cattail is processed second -> "cattail_1_usage.txt".
 
-	fooUsage := "cmd/app/templates/foo_usage.txt"
-	foo1Usage := "cmd/app/templates/foo_1_usage.txt"
+	catTailUsage := "cmd/app/templates/cattail_usage.txt"
+	cattailUsage := "cmd/app/templates/cattail_1_usage.txt"
 
-	_, ok1 := writer.Files[fooUsage]
-	_, ok2 := writer.Files[foo1Usage]
+	_, ok1 := writer.Files[catTailUsage]
+	_, ok2 := writer.Files[cattailUsage]
 
 	if !ok1 {
-		t.Errorf("Expected %s to exist", fooUsage)
+		t.Errorf("Expected %s to exist", catTailUsage)
 	}
 	if !ok2 {
-		t.Errorf("Expected %s to exist (mitigation for collision)", foo1Usage)
+		t.Errorf("Expected %s to exist (mitigation for collision)", cattailUsage)
 	}
 }
