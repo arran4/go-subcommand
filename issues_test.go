@@ -785,7 +785,7 @@ func CatTail() {}
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
 
-	// We expect NO error now, but distinct filenames.
+	// Verify that case-insensitive collisions are mitigated by assigning distinct filenames.
 	// "Cattail" and "CatTail" differ only by case.
 	// Alphabetical order: CatTail (T=84) < Cattail (t=116).
 	// So CatTail is processed first -> "cattail_usage.txt".
