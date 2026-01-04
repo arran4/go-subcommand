@@ -21,8 +21,20 @@ type Generate struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataGenerate struct {
+	*Generate
+	Recursive bool
+}
+
 func (c *Generate) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", c)
+	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Generate) UsageRecursive() {
+	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
