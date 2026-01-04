@@ -1,4 +1,4 @@
-Usage: complex toplevel [flags...] <subcommand>
+Usage: complex toplevel <subcommand> [arguments]
 
 This command demonstrates a top level command with a string argument.
 It prints the name provided.

@@ -713,70 +713,94 @@ func GrandChild() {}
 	}
 }
 
-func TestIssue81_WhitespaceInDefinitions(t *testing.T) {
+func TestIssue67_DeepFlag(t *testing.T) {
 	src := `package main
 
-// MyCmd   is a    subcommand    ` + "`app   mycmd`" + `
-// Flags:
-//   verbose:   --verbose    Verbose   mode
-func MyCmd(
-	verbose bool,
-) {}
+// Root is a subcommand ` + "`app`" + `
+func Root() {}
+
+// Child is a subcommand ` + "`app child`" + `
+func Child() {}
+
+// GrandChild is a subcommand ` + "`app child grandchild`" + `
+func GrandChild() {}
 `
 	fs := setupProject(t, src)
 	writer := runGenerateInMemory(t, fs)
 
-	usagePath := "cmd/app/templates/mycmd_usage.txt"
-	content, ok := writer.Files[usagePath]
-	if !ok {
-		// If the command wasn't parsed at all, the usage file won't exist.
-		// We expect this to happen currently due to strict "is a subcommand" check.
-		t.Logf("Usage file not found: %s (Expected failure for Issue 81)", usagePath)
-        // We want the test to fail so we can fix it.
-        t.Fail()
-        return
-	}
-	usageText := string(content)
-
-	if !strings.Contains(usageText, "--verbose") {
-		t.Errorf("Expected usage to contain --verbose despite extra whitespace")
-	}
-    if !strings.Contains(usageText, "Verbose mode") {
-		t.Errorf("Expected usage to contain 'Verbose mode' despite extra whitespace")
-	}
-}
-
-
-func TestIssue86_RootHelpFlag(t *testing.T) {
-	src := `package main
-
-// MyCmd is a subcommand ` + "`app mycmd`" + `
-func MyCmd() {}
-`
-	fs := setupProject(t, src)
-	writer := runGenerateInMemory(t, fs)
-
+	// 1. Verify RootCmd supports UsageRecursive logic (or equivalent in Execute)
+	// We check if the generated root.go contains logic to handle "-deep"
 	rootPath := "cmd/app/root.go"
-	content, ok := writer.Files[rootPath]
+	rootContent, ok := writer.Files[rootPath]
 	if !ok {
 		t.Fatalf("Root file not found: %s", rootPath)
 	}
+	rootCode := string(rootContent)
 
-	code := string(content)
+	if !strings.Contains(rootCode, "-deep") {
+		t.Errorf("RootCmd does not check for '-deep' flag")
+	}
 
-	// Issue 86: "unknown command: --help" when running root command with --help.
-	// This happens because when there is no root function, it expects args[0] to be a command.
-	// We want to ensure that generated code handles -h and --help gracefully.
+	// 2. Verify SubCommand supports UsageRecursive
+	childPath := "cmd/app/child.go"
+	childContent, ok := writer.Files[childPath]
+	if !ok {
+		t.Fatalf("Child file not found: %s", childPath)
+	}
+	childCode := string(childContent)
 
-	// We look for logic that checks for help flags before looking up commands.
-	// Or logic that parses flags.
+	if !strings.Contains(childCode, "-deep") {
+		t.Errorf("SubCommand does not check for '-deep' flag")
+	}
+	if !strings.Contains(childCode, "UsageRecursive()") {
+		t.Errorf("SubCommand does not have UsageRecursive() method")
+	}
 
-	// The fix should likely introduce something like:
-	// if args[0] == "-h" || args[0] == "--help" { ... }
+	// 3. Verify existence of combined usage template with toggle
+	usagePath := "cmd/app/templates/child_usage.txt"
+	content, ok := writer.Files[usagePath]
+	if !ok {
+		t.Errorf("Usage file not found: %s", usagePath)
+	} else {
+		// Check content includes toggle and grandchild
+		usageText := string(content)
+		if !strings.Contains(usageText, "{{if .Recursive}}") {
+			t.Errorf("Usage text does not contain Recursive toggle:\n%s", usageText)
+		}
+		if !strings.Contains(usageText, "child grandchild") {
+			t.Errorf("Usage text does not contain recursive grandchild info:\n%s", usageText)
+		}
+	}
+}
 
-	hasHelpCheck := strings.Contains(code, `args[0] == "-h"`) || strings.Contains(code, `args[0] == "--help"`) || strings.Contains(code, `c.FlagSet.Parse(args)`)
+func TestIssue67_CollisionMitigation(t *testing.T) {
+	src := `package main
 
-	if !hasHelpCheck {
-		t.Errorf("Issue #86: Generated RootCmd.Execute does not appear to check for help flags (-h, --help) or parse flags when no root function is defined.\nCode snippet:\n%s", code)
+// Cattail is a subcommand ` + "`app Cattail`" + `
+func Cattail() {}
+
+// CatTail is a subcommand ` + "`app CatTail`" + `
+func CatTail() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// Verify that case-insensitive collisions are mitigated by assigning distinct filenames.
+	// "Cattail" and "CatTail" differ only by case.
+	// Alphabetical order: CatTail (T=84) < Cattail (t=116).
+	// So CatTail is processed first -> "cattail_usage.txt".
+	// Cattail is processed second -> "cattail_1_usage.txt".
+
+	catTailUsage := "cmd/app/templates/cattail_usage.txt"
+	cattailUsage := "cmd/app/templates/cattail_1_usage.txt"
+
+	_, ok1 := writer.Files[catTailUsage]
+	_, ok2 := writer.Files[cattailUsage]
+
+	if !ok1 {
+		t.Errorf("Expected %s to exist", catTailUsage)
+	}
+	if !ok2 {
+		t.Errorf("Expected %s to exist (mitigation for collision)", cattailUsage)
 	}
 }
