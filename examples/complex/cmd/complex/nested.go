@@ -22,8 +22,20 @@ type Nested struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataNested struct {
+	*Nested
+	Recursive bool
+}
+
 func (c *Nested) Usage() {
-	err := executeUsage(os.Stderr, "nested_usage.txt", c)
+	err := executeUsage(os.Stderr, "nested_usage.txt", UsageDataNested{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Nested) UsageRecursive() {
+	err := executeUsage(os.Stderr, "nested_usage.txt", UsageDataNested{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -90,7 +102,6 @@ func (c *Nested) Execute(args []string) error {
 			remainingArgs = append(remainingArgs, arg)
 		}
 	}
-	_ = remainingArgs
 
 	complex.Nested(c.count, c.verbose)
 

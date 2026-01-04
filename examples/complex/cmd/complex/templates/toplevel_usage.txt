@@ -4,9 +4,14 @@ This command demonstrates a top level command with a string argument.
 It prints the name provided.
 
 Subcommands:
+{{if .Recursive}}
+    toplevel nested                          A nested command
+{{else}}
     nested     A nested command
+{{end}}
     help         Print this help message
     usage        Print this usage message
 
 Flags:
     --name, -n string   The name to greet (default: world)
+

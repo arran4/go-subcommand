@@ -3,3 +3,4 @@ Usage: gosubc generate [flags...]
 Flags:
     --dir string       Project root directory containing go.mod (default: .)
     --man-dir string   Directory to generate man pages in optional
+

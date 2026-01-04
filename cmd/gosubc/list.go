@@ -20,8 +20,20 @@ type List struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataList struct {
+	*List
+	Recursive bool
+}
+
 func (c *List) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", c)
+	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *List) UsageRecursive() {
+	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}

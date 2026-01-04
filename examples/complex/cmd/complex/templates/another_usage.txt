@@ -4,3 +4,4 @@ This command demonstrates using a duration parameter.
 
 Flags:
     --wait, -w time.Duration   How long to wait (default: 1s)
+
