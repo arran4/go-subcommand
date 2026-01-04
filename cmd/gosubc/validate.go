@@ -20,8 +20,20 @@ type Validate struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataValidate struct {
+	*Validate
+	Recursive bool
+}
+
 func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", c)
+	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Validate) UsageRecursive() {
+	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -92,5 +104,31 @@ func (c *RootCmd) NewValidate() *Validate {
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 	set.Usage = v.Usage
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }
