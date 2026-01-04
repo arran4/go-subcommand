@@ -141,18 +141,14 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) error {
-	if err := c.FlagSet.Parse(args); err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
-	}
-	remainingArgs := c.FlagSet.Args()
-	if len(remainingArgs) < 1 {
+	if len(args) < 1 {
 		c.Usage()
 		return nil
 	}
-	cmd, ok := c.Commands[remainingArgs[0]]
+	cmd, ok := c.Commands[args[0]]
 	if !ok {
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
-	return cmd.Execute(remainingArgs[1:])
+	return cmd.Execute(args[1:])
 }
