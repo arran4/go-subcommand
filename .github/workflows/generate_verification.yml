@@ -85,7 +85,7 @@ jobs:
       - name: Install & Run golangci-lint
         run: |
           # Install golangci-lint from source to ensure compatibility with the current Go toolchain
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
           # Run lint on root module
           golangci-lint run
