@@ -295,16 +295,16 @@ func (c *RootCmd) Execute(args []string) error {
 
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.PackageName}}.{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 	}
 	{{- else }}
-	if err := {{.PackageName}}.{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+	if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 	}
 	{{- end }}
 	{{else}}
-	{{.PackageName}}.{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+	{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 	{{end -}}
 	return nil
 

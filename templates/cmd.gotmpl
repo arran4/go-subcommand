@@ -82,6 +82,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		}
 		if strings.HasPrefix(arg, "-") {
 			name := arg
+			{{- $hasFlags := false }}
+			{{- range .Parameters }}
+			{{- if not .IsPositional }}
+			{{- $hasFlags = true }}
+			{{- end }}
+			{{- end }}
+			{{- if $hasFlags }}
 			value := ""
 			hasValue := false
 			if strings.Contains(arg, "=") {
@@ -90,6 +97,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				value = parts[1]
 				hasValue = true
 			}
+			{{- end }}
 			trimmedName := strings.TrimLeft(name, "-")
 			switch trimmedName {
 			{{- range .Parameters }}
@@ -251,16 +259,16 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{if .SubCommandFunctionName}}
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 	}
 	{{- else }}
-	if err := {{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+	if err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
 		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 	}
 	{{- end }}
 	{{else}}
-	{{.SubCommandPackageName}}.{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+	{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 	{{end -}}
 	{{else}}
 	c.Usage()
