@@ -8,7 +8,7 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/arran4/go-subcommand"
+	go_subcommand "github.com/arran4/go-subcommand"
 	"golang.org/x/tools/txtar"
 )
 
@@ -67,17 +67,32 @@ func TestUsageTemplate(t *testing.T) {
 				t.Fatalf("input.json not found in %s", entry.Name())
 			}
 
-			var subCmd go_subcommand.SubCommand
-			if err := json.Unmarshal(inputData, &subCmd); err != nil {
+			var input struct {
+				go_subcommand.SubCommand
+				Recursive bool
+			}
+			if err := json.Unmarshal(inputData, &input); err != nil {
 				t.Fatalf("failed to unmarshal input.json: %v", err)
 			}
+			input.SubCommand.Command = input.Command // fix embedding? json.Unmarshal usually handles embedded structs if flat.
+			// Actually, SubCommand embeds *Command. JSON unmarshal might populate Command fields into SubCommand if they are top level.
+			// But Command field is *Command.
+			// Let's assume inputData structure matches what we expect.
+			// However, `Recursive` is not in SubCommand.
 
-			// When unmarshalling, the embedded pointer *Command might be created but empty if no fields for it were in JSON?
-			// But we saw MainCmdName in JSON.
-			// Let's verify `ProgName()` uses it correctly.
+			// Wrapper for template
+			data := struct {
+				*go_subcommand.SubCommand
+				Recursive bool
+			}{
+				SubCommand: &input.SubCommand,
+				Recursive:  input.Recursive,
+			}
+
+			populateParentsUsage(data.SubCommand, nil)
 
 			var buf bytes.Buffer
-			if err := tmpl.Execute(&buf, &subCmd); err != nil {
+			if err := tmpl.Execute(&buf, data); err != nil {
 				t.Fatalf("failed to execute template: %v", err)
 			}
 
@@ -85,5 +100,12 @@ func TestUsageTemplate(t *testing.T) {
 				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
 			}
 		})
+	}
+}
+
+func populateParentsUsage(sc *go_subcommand.SubCommand, parent *go_subcommand.SubCommand) {
+	sc.Parent = parent
+	for _, child := range sc.SubCommands {
+		populateParentsUsage(child, sc)
 	}
 }

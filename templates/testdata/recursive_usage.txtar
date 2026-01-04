@@ -1,0 +1,39 @@
+-- input.json --
+{
+  "MainCmdName": "myapp",
+  "SubCommandName": "root",
+  "SubCommandStructName": "Root",
+  "SubCommandDescription": "Root command",
+  "Recursive": true,
+  "SubCommands": [
+    {
+      "SubCommandName": "child1",
+      "SubCommandDescription": "First child",
+      "SubCommands": [
+           {
+               "SubCommandName": "grandchild",
+               "SubCommandDescription": "Grandchild"
+           }
+      ]
+    },
+    {
+      "SubCommandName": "child2",
+      "SubCommandDescription": "Second child"
+    }
+  ],
+  "SubCommandFunctionName": "exec"
+}
+-- output.txt --
+Usage: myapp root <subcommand>
+
+Subcommands:
+{{if .Recursive}}
+    root child1                              First child
+    root child1 grandchild                   Grandchild
+    root child2                              Second child
+{{else}}
+    child1     First child
+    child2     Second child
+{{end}}
+    help         Print this help message
+    usage        Print this usage message

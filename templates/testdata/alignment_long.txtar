@@ -42,8 +42,8 @@ Usage: myapp align [flags...] <subcommand>
 
 Subcommands:
 {{if .Recursive}}
-    short-cmd                                Short description
-    very-long-subcommand-name-here           Description for long subcommand
+    align short-cmd                          Short description
+    align very-long-subcommand-name-here     Description for long subcommand
 {{else}}
     short-cmd  Short description
     very-long-subcommand-name-here Description for long subcommand
