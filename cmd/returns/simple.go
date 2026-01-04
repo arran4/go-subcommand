@@ -6,40 +6,41 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
-	"github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/examples/returns"
 )
 
-var _ Cmd = (*List)(nil)
+var _ Cmd = (*Simple)(nil)
 
-type List struct {
+type Simple struct {
 	*RootCmd
 	Flags       *flag.FlagSet
-	dir         string
+	fail        bool
 	SubCommands map[string]Cmd
 }
 
-type UsageDataList struct {
-	*List
+type UsageDataSimple struct {
+	*Simple
 	Recursive bool
 }
 
-func (c *List) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, false})
+func (c *Simple) Usage() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *List) UsageRecursive() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, true})
+func (c *Simple) UsageRecursive() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *List) Execute(args []string) error {
+func (c *Simple) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -65,16 +66,16 @@ func (c *List) Execute(args []string) error {
 			trimmedName := strings.TrimLeft(name, "-")
 			switch trimmedName {
 
-			case "dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+			case "fail", "f":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
+					c.fail = b
+				} else {
+					c.fail = true
 				}
-				c.dir = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -86,22 +87,23 @@ func (c *List) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.List(c.dir); err != nil {
-		return fmt.Errorf("list failed: %w", err)
+	if err := returns.SimpleError(c.fail); err != nil {
+		return fmt.Errorf("simple failed: %w", err)
 	}
 
 	return nil
 }
 
-func (c *RootCmd) NewList() *List {
-	set := flag.NewFlagSet("list", flag.ContinueOnError)
-	v := &List{
+func (c *RootCmd) NewSimple() *Simple {
+	set := flag.NewFlagSet("simple", flag.ContinueOnError)
+	v := &Simple{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+	set.BoolVar(&v.fail, "fail", false, "Make the command fail")
+	set.BoolVar(&v.fail, "f", false, "Make the command fail")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

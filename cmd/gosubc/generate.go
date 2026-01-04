@@ -21,8 +21,20 @@ type Generate struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataGenerate struct {
+	*Generate
+	Recursive bool
+}
+
 func (c *Generate) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", c)
+	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Generate) UsageRecursive() {
+	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -106,5 +118,31 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 	set.Usage = v.Usage
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }

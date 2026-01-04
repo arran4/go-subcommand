@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
+	"github.com/arran4/go-subcommand/cmd/returns/templates"
 )
 
 type Cmd interface {
@@ -68,9 +68,7 @@ func (c *RootCmd) UsageRecursive() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	c.FlagSet.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
-	fmt.Fprintf(os.Stderr, "    %s\n", "generate")
-	fmt.Fprintf(os.Stderr, "    %s\n", "list")
-	fmt.Fprintf(os.Stderr, "    %s\n", "validate")
+	fmt.Fprintf(os.Stderr, "    %s\n", "simple")
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
@@ -82,9 +80,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	c.Commands["generate"] = c.NewGenerate()
-	c.Commands["list"] = c.NewList()
-	c.Commands["validate"] = c.NewValidate()
+	c.Commands["simple"] = c.NewSimple()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {
