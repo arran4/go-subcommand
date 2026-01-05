@@ -6,41 +6,41 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
-	"github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/examples/returns"
 )
 
-var _ Cmd = (*Generate)(nil)
+var _ Cmd = (*Simple)(nil)
 
-type Generate struct {
+type Simple struct {
 	*RootCmd
 	Flags       *flag.FlagSet
-	dir         string
-	manDir      string
+	fail        bool
 	SubCommands map[string]Cmd
 }
 
-type UsageDataGenerate struct {
-	*Generate
+type UsageDataSimple struct {
+	*Simple
 	Recursive bool
 }
 
-func (c *Generate) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, false})
+func (c *Simple) Usage() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Generate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
+func (c *Simple) UsageRecursive() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Generate) Execute(args []string) error {
+func (c *Simple) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -64,27 +64,16 @@ func (c *Generate) Execute(args []string) error {
 			trimmedName := strings.TrimLeft(name, "-")
 			switch trimmedName {
 
-			case "dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+			case "fail", "f":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
+					c.fail = b
+				} else {
+					c.fail = true
 				}
-				c.dir = value
-
-			case "manDir", "man-dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.manDir = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -94,24 +83,23 @@ func (c *Generate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
-		return fmt.Errorf("generate failed: %w", err)
+	if err := returns.SimpleError(c.fail); err != nil {
+		return fmt.Errorf("simple failed: %w", err)
 	}
 
 	return nil
 }
 
-func (c *RootCmd) NewGenerate() *Generate {
-	set := flag.NewFlagSet("generate", flag.ContinueOnError)
-	v := &Generate{
+func (c *RootCmd) NewSimple() *Simple {
+	set := flag.NewFlagSet("simple", flag.ContinueOnError)
+	v := &Simple{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
-
-	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
+	set.BoolVar(&v.fail, "fail", false, "Make the command fail")
+	set.BoolVar(&v.fail, "f", false, "Make the command fail")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

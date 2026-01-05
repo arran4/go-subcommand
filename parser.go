@@ -152,8 +152,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 		}
 
 		allocator := NewNameAllocator()
-		var subCommands []*SubCommand
-		subCommands = collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
+		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
@@ -486,10 +485,7 @@ type ParsedParam struct {
 	VarArgMax          int
 }
 
-var (
-	reExplicitParam = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-	reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
-)
+var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -619,7 +615,10 @@ func parseParamDetails(text string) ParsedParam {
 	posArgMatches := posArgRegex.FindStringSubmatch(text)
 	if posArgMatches != nil {
 		p.IsPositional = true
-		fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex)
+		if _, err := fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex); err != nil {
+			// fallback/ignore, though usually this regex implies digits
+			p.PositionalArgIndex = 0
+		}
 	}
 
 	// Varargs constraints: 1...3 or ...
@@ -630,8 +629,12 @@ func parseParamDetails(text string) ParsedParam {
 		if varArgRangeMatches[3] == "..." {
 			// Just "..." means no specific limits parsed here
 		} else {
-			fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin)
-			fmt.Sscanf(varArgRangeMatches[2], "%d", &p.VarArgMax)
+			if _, err := fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin); err != nil {
+				p.VarArgMin = 0
+			}
+			if _, err := fmt.Sscanf(varArgRangeMatches[2], "%d", &p.VarArgMax); err != nil {
+				p.VarArgMax = 0
+			}
 		}
 	}
 

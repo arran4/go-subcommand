@@ -9,7 +9,9 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/arran4/go-subcommand"
+	go_subcommand "github.com/arran4/go-subcommand"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"golang.org/x/tools/txtar"
 )
 
@@ -23,7 +25,7 @@ func TestGoTemplates(t *testing.T) {
 	// Parse all templates
 	funcs := template.FuncMap{
 		"lower":   strings.ToLower,
-		"title":   strings.Title,
+		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },

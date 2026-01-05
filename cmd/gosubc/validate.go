@@ -45,11 +45,9 @@ func (c *Validate) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			remainingArgs = append(remainingArgs, args[i+1:]...)
 			break
 		}
 		if strings.HasPrefix(arg, "-") {
@@ -81,8 +79,6 @@ func (c *Validate) Execute(args []string) error {
 			default:
 				return fmt.Errorf("unknown flag: %s", name)
 			}
-		} else {
-			remainingArgs = append(remainingArgs, arg)
 		}
 	}
 

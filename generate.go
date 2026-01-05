@@ -5,24 +5,21 @@ import (
 	"embed"
 	"fmt"
 	"go/format"
-	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 //go:embed templates/*.gotmpl
 var templatesFS embed.FS
 
 var templates *template.Template
-
-type closableFile struct {
-	io.Reader
-	io.Closer
-}
 
 // FileWriter interface allows mocking file system writes
 type FileWriter interface {
@@ -53,7 +50,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 	var err error
 	templates = template.New("").Funcs(template.FuncMap{
 		"lower":   strings.ToLower,
-		"title":   strings.Title,
+		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },
