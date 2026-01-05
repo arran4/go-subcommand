@@ -16,8 +16,12 @@ The `gosubc` command line tool (`cmd/gosubc`) is self-hosting: it uses the libra
 
 *   **Generating Examples:**
     Examples typically include a `//go:generate` directive (e.g., `examples/complex`, `examples/returns`). This directive usually attempts to use a locally installed `gosubc` or falls back to `go run`.
+    
+    **Important:** Because examples are standalone modules that may rely on the local root module, it is recommended to use `go work` to ensure `go generate` can locate dependencies correctly without publishing changes.
     ```bash
+    go work init . ./examples/returns ./examples/complex
     go generate ./examples/...
+    rm go.work go.work.sum # Cleanup
     ```
     *Note: `examples/basic1` may not include this directive and might be maintained manually.*
 
