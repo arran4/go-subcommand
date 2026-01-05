@@ -96,7 +96,19 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(pathStr, ".go") {
+		if d.IsDir() {
+			if d.Name() == "examples" || d.Name() == "testdata" || d.Name() == ".git" {
+				return fs.SkipDir
+			}
+			// Skip directories that are submodules (have go.mod, unless it's the root)
+			if pathStr != root {
+				if _, err := fs.Stat(fsys, filepath.Join(pathStr, "go.mod")); err == nil {
+					return fs.SkipDir
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(pathStr, ".go") {
 			return nil
 		}
 
