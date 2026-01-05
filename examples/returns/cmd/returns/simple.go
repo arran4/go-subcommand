@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/arran4/go-subcommand/examples/returns"
 )
@@ -19,8 +21,20 @@ type Simple struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataSimple struct {
+	*Simple
+	Recursive bool
+}
+
 func (c *Simple) Usage() {
-	err := executeUsage(os.Stderr, "simple_usage.txt", c)
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Simple) UsageRecursive() {
+	err := executeUsage(os.Stderr, "simple_usage.txt", UsageDataSimple{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -32,9 +46,41 @@ func (c *Simple) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			value := ""
+			hasValue := false
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+
+			case "fail", "f":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.fail = b
+				} else {
+					c.fail = true
+				}
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		}
 	}
 
 	if err := returns.SimpleError(c.fail); err != nil {
@@ -56,5 +102,31 @@ func (c *RootCmd) NewSimple() *Simple {
 	set.BoolVar(&v.fail, "f", false, "Make the command fail")
 	set.Usage = v.Usage
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }

@@ -1,6 +1,10 @@
-Usage: returns simple <subcommand> [arguments]
+Usage: returns simple [flags...]
 
 Returns a simple error if the flag is set.
+
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
     --fail, -f   Make the command fail (default: false)

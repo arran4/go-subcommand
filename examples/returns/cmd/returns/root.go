@@ -64,6 +64,13 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) UsageRecursive() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	c.FlagSet.PrintDefaults()
+	fmt.Fprintln(os.Stderr, "  Commands:")
+	fmt.Fprintf(os.Stderr, "    %s\n", "simple")
+}
+
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
@@ -76,6 +83,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["simple"] = c.NewSimple()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
 			c.Usage()
 			return nil
 		},
@@ -83,6 +96,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.Commands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
 			c.Usage()
 			return nil
 		},
@@ -101,14 +120,18 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) error {
-	if len(args) < 1 {
+	if err := c.FlagSet.Parse(args); err != nil {
+		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	}
+	remainingArgs := c.FlagSet.Args()
+	if len(remainingArgs) < 1 {
 		c.Usage()
 		return nil
 	}
-	cmd, ok := c.Commands[args[0]]
+	cmd, ok := c.Commands[remainingArgs[0]]
 	if !ok {
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", args[0])
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
 	}
-	return cmd.Execute(args[1:])
+	return cmd.Execute(remainingArgs[1:])
 }
