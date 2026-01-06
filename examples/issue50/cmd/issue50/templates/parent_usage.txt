@@ -1,0 +1,11 @@
+Usage: issue50 parent <subcommand> [arguments]
+
+flag: verbose --verbose -v "Verbosity level"
+
+Subcommands:
+    child
+    help         Print this help message
+    usage        Print this usage message
+
+Flags:
+    --verbose
