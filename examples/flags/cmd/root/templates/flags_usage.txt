@@ -1,0 +1,10 @@
+Usage: root flags <subcommand> [arguments]
+
+
+    version      Print version information
+
+Flags:
+    -n, -name string   Your name (default: World)
+    -a int             Your age (default: 18)
+    -v                 Verbose mode
+    -t time.Duration   Timeout duration (default: 10s)

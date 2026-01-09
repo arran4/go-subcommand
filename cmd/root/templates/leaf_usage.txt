@@ -1,0 +1,4 @@
+Usage: root sub leaf <subcommand> [arguments]
+
+
+    version      Print version information
