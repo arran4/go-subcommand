@@ -43,19 +43,7 @@ func PrintHelloWorld() {
 
 ### 2. Add a `generate.go` File
 
-Create a file named `generate.go` in the same directory (package `main`).
-
-**Option 1: Standard (Recommended)**
-Use this if `gosubc` is installed in your system PATH.
-
-```go
-package main
-
-//go:generate gosubc generate
-```
-
-**Option 2: Robust (Recommended for teams)**
-This version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
+Create a file named `generate.go` in the same directory (package `main`). This robust version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
 
 ```go
 package main
