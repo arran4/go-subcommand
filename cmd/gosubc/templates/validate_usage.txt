@@ -1,9 +1,8 @@
-Usage: gosubc validate <subcommand> [arguments]
+Usage: gosubc validate [flags...]
 
-
-    version      Print version information
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
-    -dir string   Directory to validate (default: .)
-
-
+    --dir string   The project root directory containing go.mod (default: .)

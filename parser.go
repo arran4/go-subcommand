@@ -7,20 +7,15 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
-	"os"
+	"io/fs"
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"golang.org/x/mod/modfile"
 )
-
-type File struct {
-	Path   string
-	Reader io.Reader
-}
 
 type SubCommandTree struct {
 	SubCommands map[string]*SubCommandTree
@@ -46,6 +41,12 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
+	FunctionName string
+	Parameters   []*FunctionParameter
+	ReturnsError bool
+	ReturnCount  int
+	Description  string
+	ExtendedHelp string
 }
 
 type CommandsTree struct {
@@ -72,28 +73,49 @@ func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
 	}
 }
 
-func ParseGoFiles(root string, files ...File) (*DataModel, error) {
+// ParseGoFiles parses the Go files in the provided filesystem to build the command model.
+// It expects a go.mod file at the root of the filesystem (or root directory).
+func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	fset := token.NewFileSet()
 
-	goModPath := filepath.Join(root, "go.mod")
-	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("go.mod not found in the root of the repository: %s", goModPath)
+	// Read go.mod from FS
+	goModBytes, err := fs.ReadFile(fsys, filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil, fmt.Errorf("go.mod not found in the root of the repository: %w", err)
 	}
 
-	goModBytes, err := ioutil.ReadFile(goModPath)
-	if err != nil {
-		return nil, err
-	}
 	modPath := modfile.ModulePath(goModBytes)
 
 	rootCommands := &CommandsTree{
 		Commands:    map[string]*CommandTree{},
 		PackagePath: modPath,
 	}
-	for _, file := range files {
-		rel, err := filepath.Rel(root, file.Path)
+
+	// Walk the FS
+	err = fs.WalkDir(fsys, root, func(pathStr string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, err
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "examples" || d.Name() == "testdata" || d.Name() == ".git" {
+				return fs.SkipDir
+			}
+			// Skip directories that are submodules (have go.mod, unless it's the root)
+			if pathStr != root {
+				if _, err := fs.Stat(fsys, filepath.Join(pathStr, "go.mod")); err == nil {
+					return fs.SkipDir
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(pathStr, ".go") {
+			return nil
+		}
+
+		// Calculate import path
+		rel, err := filepath.Rel(root, pathStr)
+		if err != nil {
+			rel = pathStr // Fallback
 		}
 		dir := filepath.Dir(rel)
 		if dir == "." {
@@ -101,9 +123,19 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 		}
 		importPath := path.Join(modPath, dir)
 
-		if err := ParseGoFile(fset, importPath, file.Reader, rootCommands); err != nil {
-			return nil, err
+		f, err := fsys.Open(pathStr)
+		if err != nil {
+			return err
 		}
+		defer f.Close()
+
+		if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	d := &DataModel{
@@ -111,15 +143,28 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 	}
 
 	var commands []*Command
-	for cmdName, cmdTree := range rootCommands.Commands {
+	var cmdNames []string
+	for cmdName := range rootCommands.Commands {
+		cmdNames = append(cmdNames, cmdName)
+	}
+	sort.Strings(cmdNames)
+	for _, cmdName := range cmdNames {
+		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &Command{
-			DataModel:   d,
-			MainCmdName: cmdName,
-			PackagePath: rootCommands.PackagePath,
+			DataModel:    d,
+			MainCmdName:  cmdName,
+			PackagePath:  rootCommands.PackagePath,
+			ImportPath:   rootCommands.PackagePath, // Root command logic usually in root package
+			FunctionName: cmdTree.FunctionName,
+			Parameters:   cmdTree.Parameters,
+			ReturnsError: cmdTree.ReturnsError,
+			ReturnCount:  cmdTree.ReturnCount,
+			Description:  cmdTree.Description,
+			ExtendedHelp: cmdTree.ExtendedHelp,
 		}
 
-		var subCommands []*SubCommand
-		subCommands = collectSubCommands(cmd, cmdTree.SubCommandTree, nil)
+		allocator := NewNameAllocator()
+		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 	}
@@ -127,28 +172,59 @@ func ParseGoFiles(root string, files ...File) (*DataModel, error) {
 	return d, nil
 }
 
-func collectSubCommands(cmd *Command, sct *SubCommandTree, parent *SubCommand) []*SubCommand {
+func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand, allocator *NameAllocator) []*SubCommand {
 	var subCommands []*SubCommand
+	var subCommandNames []string
+	for name := range sct.SubCommands {
+		subCommandNames = append(subCommandNames, name)
+	}
+	sort.Strings(subCommandNames)
 	if sct.SubCommand != nil {
 		sct.SubCommand.Command = cmd
 		sct.SubCommand.Parent = parent
+		// Allocate unique struct name
+		sct.SubCommand.SubCommandStructName = allocator.Allocate(sct.SubCommand.SubCommandName)
+
 		subCommands = append(subCommands, sct.SubCommand)
-		for _, subTree := range sct.SubCommands {
-			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, subTree, sct.SubCommand)...)
+		for _, name := range subCommandNames {
+			subTree := sct.SubCommands[name]
+			sct.SubCommand.SubCommands = append(sct.SubCommand.SubCommands, collectSubCommands(cmd, name, subTree, sct.SubCommand, allocator)...)
 		}
 	} else {
-		for _, subTree := range sct.SubCommands {
-			subCommands = append(subCommands, collectSubCommands(cmd, subTree, parent)...)
+		if name == "" {
+			for _, name := range subCommandNames {
+				subTree := sct.SubCommands[name]
+				subCommands = append(subCommands, collectSubCommands(cmd, name, subTree, parent, allocator)...)
+			}
+		} else {
+			// Missing intermediate node -> Synthetic command
+			syntheticCmd := &SubCommand{
+				Command:                cmd,
+				Parent:                 parent,
+				SubCommandName:         name,
+				SubCommandStructName:   allocator.Allocate(name),
+				SubCommandFunctionName: "", // Empty to indicate synthetic
+			}
+			subCommands = append(subCommands, syntheticCmd)
+			for _, childName := range subCommandNames {
+				subTree := sct.SubCommands[childName]
+				syntheticCmd.SubCommands = append(syntheticCmd.SubCommands, collectSubCommands(cmd, childName, subTree, syntheticCmd, allocator)...)
+			}
 		}
 	}
 	return subCommands
 }
 
-func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree *CommandsTree) error {
-	f, err := parser.ParseFile(fset, "", file, parser.SkipObjectResolution|parser.ParseComments)
+func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reader, cmdTree *CommandsTree) error {
+	src, err := io.ReadAll(file)
 	if err != nil {
 		return err
 	}
+	f, err := parser.ParseFile(fset, filename, src, parser.SkipObjectResolution|parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
 	// packageName := f.Name.Name
 	for _, s := range f.Decls {
 		switch s := s.(type) {
@@ -157,7 +233,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				continue
 			}
 			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
-			if !ok || len(subCommandSequence) == 0 {
+			if !ok {
 				continue
 			}
 
@@ -166,6 +242,7 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
 						typeName := ""
+						isVarArg := false
 						switch t := p.Type.(type) {
 						case *ast.Ident:
 							typeName = t.Name
@@ -176,18 +253,176 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 								// Fallback or panic, for now panic to discover what's wrong
 								panic(fmt.Sprintf("Unsupported selector type: %T", t.X))
 							}
+						case *ast.Ellipsis:
+							isVarArg = true
+							if ident, ok := t.Elt.(*ast.Ident); ok {
+								typeName = ident.Name
+							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
+								if ident, ok := sel.X.(*ast.Ident); ok {
+									typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
+								} else {
+									panic(fmt.Sprintf("Unsupported selector type in ellipsis: %T", sel.X))
+								}
+							} else {
+								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
+							}
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
 						}
 						fp := &FunctionParameter{
-							Name: name.Name,
-							Type: typeName,
+							Name:     name.Name,
+							Type:     typeName,
+							IsVarArg: isVarArg,
 						}
+						// Extract details from different sources with priority
+						// Priority:
+						// 1. Flags: block in main documentation (Top)
+						// 2. Inline comment (same line) (2nd)
+						// 3. Preceding comment (line before) (3rd)
+
+						var candidates []ParsedParam
+
+						// 1. Flags block
 						if parsed, ok := parsedParams[name.Name]; ok {
-							fp.FlagAliases = parsed.Flags
-							fp.Default = parsed.Default
-							fp.Description = parsed.Description
+							candidates = append(candidates, parsed)
+						} else {
+							candidates = append(candidates, ParsedParam{})
 						}
+
+						// 2. Inline comment
+						var inlineComment string
+						if p.Comment != nil {
+							inlineComment = p.Comment.Text()
+						}
+						if inlineComment == "" {
+							pLine := fset.Position(p.Pos()).Line
+							for _, cg := range f.Comments {
+								cPos := fset.Position(cg.Pos())
+								if cPos.Line == pLine {
+									inlineComment = cg.Text()
+									break
+								}
+							}
+						}
+						if inlineComment != "" {
+							candidates = append(candidates, parseParamDetails(inlineComment))
+						} else {
+							candidates = append(candidates, ParsedParam{})
+						}
+
+						// 3. Preceding comment
+						var precedingComment string
+						if p.Doc != nil {
+							precedingComment = p.Doc.Text()
+						}
+						// Fallback if p.Doc is empty: look for comment ending on line-1
+						if precedingComment == "" {
+							pLine := fset.Position(p.Pos()).Line
+							for _, cg := range f.Comments {
+								// If the comment is the function's doc, ignore it
+								if s.Doc != nil && cg.Pos() == s.Doc.Pos() {
+									continue
+								}
+								cEndLine := fset.Position(cg.End()).Line
+								if cEndLine == pLine-1 {
+									precedingComment = cg.Text()
+									break
+								}
+							}
+						}
+						if precedingComment != "" {
+							candidates = append(candidates, parseParamDetails(precedingComment))
+						} else {
+							candidates = append(candidates, ParsedParam{})
+						}
+
+						// Merge Logic based on Priority
+						// We fill the 'fp' fields starting from the lowest priority (Preceding)
+						// and overwrite with higher priority if the field is present/non-empty in the higher one.
+						// EXCEPT for Description: if higher priority has description, it overwrites.
+						// But what if higher priority has NO description? Then we keep the lower one.
+
+						// Start with Preceding (3rd)
+						if len(candidates) > 2 {
+							c := candidates[2]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+						}
+
+						// Merge Inline (2nd)
+						if len(candidates) > 1 {
+							c := candidates[1]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+						}
+
+						// Merge Flags Block (Top)
+						if len(candidates) > 0 {
+							c := candidates[0]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+						}
+
+						if len(fp.FlagAliases) == 0 {
+							kebab := ToKebabCase(name.Name)
+							if kebab != name.Name {
+								fp.FlagAliases = []string{kebab}
+							}
+						}
+
+						// If detected as VarArg in signature, force IsPositional to true
+						if fp.IsVarArg {
+							fp.IsPositional = true
+						}
+
 						params = append(params, fp)
 					}
 				}
@@ -196,13 +431,37 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 			returnsError := false
 			returnCount := 0
 			if s.Type.Results != nil {
-				returnCount = len(s.Type.Results.List)
 				for _, r := range s.Type.Results.List {
+					if len(r.Names) > 0 {
+						returnCount += len(r.Names)
+					} else {
+						returnCount++
+					}
 					if ident, ok := r.Type.(*ast.Ident); ok && ident.Name == "error" {
 						returnsError = true
-						break
 					}
 				}
+				if returnCount > 1 {
+					return fmt.Errorf("function %s has multiple return values, which is not implemented yet", s.Name.Name)
+				}
+			}
+
+			if len(subCommandSequence) == 0 {
+				ct, ok := cmdTree.Commands[cmdName]
+				if !ok {
+					ct = &CommandTree{
+						CommandName:    cmdName,
+						SubCommandTree: NewSubCommandTree(nil),
+					}
+					cmdTree.Commands[cmdName] = ct
+				}
+				ct.FunctionName = s.Name.Name
+				ct.Parameters = params
+				ct.ReturnsError = returnsError
+				ct.ReturnCount = returnCount
+				ct.Description = description
+				ct.ExtendedHelp = extendedHelp
+				continue
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
@@ -211,20 +470,34 @@ func ParseGoFile(fset *token.FileSet, importPath string, file io.Reader, cmdTree
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
-				Parameters:             params,
-				ReturnsError:           returnsError,
-				ReturnCount:            returnCount,
+				// SubCommandStructName is assigned during collection
+				Parameters:   params,
+				ReturnsError: returnsError,
+				ReturnCount:  returnCount,
 			})
 		}
 	}
 	return nil
 }
 
+var (
+	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
+	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+)
+
 type ParsedParam struct {
-	Flags       []string
-	Default     string
-	Description string
+	Flags              []string
+	Default            string
+	Description        string
+	IsPositional       bool
+	PositionalArgIndex int
+	IsVarArg           bool
+	VarArgMin          int
+	VarArgMax          int
 }
+
+var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -298,12 +571,17 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			} else if strings.HasPrefix(trimmedLine, "param ") {
 				paramLine = strings.TrimPrefix(trimmedLine, "param ")
 				parsedParam = true
+			} else if matches := reImplicitFormat.FindStringSubmatch(trimmedLine); matches != nil {
+				if reImplicitCheck.MatchString(matches[2]) {
+					paramLine = trimmedLine
+					parsedParam = true
+				}
 			}
 		}
 
 		if parsedParam {
-			re := regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-			matches := re.FindStringSubmatch(paramLine)
+			matches := reParamDefinition.FindStringSubmatch(paramLine)
+			//matches := reExplicitParam.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
@@ -312,6 +590,22 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
+			// Attempt to parse as parameter if it looks like one, even without prefix/block
+			matches := reImplicitParam.FindStringSubmatch(trimmedLine)
+			if matches != nil {
+				name := matches[1]
+				rest := matches[2]
+				details := parseParamDetails(rest)
+
+				// We only accept it as a parameter if it has explicit configuration
+				// that strongly suggests it is a parameter definition.
+				// e.g. @N for positional, or defined flags, or default value.
+				// This prevents false positives from general description text.
+				if details.IsPositional || details.IsVarArg {
+					params[name] = details
+					continue
+				}
+			}
 			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
@@ -328,6 +622,34 @@ func parseParamDetails(text string) ParsedParam {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 	}
 
+	// Positional arguments: @1, @2, etc.
+	posArgRegex := regexp.MustCompile(`@(\d+)`)
+	posArgMatches := posArgRegex.FindStringSubmatch(text)
+	if posArgMatches != nil {
+		p.IsPositional = true
+		if _, err := fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex); err != nil {
+			// fallback/ignore, though usually this regex implies digits
+			p.PositionalArgIndex = 0
+		}
+	}
+
+	// Varargs constraints: 1...3 or ...
+	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
+	if varArgRangeMatches != nil {
+		p.IsVarArg = true
+		if varArgRangeMatches[3] == "..." {
+			// Just "..." means no specific limits parsed here
+		} else {
+			if _, err := fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin); err != nil {
+				p.VarArgMin = 0
+			}
+			if _, err := fmt.Sscanf(varArgRangeMatches[2], "%d", &p.VarArgMax); err != nil {
+				p.VarArgMax = 0
+			}
+		}
+	}
+
 	flagRegex := regexp.MustCompile(`-[\w-]+`)
 	flagMatches := flagRegex.FindAllString(text, -1)
 
@@ -342,6 +664,8 @@ func parseParamDetails(text string) ParsedParam {
 
 	clean := flagRegex.ReplaceAllString(text, "")
 	clean = defaultRegex.ReplaceAllString(clean, "")
+	clean = posArgRegex.ReplaceAllString(clean, "")
+	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)

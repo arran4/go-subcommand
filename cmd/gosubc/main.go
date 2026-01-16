@@ -2,6 +2,8 @@
 
 package main
 
+//go:generate sh -c "if [ -x \"$(command -v gosubc)\" ]; then gosubc generate .; else go run github.com/arran4/go-subcommand/cmd/gosubc generate .; fi"
+
 import (
 	"fmt"
 	"os"

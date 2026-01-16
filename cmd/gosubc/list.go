@@ -6,37 +6,80 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*listCmd)(nil)
+var _ Cmd = (*List)(nil)
 
-type listCmd struct {
+type List struct {
 	*RootCmd
-	Flags *flag.FlagSet
-
-	dir string
-
+	Flags       *flag.FlagSet
+	dir         string
 	SubCommands map[string]Cmd
 }
 
-func (c *listCmd) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", c)
+type UsageDataList struct {
+	*List
+	Recursive bool
+}
+
+func (c *List) Usage() {
+	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *listCmd) Execute(args []string) error {
+func (c *List) UsageRecursive() {
+	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *List) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			value := ""
+			hasValue := false
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+
+			case "dir":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.dir = value
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		}
 	}
 
 	if err := go_subcommand.List(c.dir); err != nil {
@@ -46,17 +89,42 @@ func (c *listCmd) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewlistCmd() *listCmd {
+func (c *RootCmd) NewList() *List {
 	set := flag.NewFlagSet("list", flag.ContinueOnError)
-	v := &listCmd{
+	v := &List{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Directory to list subcommands from")
-
+	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 	set.Usage = v.Usage
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }

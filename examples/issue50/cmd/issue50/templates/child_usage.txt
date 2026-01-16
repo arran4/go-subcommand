@@ -1,0 +1,6 @@
+Usage: issue50 parent child <subcommand> [arguments]
+
+parent-flag: verbose
+
+Flags:
+    --verbose

@@ -1,10 +1,9 @@
-Usage: gosubc generate <subcommand> [arguments]
+Usage: gosubc generate [flags...]
 
-
-    version      Print version information
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
 Flags:
-    -dir string       Directory to generate code for (default: .)
-    -man-dir string   Directory to generate man pages in optional
-
-
+    --dir string       Project root directory containing go.mod (default: .)
+    --man-dir string   Directory to generate man pages in optional

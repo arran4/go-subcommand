@@ -1,0 +1,55 @@
+-- input.json --
+{
+  "MainCmdName": "myapp",
+  "SubCommandName": "align",
+  "SubCommandDescription": "Check alignment",
+  "Parameters": [
+    {
+      "Name": "short",
+      "Type": "bool",
+      "FlagAliases": ["s"],
+      "Default": "false",
+      "Description": "Short flag"
+    },
+    {
+      "Name": "very-very-long-flag-name-to-test-alignment-limits",
+      "Type": "string",
+      "FlagAliases": ["long"],
+      "Default": "",
+      "Description": "This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long."
+    },
+    {
+      "Name": "another",
+      "Type": "int",
+      "FlagAliases": [],
+      "Default": "42",
+      "Description": "Another flag"
+    }
+  ],
+  "SubCommands": [
+    {
+      "SubCommandName": "short-cmd",
+      "SubCommandDescription": "Short description"
+    },
+    {
+      "SubCommandName": "very-long-subcommand-name-here",
+      "SubCommandDescription": "Description for long subcommand"
+    }
+  ]
+}
+-- output.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Subcommands:
+{{if .Recursive}}
+    align short-cmd                          Short description
+    align very-long-subcommand-name-here     Description for long subcommand
+{{else}}
+    short-cmd  Short description
+    very-long-subcommand-name-here Description for long subcommand
+{{end}}
+
+Flags:
+    -s              Short flag (default: false)
+    --long string   This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
+    --another int   Another flag (default: 42)

@@ -1,0 +1,107 @@
+name: Verify Generation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verify-generation:
+    name: Verify Generated Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install gosubc
+        run: go install ./cmd/gosubc
+
+      - name: Clean generated files
+        run: |
+          # Clean generated Go files in cmd/gosubc (preserving directory structure if needed)
+          rm -f cmd/gosubc/*.go
+          # Clean generated templates directory
+          rm -rf cmd/gosubc/templates
+
+      - name: Run generation
+        run: gosubc generate
+
+      - name: Build
+        run: |
+          go build .
+          go build ./cmd/gosubc
+
+          cd examples/basic1
+          go build .
+          cd ../..
+
+          cd examples/complex
+          go build .
+          cd ../..
+
+      - name: Verify (Vet & Lint)
+        run: |
+          go vet .
+          go vet ./cmd/gosubc
+          go vet ./templates
+
+          # Vet examples
+          cd examples/basic1
+          go vet ./...
+          cd ../..
+
+          cd examples/complex
+          go vet ./...
+          cd ../..
+
+          cd examples/returns
+          go vet ./...
+          cd ../..
+
+      - name: Install & Run golangci-lint
+        run: |
+          # Install golangci-lint from source to ensure compatibility with the current Go toolchain
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+          # Run lint on root module only
+          # Generated examples are currently skipped due to "no export data" errors
+          # caused by toolchain mismatch in the CI environment.
+          golangci-lint run
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected"
+            git status
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes detected"
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes_detected == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update generated code"
+          title: "chore: update generated code"
+          body: "This PR updates the generated code to match the current generator logic."
+          branch: "update-generated-code"
+          delete-branch: true
+          base: main

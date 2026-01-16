@@ -10,27 +10,24 @@ import (
 	"github.com/arran4/go-subcommand/examples/complex"
 )
 
-var _ Cmd = (*nestedCmd)(nil)
+var _ Cmd = (*Nested)(nil)
 
-type nestedCmd struct {
-	*toplevelCmd
-	Flags *flag.FlagSet
-
-	count int
-
-	verbose bool
-
+type Nested struct {
+	*Toplevel
+	Flags       *flag.FlagSet
+	count       int
+	verbose     bool
 	SubCommands map[string]Cmd
 }
 
-func (c *nestedCmd) Usage() {
+func (c *Nested) Usage() {
 	err := executeUsage(os.Stderr, "nested_usage.txt", c)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *nestedCmd) Execute(args []string) error {
+func (c *Nested) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -46,10 +43,10 @@ func (c *nestedCmd) Execute(args []string) error {
 	return nil
 }
 
-func (c *toplevelCmd) NewnestedCmd() *nestedCmd {
+func (c *Toplevel) NewNested() *Nested {
 	set := flag.NewFlagSet("nested", flag.ContinueOnError)
-	v := &nestedCmd{
-		toplevelCmd: c,
+	v := &Nested{
+		Toplevel:    c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
@@ -59,7 +56,6 @@ func (c *toplevelCmd) NewnestedCmd() *nestedCmd {
 
 	set.BoolVar(&v.verbose, "verbose", false, "Enable verbose output")
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
-
 	set.Usage = v.Usage
 
 	return v

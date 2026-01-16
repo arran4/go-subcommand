@@ -2,73 +2,112 @@ package templates
 
 import (
 	"bytes"
-	"os"
+	"embed"
+	"encoding/json"
 	"strings"
 	"testing"
 	"text/template"
 
-	"github.com/arran4/go-subcommand"
+	go_subcommand "github.com/arran4/go-subcommand"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"golang.org/x/tools/txtar"
 )
 
+//go:embed usage.txt.gotmpl testdata/*.txtar
+var templatesFS embed.FS
+
 func TestUsageTemplate(t *testing.T) {
-	tmplBytes, err := os.ReadFile("usage.txt.gotmpl")
+	// Parse the template
+	tmplContent, err := templatesFS.ReadFile("usage.txt.gotmpl")
 	if err != nil {
-		t.Fatalf("failed to read template file: %v", err)
+		t.Fatalf("failed to read usage.txt.gotmpl: %v", err)
 	}
-	tmplStr := string(tmplBytes)
 
 	funcs := template.FuncMap{
 		"lower":   strings.ToLower,
-		"title":   strings.Title,
+		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },
 	}
 
-	tmpl, err := template.New("usage").Funcs(funcs).Parse(tmplStr)
+	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
 
-	cmd := &go_subcommand.Command{
-		MainCmdName: "myapp",
-	}
-	subCmd := &go_subcommand.SubCommand{
-		Command:        cmd,
-		SubCommandName: "foo",
-		Parameters: []*go_subcommand.FunctionParameter{
-			{Name: "verbose", Type: "bool", Description: "Enable verbose", Default: "false", FlagAliases: []string{"v"}},
-			{Name: "count", Type: "int", Description: "Count items", Default: "0", FlagAliases: []string{"c"}},
-		},
-		SubCommands: []*go_subcommand.SubCommand{
-			{SubCommandName: "bar", SubCommandDescription: "Bar command"},
-			{SubCommandName: "baz", SubCommandDescription: "Baz command"},
-		},
+	// Iterate over txtar files
+	dirEntries, err := templatesFS.ReadDir("testdata")
+	if err != nil {
+		t.Fatalf("failed to read testdata dir: %v", err)
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, subCmd); err != nil {
-		t.Fatalf("failed to execute template: %v", err)
+	for _, entry := range dirEntries {
+		if !strings.HasSuffix(entry.Name(), ".txtar") || strings.HasSuffix(entry.Name(), ".go.txtar") {
+			continue
+		}
+		t.Run(entry.Name(), func(t *testing.T) {
+			content, err := templatesFS.ReadFile("testdata/" + entry.Name())
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", entry.Name(), err)
+			}
+
+			archive := txtar.Parse(content)
+			var inputData []byte
+			var expectedOutput []byte
+
+			for _, f := range archive.Files {
+				if f.Name == "input.json" {
+					inputData = f.Data
+				} else if f.Name == "output.txt" {
+					expectedOutput = f.Data
+				}
+			}
+
+			if inputData == nil {
+				t.Fatalf("input.json not found in %s", entry.Name())
+			}
+
+			var input struct {
+				go_subcommand.SubCommand
+				Recursive bool
+			}
+			if err := json.Unmarshal(inputData, &input); err != nil {
+				t.Fatalf("failed to unmarshal input.json: %v", err)
+			}
+			input.SubCommand.Command = input.Command // fix embedding? json.Unmarshal usually handles embedded structs if flat.
+			// Actually, SubCommand embeds *Command. JSON unmarshal might populate Command fields into SubCommand if they are top level.
+			// But Command field is *Command.
+			// Let's assume inputData structure matches what we expect.
+			// However, `Recursive` is not in SubCommand.
+
+			// Wrapper for template
+			data := struct {
+				*go_subcommand.SubCommand
+				Recursive bool
+			}{
+				SubCommand: &input.SubCommand,
+				Recursive:  input.Recursive,
+			}
+
+			populateParentsUsage(data.SubCommand, nil)
+
+			var buf bytes.Buffer
+			if err := tmpl.Execute(&buf, data); err != nil {
+				t.Fatalf("failed to execute template: %v", err)
+			}
+
+			if !bytes.Equal(buf.Bytes(), expectedOutput) {
+				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
+			}
+		})
 	}
+}
 
-	output := buf.String()
-
-	// Check Subcommands section
-	// Expecting indentation 4 spaces, no empty lines between items.
-	// Empty line before version is acceptable/expected.
-	expectedSubcommands := `Subcommands:
-    bar        Bar command
-    baz        Baz command`
-
-	if !strings.Contains(output, expectedSubcommands) {
-		t.Errorf("Expected subcommands section:\n%q\nGot:\n%q", expectedSubcommands, output)
-	}
-
-	expectedFlags := `Flags:
-    -v       Enable verbose (default: false)
-    -c int   Count items (default: 0)`
-
-	if !strings.Contains(output, expectedFlags) {
-		t.Errorf("Expected flags section:\n%q\nGot:\n%q", expectedFlags, output)
+func populateParentsUsage(sc *go_subcommand.SubCommand, parent *go_subcommand.SubCommand) {
+	sc.Parent = parent
+	for _, child := range sc.SubCommands {
+		populateParentsUsage(child, sc)
 	}
 }

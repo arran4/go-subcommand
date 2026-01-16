@@ -7,13 +7,47 @@ import (
 	"fmt"
 	"io"
 	"os"
+	{{- $hasDuration := false }}
+	{{- $hasStrconv := false }}
+	{{- range .Parameters }}
+	{{- if eq .Type "time.Duration" }}
+	{{- $hasDuration = true }}
+	{{- end }}
+	{{- if .IsPositional }}
+		{{- if or (eq .Type "int") (eq .Type "bool") }}
+		{{- $hasStrconv = true }}
+		{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasStrconv }}
+	"strconv"
+	{{- end }}
+	{{- if $hasDuration }}
+	"time"
+	{{- end }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
+	{{- if .FunctionName}}
+	"{{.ImportPath}}"
+	{{- end }}
 )
 
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
 }
 
 type UserError struct {
@@ -42,6 +76,9 @@ type RootCmd struct {
 	Version  string
 	Commit   string
 	Date     string
+	{{- range .Parameters}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
+	{{- end}}
 }
 
 func (c *RootCmd) Usage() {
@@ -53,6 +90,21 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) UsageRecursive() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	c.FlagSet.PrintDefaults()
+	fmt.Fprintln(os.Stderr, "  Commands:")
+{{- define "root_subcommands" -}}
+{{- range .SubCommands}}
+	fmt.Fprintf(os.Stderr, "    %s\n", "{{.SubCommandSequence}}")
+{{- if .SubCommands}}
+{{- template "root_subcommands" . }}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- template "root_subcommands" . }}
+}
+
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
@@ -62,21 +114,216 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-	{{range .SubCommands -}}
-	c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandName}}Cmd()
-	{{end}}
+	{{- range .Parameters}}
+		{{- if not .IsPositional }}
+		{{$param := .}}
+		{{- $desc := .Description -}}
+		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
+
+		{{- $default := .Default -}}
+		{{- if not $default -}}
+			{{- if eq .Type "string" }}{{ $default = "\"\"" }}
+			{{- else if eq .Type "bool" }}{{ $default = "false" }}
+			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
+			{{- else }}{{ $default = "0" }}{{ end -}}
+		{{- else -}}
+			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+			{{- else }}{{ $default = .Default }}{{ end -}}
+		{{- end -}}
+
+		{{- $typeTitle := $param.Type | title -}}
+		{{- if eq $param.Type "time.Duration" -}}
+			{{- $typeTitle = "Duration" -}}
+		{{- end -}}
+		{{- if .FlagAliases -}}
+			{{- range .FlagAliases }}
+			{{- if eq $param.Type "time.Duration" }}
+	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		c.DurationVar(&c.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+	} else {
+		c.DurationVar(&c.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+	}
+			{{- else }}
+	c.{{$typeTitle}}Var(&c.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+			{{- end }}
+			{{- end -}}
+		{{- else -}}
+		{{- if eq $param.Type "time.Duration" }}
+	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		c.DurationVar(&c.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
+	} else {
+		c.DurationVar(&c.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
+	}
+		{{- else }}
+	c.{{$typeTitle}}Var(&c.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+		{{- end }}
+		{{- end }}
+		{{- end }}
+	{{- end}}
+	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
+	{{end -}}
+	c.Commands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
+			c.Usage()
+			return nil
+		},
+		UsageFunc: c.Usage,
+	}
+	c.Commands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					c.UsageRecursive()
+					return nil
+				}
+			}
+			c.Usage()
+			return nil
+		},
+		UsageFunc: c.Usage,
+	}
+	c.Commands["version"] = &InternalCommand{
+		Exec: func(args []string) error {
+			fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+			return nil
+		},
+		UsageFunc: func() {
+			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+		},
+	}
 	return c, nil
 }
 
 func (c *RootCmd) Execute(args []string) error {
-	if len(args) < 1 {
+	{{- if .FunctionName}}
+	if err := c.FlagSet.Parse(args); err != nil {
+		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	}
+	remainingArgs := c.FlagSet.Args()
+	if len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd.Execute(remainingArgs[1:])
+		}
+	}
+	{{- $posArgs := 0 }}
+	{{- range .Parameters }}
+		{{- if .IsPositional }}
+			{{- if not .IsVarArg }}
+				{{- $posArgs = add $posArgs 1 }}
+			{{- end }}
+		{{- end }}
+	{{- end }}
+
+	{{- if gt $posArgs 0 }}
+	if len(remainingArgs) < {{$posArgs}} {
+		return fmt.Errorf("expected at least {{$posArgs}} positional arguments, got %d", len(remainingArgs))
+	}
+	{{- end }}
+
+	{{- range .Parameters }}
+		{{- if .IsPositional }}
+			{{- if .IsVarArg }}
+	// Handle vararg {{.Name}}
+	{
+		varArgStart := {{if .PositionalArgIndex}}{{.PositionalArgIndex | add -1}}{{else}}{{$posArgs}}{{end}}
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		{{- if gt .VarArgMin 0}}
+		if len(varArgs) < {{.VarArgMin}} {
+			return fmt.Errorf("expected at least {{.VarArgMin}} arguments for {{.Name}}, got %d", len(varArgs))
+		}
+		{{- end }}
+		{{- if gt .VarArgMax 0}}
+		if len(varArgs) > {{.VarArgMax}} {
+			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
+		}
+		{{- end }}
+		{{- if eq .Type "string" }}
+		c.{{.Name}} = varArgs
+		{{- else if eq .Type "int" }}
+		for _, arg := range varArgs {
+			i, err := strconv.Atoi(arg)
+			if err != nil {
+				return fmt.Errorf("invalid integer argument for {{.Name}}: %s", arg)
+			}
+			c.{{.Name}} = append(c.{{.Name}}, i)
+		}
+		{{- else }}
+		// TODO: Implement parsing for vararg type {{.Type}}
+		{{- end }}
+	}
+			{{- else }}
+	// Handle positional argument {{.Name}}
+	{
+		argIndex := {{.PositionalArgIndex | add -1}}
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			{{- if eq .Type "string" }}
+			c.{{.Name}} = argVal
+			{{- else if eq .Type "int" }}
+			i, err := strconv.Atoi(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid integer argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = i
+			{{- else if eq .Type "bool" }}
+			b, err := strconv.ParseBool(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid boolean argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = b
+			{{- else if eq .Type "time.Duration" }}
+			d, err := time.ParseDuration(argVal)
+			if err != nil {
+				return fmt.Errorf("invalid duration argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = d
+			{{- else }}
+			// TODO: Implement parsing for positional type {{.Type}}
+			{{- end }}
+		}
+	}
+			{{- end }}
+		{{- end }}
+	{{- end }}
+
+	{{if .ReturnsError}}
+	{{- if gt .ReturnCount 1 }}
+	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+	}
+	{{- else }}
+	if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+	}
+	{{- end }}
+	{{else}}
+	{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+	{{end -}}
+	return nil
+
+	{{- else}}
+	if err := c.FlagSet.Parse(args); err != nil {
+		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	}
+	remainingArgs := c.FlagSet.Args()
+	if len(remainingArgs) < 1 {
 		c.Usage()
 		return nil
 	}
-	cmd, ok := c.Commands[args[0]]
+	cmd, ok := c.Commands[remainingArgs[0]]
 	if !ok {
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", args[0])
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
 	}
-	return cmd.Execute(args[1:])
+	return cmd.Execute(remainingArgs[1:])
+	{{- end}}
 }
