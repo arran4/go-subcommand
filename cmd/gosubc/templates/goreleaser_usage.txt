@@ -1,0 +1,9 @@
+Usage: gosubc goreleaser [flags...]
+
+Subcommands:
+    help         Print this help message
+    usage        Print this usage message
+
+Flags:
+    --dir string                     (default: .)
+    --go-releaser-github-workflow

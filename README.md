@@ -251,6 +251,13 @@ Validates subcommand definitions for errors or conflicts.
 
 *   `--dir <path>`: Root directory.
 
+### `gosubc goreleaser`
+
+Generates release configuration.
+
+*   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
+*   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
+
 ## Contributing
 
 Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).

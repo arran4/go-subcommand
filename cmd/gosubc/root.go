@@ -69,6 +69,7 @@ func (c *RootCmd) UsageRecursive() {
 	c.FlagSet.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
 	fmt.Fprintf(os.Stderr, "    %s\n", "generate")
+	fmt.Fprintf(os.Stderr, "    %s\n", "goreleaser")
 	fmt.Fprintf(os.Stderr, "    %s\n", "list")
 	fmt.Fprintf(os.Stderr, "    %s\n", "validate")
 }
@@ -83,6 +84,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 	c.Commands["generate"] = c.NewGenerate()
+	c.Commands["goreleaser"] = c.NewGoreleaser()
 	c.Commands["list"] = c.NewList()
 	c.Commands["validate"] = c.NewValidate()
 	c.Commands["help"] = &InternalCommand{
