@@ -47,24 +47,8 @@ func Generate(dir string, manDir string) error {
 
 // GenerateWithFS generates code using provided FS and Writer
 func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string) error {
-	var err error
-	templates = template.New("").Funcs(template.FuncMap{
-		"lower":   strings.ToLower,
-		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":   strings.ToUpper,
-		"replace": strings.ReplaceAll,
-		"add":     func(a, b int) int { return a + b },
-		"until": func(n int) []int {
-			res := make([]int, n)
-			for i := 0; i < n; i++ {
-				res[i] = i
-			}
-			return res
-		},
-	})
-	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
-	if err != nil {
-		return fmt.Errorf("error parsing templates: %w", err)
+	if err := initTemplates(); err != nil {
+		return err
 	}
 
 	// inputFS is already rooted at the source directory, so we parse from "."
@@ -142,6 +126,29 @@ func parse(dir string) (*DataModel, error) {
 		dir = "."
 	}
 	return ParseGoFiles(os.DirFS(dir), ".")
+}
+
+func initTemplates() error {
+	var err error
+	templates = template.New("").Funcs(template.FuncMap{
+		"lower":   strings.ToLower,
+		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":   strings.ToUpper,
+		"replace": strings.ReplaceAll,
+		"add":     func(a, b int) int { return a + b },
+		"until": func(n int) []int {
+			res := make([]int, n)
+			for i := 0; i < n; i++ {
+				res[i] = i
+			}
+			return res
+		},
+	})
+	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
+	if err != nil {
+		return fmt.Errorf("error parsing templates: %w", err)
+	}
+	return nil
 }
 
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
