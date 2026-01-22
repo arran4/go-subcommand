@@ -38,9 +38,11 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// Generate is a subcommand `gosubc generate` that generates the subcommand code
-// param dir (default: ".") Project root directory containing go.mod
-// param manDir (--man-dir) Directory to generate man pages in (optional)
+// Generate is a subcommand `gosubc generate` generates the subcommand code
+//
+// Flags:
+//   dir:    --dir string     (default: ".") Project root directory containing go.mod
+//   manDir: --man-dir string                Directory to generate man pages in optional
 func Generate(dir string, manDir string) error {
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir)
 }

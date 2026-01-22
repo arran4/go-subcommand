@@ -4,8 +4,10 @@ import (
 	"fmt"
 )
 
-// Validate is a subcommand `gosubc validate` that validates the subcommand code
-// param dir (default: ".") The project root directory containing go.mod
+// Validate is a subcommand `gosubc validate` validates the subcommand code
+//
+// Flags:
+//   dir: --dir string (default: ".") The project root directory containing go.mod
 func Validate(dir string) error {
 	_, err := parse(dir)
 	if err != nil {
@@ -15,8 +17,10 @@ func Validate(dir string) error {
 	return nil
 }
 
-// List is a subcommand `gosubc list` that lists the subcommands
-// param dir (default: ".") The project root directory containing go.mod
+// List is a subcommand `gosubc list` lists the subcommands
+//
+// Flags:
+//   dir: --dir string (default: ".") The project root directory containing go.mod
 func List(dir string) error {
 	dataModel, err := parse(dir)
 	if err != nil {
