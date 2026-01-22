@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/arran4/go-subcommand/examples/basic1"
 )
@@ -18,8 +19,20 @@ type Example1 struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataExample1 struct {
+	*Example1
+	Recursive bool
+}
+
 func (c *Example1) Usage() {
-	err := executeUsage(os.Stderr, "example1_usage.txt", c)
+	err := executeUsage(os.Stderr, "example1_usage.txt", UsageDataExample1{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Example1) UsageRecursive() {
+	err := executeUsage(os.Stderr, "example1_usage.txt", UsageDataExample1{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -31,9 +44,22 @@ func (c *Example1) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		}
 	}
 
 	basic1.ExampleCmd1()
@@ -50,5 +76,31 @@ func (c *RootCmd) NewExample1() *Example1 {
 	}
 	set.Usage = v.Usage
 
+	v.SubCommands["help"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
+	v.SubCommands["usage"] = &InternalCommand{
+		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
+			v.Usage()
+			return nil
+		},
+		UsageFunc: v.Usage,
+	}
 	return v
 }
