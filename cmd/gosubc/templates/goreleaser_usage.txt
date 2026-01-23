@@ -6,4 +6,4 @@ Subcommands:
 
 Flags:
     --dir string                    string (default: .)
-    --go-releaser-github-workflow
+    --go-releaser-github-workflow   
