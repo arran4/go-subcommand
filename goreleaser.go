@@ -6,8 +6,10 @@ import (
 )
 
 // Goreleaser is a subcommand `gosubc goreleaser`
-// param dir (default: ".")
-// param githubWorkflow (--go-releaser-github-workflow)
+//
+// Flags:
+//   dir:            --dir string                  (default: ".")
+//   githubWorkflow: --go-releaser-github-workflow
 func Goreleaser(dir string, githubWorkflow bool) error {
 	writer := &OSFileWriter{}
 	return GoreleaserWithWriter(writer, dir, githubWorkflow)

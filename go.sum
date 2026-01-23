@@ -1,9 +1,3 @@
-github.com/arran4/go-subcommand/examples/basic1 v0.0.0-20260105062649-7d16fe48756d h1:qmJaFIj/H11QPbLGhqLKw+O6/tJdkcI4cgrv8zaeumg=
-github.com/arran4/go-subcommand/examples/basic1 v0.0.0-20260105062649-7d16fe48756d/go.mod h1:leJDE++kPZpDj6Sv6RJLm1DP+Z5Q/LACVJHxgKtr0EA=
-github.com/arran4/go-subcommand/examples/complex v0.0.0-20260105062649-7d16fe48756d h1:8xLWyxLSX65UZlQF09D1+0L69ft0Dc36tPfR7P2ds4A=
-github.com/arran4/go-subcommand/examples/complex v0.0.0-20260105062649-7d16fe48756d/go.mod h1:3/T9kIhIVnVeTAbK0kBKcgSYgzqJ+MGAC1KulgUWewI=
-github.com/arran4/go-subcommand/examples/returns v0.0.0-20260105062649-7d16fe48756d h1:t2cn3buyvNykz6HKwbg4Nj7ggjatf+TTXu5JmlkuU/I=
-github.com/arran4/go-subcommand/examples/returns v0.0.0-20260105062649-7d16fe48756d/go.mod h1:MINltegZlydvf46swDnpTRSRmhaWRVFOtNw8qnrponQ=
 golang.org/x/mod v0.31.0 h1:HaW9xtz0+kOcWKwli0ZXy79Ix+UW/vOfmWI5QVd2tgI=
 golang.org/x/mod v0.31.0/go.mod h1:43JraMp9cGx1Rx3AqioxrbrhNsLl2l/iNAvuBkrezpg=
 golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=

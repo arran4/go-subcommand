@@ -11,35 +11,35 @@ import (
 	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*Validate)(nil)
+var _ Cmd = (*Scan)(nil)
 
-type Validate struct {
+type Scan struct {
 	*RootCmd
 	Flags       *flag.FlagSet
 	dir         string
 	SubCommands map[string]Cmd
 }
 
-type UsageDataValidate struct {
-	*Validate
+type UsageDataScan struct {
+	*Scan
 	Recursive bool
 }
 
-func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+func (c *Scan) Usage() {
+	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
+func (c *Scan) UsageRecursive() {
+	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) Execute(args []string) error {
+func (c *Scan) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -82,22 +82,22 @@ func (c *Validate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Validate(c.dir); err != nil {
-		return fmt.Errorf("validate failed: %w", err)
+	if err := go_subcommand.Scan(c.dir); err != nil {
+		return fmt.Errorf("scan failed: %w", err)
 	}
 
 	return nil
 }
 
-func (c *RootCmd) NewValidate() *Validate {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &Validate{
+func (c *RootCmd) NewScan() *Scan {
+	set := flag.NewFlagSet("scan", flag.ContinueOnError)
+	v := &Scan{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "string The project root directory containing go.mod")
+	set.StringVar(&v.dir, "dir", ".", "string The project root directory")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{
