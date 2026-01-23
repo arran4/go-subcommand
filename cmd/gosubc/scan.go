@@ -97,7 +97,7 @@ func (c *RootCmd) NewScan() *Scan {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory")
+	set.StringVar(&v.dir, "dir", ".", "string The project root directory")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

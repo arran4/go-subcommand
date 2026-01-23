@@ -5,5 +5,5 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --dir string       Project root directory containing go.mod (default: .)
-    --man-dir string   Directory to generate man pages in optional
+    --dir string       string Project root directory containing go.mod (default: .)
+    --man-dir string   string Directory to generate man pages in optional

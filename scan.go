@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-// Scan is a subcommand `gosubc scan` scans for subcommands and prints their flags
+// Scan is a subcommand `gosubc scan` that lists all available subcommands and their flags
+//
+// Scan lists all available subcommands and their flags from the parsed codebase.
+// It is useful for verifying the command structure and configuration.
 //
 // Flags:
 //   dir: --dir string (default: ".") The project root directory

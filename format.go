@@ -10,6 +10,9 @@ import (
 
 // Format is a subcommand `gosubc format` formats the subcommand definitions
 //
+// Format updates the documentation comments for subcommands in the codebase
+// to match the defined parameters and standard formatting.
+//
 // Flags:
 //   dir:     --dir string (default: ".") The project root directory
 //   inplace: --inplace                   Modify files in place

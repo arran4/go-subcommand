@@ -97,7 +97,7 @@ func (c *RootCmd) NewList() *List {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+	set.StringVar(&v.dir, "dir", ".", "string The project root directory containing go.mod")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{
