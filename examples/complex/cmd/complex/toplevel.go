@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/arran4/go-subcommand/examples/complex"
 )
@@ -19,8 +20,20 @@ type Toplevel struct {
 	SubCommands map[string]Cmd
 }
 
+type UsageDataToplevel struct {
+	*Toplevel
+	Recursive bool
+}
+
 func (c *Toplevel) Usage() {
-	err := executeUsage(os.Stderr, "toplevel_usage.txt", c)
+	err := executeUsage(os.Stderr, "toplevel_usage.txt", UsageDataToplevel{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Toplevel) UsageRecursive() {
+	err := executeUsage(os.Stderr, "toplevel_usage.txt", UsageDataToplevel{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -32,9 +45,41 @@ func (c *Toplevel) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	err := c.Flags.Parse(args)
-	if err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			name := arg
+			value := ""
+			hasValue := false
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			trimmedName := strings.TrimLeft(name, "-")
+			switch trimmedName {
+
+			case "name", "n":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.name = value
+			case "help", "h":
+				c.Usage()
+				return nil
+			default:
+				return fmt.Errorf("unknown flag: %s", name)
+			}
+		}
 	}
 
 	complex.TopLevel(c.name)
@@ -58,6 +103,12 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},
@@ -65,6 +116,12 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			for _, arg := range args {
+				if arg == "-deep" {
+					v.UsageRecursive()
+					return nil
+				}
+			}
 			v.Usage()
 			return nil
 		},
