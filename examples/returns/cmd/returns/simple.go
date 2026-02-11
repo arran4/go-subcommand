@@ -98,8 +98,8 @@ func (c *RootCmd) NewSimple() *Simple {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.BoolVar(&v.fail, "fail", false, "Make the command fail")
 	set.BoolVar(&v.fail, "f", false, "Make the command fail")
+	set.BoolVar(&v.fail, "fail", false, "Make the command fail")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

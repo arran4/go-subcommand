@@ -7,4 +7,4 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --fail, -f   Make the command fail (default: false)
+    -f, --fail   Make the command fail (default: false)
