@@ -112,11 +112,11 @@ func (c *Toplevel) NewNested() *Nested {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.IntVar(&v.count, "count", 1, "Number of times to repeat")
 	set.IntVar(&v.count, "c", 1, "Number of times to repeat")
+	set.IntVar(&v.count, "count", 1, "Number of times to repeat")
 
-	set.BoolVar(&v.verbose, "verbose", false, "Enable verbose output")
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
+	set.BoolVar(&v.verbose, "verbose", false, "Enable verbose output")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

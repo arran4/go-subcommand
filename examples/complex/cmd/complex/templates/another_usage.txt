@@ -7,4 +7,4 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --wait, -w time.Duration   How long to wait (default: 1s)
+    -w, --wait time.Duration   How long to wait (default: 1s)

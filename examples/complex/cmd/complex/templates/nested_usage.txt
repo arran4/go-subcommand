@@ -8,5 +8,5 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --count, -c int   Number of times to repeat (default: 1)
-    --verbose, -v     Enable verbose output (default: false)
+    -c, --count int   Number of times to repeat (default: 1)
+    -v, --verbose     Enable verbose output (default: false)

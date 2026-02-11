@@ -95,8 +95,8 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.name, "name", "world", "The name to greet")
 	set.StringVar(&v.name, "n", "world", "The name to greet")
+	set.StringVar(&v.name, "name", "world", "The name to greet")
 	set.Usage = v.Usage
 
 	v.SubCommands["nested"] = v.NewNested()

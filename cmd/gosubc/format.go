@@ -7,40 +7,39 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/arran4/go-subcommand/examples/complex"
+	"github.com/arran4/go-subcommand"
 )
 
-var _ Cmd = (*Another)(nil)
+var _ Cmd = (*Format)(nil)
 
-type Another struct {
+type Format struct {
 	*RootCmd
 	Flags       *flag.FlagSet
-	wait        time.Duration
+	dir         string
 	SubCommands map[string]Cmd
 }
 
-type UsageDataAnother struct {
-	*Another
+type UsageDataFormat struct {
+	*Format
 	Recursive bool
 }
 
-func (c *Another) Usage() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, false})
+func (c *Format) Usage() {
+	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) UsageRecursive() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, true})
+func (c *Format) UsageRecursive() {
+	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) Execute(args []string) error {
+func (c *Format) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -64,7 +63,7 @@ func (c *Another) Execute(args []string) error {
 			trimmedName := strings.TrimLeft(name, "-")
 			switch trimmedName {
 
-			case "wait", "w":
+			case "dir":
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -73,11 +72,7 @@ func (c *Another) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				d, err := time.ParseDuration(value)
-				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
-				}
-				c.wait = d
+				c.dir = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -87,29 +82,22 @@ func (c *Another) Execute(args []string) error {
 		}
 	}
 
-	complex.Another(c.wait)
+	if err := go_subcommand.Format(c.dir); err != nil {
+		return fmt.Errorf("format failed: %w", err)
+	}
 
 	return nil
 }
 
-func (c *RootCmd) NewAnother() *Another {
-	set := flag.NewFlagSet("another", flag.ContinueOnError)
-	v := &Another{
+func (c *RootCmd) NewFormat() *Format {
+	set := flag.NewFlagSet("format", flag.ContinueOnError)
+	v := &Format{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "w", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "w", 0, "How long to wait")
-	}
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "wait", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "wait", 0, "How long to wait")
-	}
+	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{
