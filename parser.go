@@ -511,9 +511,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		trimmedLine := strings.TrimSpace(line)
 
 		if trimmedLine == "" {
-			if inFlagsBlock {
-				inFlagsBlock = false
-			}
 			if len(extendedHelpLines) > 0 {
 				extendedHelpLines = append(extendedHelpLines, "")
 			}

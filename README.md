@@ -114,6 +114,7 @@ This is the cleanest way to define multiple parameters. It must be an indented b
 // MyFunc is a subcommand `app cmd`
 //
 // Flags:
+//
 //   username: --username -u (default: "guest") The user to greet
 //   count:    --count -c    (default: 1)       Number of times
 func MyFunc(username string, count int) { ... }
@@ -149,6 +150,7 @@ To accept positional arguments instead of flags, use the `@N` syntax.
 // Greet is a subcommand `app greet`
 //
 // Flags:
+//
 //   name: @1 The name to greet
 func Greet(name string) {
     fmt.Printf("Hello, %s!\n", name)
@@ -164,6 +166,7 @@ To accept a variable number of arguments, use a slice parameter and mark it with
 // ProcessFiles is a subcommand `app process`
 //
 // Flags:
+//
 //   files: ... List of files to process
 func ProcessFiles(files ...string) {
     for _, file := range files {
@@ -181,6 +184,7 @@ You can define custom short and long flags.
 // Serve is a subcommand `app serve`
 //
 // Flags:
+//
 //   port: -p --port (default: 8080) Port to listen on
 func Serve(port int) { ... }
 ```
@@ -210,6 +214,7 @@ Use the `parent-flag: <param_name>` directive.
 ```go
 // Parent is a subcommand `app parent`
 // Flags:
+//
 //   verbose: -v --verbose
 func Parent(verbose bool) { ... }
 
