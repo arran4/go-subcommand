@@ -13,7 +13,8 @@ import (
 // It prints the name provided.
 //
 // Flags:
-//   name: --name -n (default: "world") The name to greet
+//
+//	name: --name -n (default: "world") The name to greet
 func TopLevel(name string) {
 	fmt.Printf("TopLevel command executed with name: %s\n", name)
 }
@@ -24,8 +25,9 @@ func TopLevel(name string) {
 // It takes an integer and a boolean.
 //
 // Flags:
-//   count: --count -c (default: 1) Number of times to repeat
-//   verbose: --verbose -v (default: false) Enable verbose output
+//
+//	count: --count -c (default: 1) Number of times to repeat
+//	verbose: --verbose -v (default: false) Enable verbose output
 func Nested(count int, verbose bool) {
 	fmt.Printf("Nested command executed with count: %d, verbose: %v\n", count, verbose)
 }
@@ -35,7 +37,8 @@ func Nested(count int, verbose bool) {
 // This command demonstrates using a duration parameter.
 //
 // Flags:
-//   wait: --wait -w (default: 1s) How long to wait
+//
+//	wait: --wait -w (default: 1s) How long to wait
 func Another(wait time.Duration) {
 	fmt.Printf("Another command executed, waiting for %s\n", wait)
 }

@@ -10,7 +10,8 @@ import (
 // SimpleError is a subcommand `returns simple`
 // Returns a simple error if the flag is set.
 // Flags:
-//   fail: --fail -f (default: false) Make the command fail
+//
+//	fail: --fail -f (default: false) Make the command fail
 func SimpleError(fail bool) error {
 	if fail {
 		return errors.New("simple error occurred")
