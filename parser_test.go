@@ -46,7 +46,7 @@ with x / y z`,
 			wantDescription:        "prints the users",
 			wantExtendedHelp:       "PrintUser prints in x format\nwith x / y z",
 			wantParams: map[string]ParsedParam{
-				"username": {Flags: []string{"user-name", "u"}, Default: "guest", Description: "User name"},
+				"username": {Flags: []string{"u", "user-name"}, Default: "guest", Description: "User name"},
 				"file":     {Flags: nil, Default: "out.png", Description: "Input file"},
 			},
 			wantOk: true,

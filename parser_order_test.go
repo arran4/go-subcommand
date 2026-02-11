@@ -58,3 +58,58 @@ func getSubCommandNames(subs []*SubCommand) []string {
 	}
 	return names
 }
+
+func TestFlagAliases_Order_Stability(t *testing.T) {
+	// Scenario 1: -n -name
+	fsys1 := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`
+package main
+
+// MyCmd is a subcommand ` + "`app cmd`" + `
+// param Name: -n -name Your name
+func MyCmd(Name string) {}
+`)},
+	}
+
+	// Scenario 2: -name -n
+	fsys2 := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`
+package main
+
+// MyCmd is a subcommand ` + "`app cmd`" + `
+// param Name: -name -n Your name
+func MyCmd(Name string) {}
+`)},
+	}
+
+	model1, err := ParseGoFiles(fsys1, ".")
+	if err != nil {
+		t.Fatalf("ParseGoFiles 1 failed: %v", err)
+	}
+	aliases1 := model1.Commands[0].SubCommands[0].Parameters[0].FlagAliases
+
+	model2, err := ParseGoFiles(fsys2, ".")
+	if err != nil {
+		t.Fatalf("ParseGoFiles 2 failed: %v", err)
+	}
+	aliases2 := model2.Commands[0].SubCommands[0].Parameters[0].FlagAliases
+
+	// We expect aliases to be sorted, so they should be identical regardless of input order
+	if !slicesEqual(aliases1, aliases2) {
+		t.Errorf("Aliases order mismatch. Run 1: %v, Run 2: %v. Expected them to be identical (sorted).", aliases1, aliases2)
+	}
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
