@@ -1,0 +1,19 @@
+-- go.mod --
+module example.com/test
+
+go 1.22
+-- main.go --
+package main
+
+// CmdA is a subcommand `app cmd-a`
+func CmdA() {}
+
+// CmdB is a subcommand `app cmd-b`
+func CmdB() {}
+
+// CmdC is a subcommand `app cmd-c`
+func CmdC() {}
+-- expected_subcommands.txt --
+cmd-a
+cmd-b
+cmd-c

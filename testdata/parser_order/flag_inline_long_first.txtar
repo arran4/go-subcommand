@@ -1,0 +1,13 @@
+-- go.mod --
+module example.com/test
+
+go 1.22
+-- main.go --
+package main
+
+// MyCmd is a subcommand `app cmd`
+// param Name: -name -n Your name
+func MyCmd(Name string) {}
+-- expected_aliases.txt --
+name
+n
