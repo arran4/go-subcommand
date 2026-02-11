@@ -1,0 +1,23 @@
+-- input.go --
+package main
+
+// MyFunc is a subcommand `app cmd`
+// Flags:
+//
+//	username: --username -u (default: "guest") The user to greet
+//	force: -f (default: false) Force action
+func MyFunc() {}
+
+-- expected.json --
+{
+  "username": {
+    "Flags": ["username", "u"],
+    "Default": "guest",
+    "Description": "The user to greet"
+  },
+  "force": {
+    "Flags": ["f"],
+    "Default": "false",
+    "Description": "Force action"
+  }
+}
