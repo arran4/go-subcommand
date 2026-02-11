@@ -664,7 +664,7 @@ func parseParamDetails(text string) ParsedParam {
 
 	sort.Slice(p.Flags, func(i, j int) bool {
 		if len(p.Flags[i]) != len(p.Flags[j]) {
-			return len(p.Flags[i]) < len(p.Flags[j])
+			return len(p.Flags[i]) > len(p.Flags[j])
 		}
 		return p.Flags[i] < p.Flags[j]
 	})
