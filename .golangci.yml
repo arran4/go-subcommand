@@ -1,5 +1,6 @@
 run:
-  # go: '1.25' # Removed to avoid configuration errors with linter versions that don't support it yet
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  timeout: 5m
 
 issues:
   exclude-dirs:
