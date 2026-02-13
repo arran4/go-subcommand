@@ -823,10 +823,23 @@ func MyCmd() error { return nil }
 	}
 
 	code := string(content)
-	if !strings.Contains(code, "errors.Is(err, go_subcommand.ErrPrintHelp)") {
+	if !strings.Contains(code, "errors.Is(err, cmd.ErrPrintHelp)") {
 		t.Errorf("Generated code should handle ErrPrintHelp")
 	}
-	if !strings.Contains(code, "errors.Is(err, go_subcommand.ErrHelp)") {
+	if !strings.Contains(code, "errors.Is(err, cmd.ErrHelp)") {
 		t.Errorf("Generated code should handle ErrHelp")
+	}
+	if !strings.Contains(code, "\"example.com/test/cmd\"") {
+		t.Errorf("Generated code should import the cmd package")
+	}
+
+	// Verify errors.go was generated
+	errorsPath := "cmd/errors.go"
+	errorsContent, ok := writer.Files[errorsPath]
+	if !ok {
+		t.Fatalf("Generated file not found: %s", errorsPath)
+	}
+	if !strings.Contains(string(errorsContent), "var ErrPrintHelp = errors.New(\"print help\")") {
+		t.Errorf("errors.go should define ErrPrintHelp")
 	}
 }

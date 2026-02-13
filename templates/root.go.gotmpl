@@ -14,7 +14,7 @@ import (
 	"{{.ImportPath}}"
 	{{- if .ReturnsError}}
 	"errors"
-	"github.com/arran4/go-subcommand"
+	"{{.PackagePath}}/cmd"
 	{{- end }}
 	{{- end }}
 )
@@ -158,11 +158,11 @@ func (c *RootCmd) Execute(args []string) error {
 	{{if .ReturnsError}}
 	{{- if gt .ReturnCount 1 }}
 	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		if errors.Is(err, go_subcommand.ErrPrintHelp) {
+		if errors.Is(err, cmd.ErrPrintHelp) {
 			c.Usage()
 			return nil
 		}
-		if errors.Is(err, go_subcommand.ErrHelp) {
+		if errors.Is(err, cmd.ErrHelp) {
 			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 			return nil
 		}
@@ -170,11 +170,11 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 	{{- else }}
 	if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		if errors.Is(err, go_subcommand.ErrPrintHelp) {
+		if errors.Is(err, cmd.ErrPrintHelp) {
 			c.Usage()
 			return nil
 		}
-		if errors.Is(err, go_subcommand.ErrHelp) {
+		if errors.Is(err, cmd.ErrHelp) {
 			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 			return nil
 		}
