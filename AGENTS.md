@@ -54,3 +54,4 @@ To ensure the integrity of the codebase and generated artifacts, follow these ve
 
 4.  **Regenerate Tooling (Optional):**
     If explicit regeneration verification is needed, refer to the **Tooling Generation** section above.
+* `go-subcommand` should never be a dependency of generated code.

@@ -8,7 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"errors"
 	"github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/cmd"
 )
 
 var _ Cmd = (*FormatSourceComments)(nil)
@@ -83,6 +85,14 @@ func (c *FormatSourceComments) Execute(args []string) error {
 	}
 
 	if err := go_subcommand.FormatSourceComments(c.dir); err != nil {
+		if errors.Is(err, cmd.ErrPrintHelp) {
+			c.Usage()
+			return nil
+		}
+		if errors.Is(err, cmd.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+			return nil
+		}
 		return fmt.Errorf("format-source-comments failed: %w", err)
 	}
 
