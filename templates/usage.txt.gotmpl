@@ -9,7 +9,9 @@
 {{- end -}}
 {{- $hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end -}}
 Usage: {{.ProgName}}{{if $hasFlags}} [flags...]{{end}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}}{{if .SubCommands}} <subcommand>{{end}}
-{{if .SubCommandExtendedHelp}}
+{{if .SubCommandDescription}}
+{{.SubCommandDescription}}
+{{end}}{{if .SubCommandExtendedHelp}}
 {{.SubCommandExtendedHelp}}
 {{end}}{{if or .SubCommands .SubCommandFunctionName}}
 Subcommands:
