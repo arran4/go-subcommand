@@ -36,6 +36,9 @@ func TestGoTemplates(t *testing.T) {
 			}
 			return res
 		},
+		"slice": func(args ...interface{}) []interface{} {
+			return args
+		},
 	}
 
 	tmpl, err := template.New("").Funcs(funcs).ParseFS(rawTemplatesFS, "*.gotmpl")
@@ -94,7 +97,7 @@ func TestGoTemplates(t *testing.T) {
 
 			var data interface{}
 
-			if templateName == "cmd.gotmpl" {
+			if templateName == "cmd.go.gotmpl" {
 				var sc go_subcommand.SubCommand
 				if err := json.Unmarshal(inputData, &sc); err != nil {
 					t.Fatalf("failed to unmarshal input.json into SubCommand: %v", err)
