@@ -178,9 +178,9 @@ func FormatSourceComments(dir string) error {
 				// Description:
 				descPart := p.Description
 
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", namePart, flagsPart, defaultPart, descPart)
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", namePart, flagsPart, defaultPart, descPart)
 			}
-			w.Flush()
+			_ = w.Flush()
 
 			newFlagsBlock := buf.String()
 
