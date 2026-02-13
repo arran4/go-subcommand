@@ -106,7 +106,7 @@ func (sc *SubCommand) HasSubcommands() bool {
 }
 
 func (sc *SubCommand) ProgName() string {
-	return sc.Command.MainCmdName + " " + sc.SubCommandSequence()
+	return sc.MainCmdName + " " + sc.SubCommandSequence()
 }
 
 func (sc *SubCommand) MaxFlagLength() int {
