@@ -20,6 +20,7 @@ type Goreleaser struct {
 	dir            string
 	githubWorkflow bool
 	SubCommands    map[string]Cmd
+	CommandAction  func(c *Goreleaser) error
 }
 
 type UsageDataGoreleaser struct {
@@ -95,8 +96,12 @@ func (c *Goreleaser) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow); err != nil {
-		return fmt.Errorf("goreleaser failed: %w", err)
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("goreleaser failed: %w", err)
+		}
+	} else {
+		c.Usage()
 	}
 
 	return nil
@@ -114,6 +119,14 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 
 	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "TODO: Add usage text")
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Goreleaser) error {
+
+		if err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

@@ -51,10 +51,11 @@ func executeUsage(out io.Writer, templateName string, data interface{}) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands map[string]Cmd
-	Version  string
-	Commit   string
-	Date     string
+	Commands      map[string]Cmd
+	Version       string
+	Commit        string
+	Date          string
+	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
@@ -86,6 +87,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
+
 	c.Commands["format-source-comments"] = c.NewFormatSourceComments()
 	c.Commands["generate"] = c.NewGenerate()
 	c.Commands["goreleaser"] = c.NewGoreleaser()

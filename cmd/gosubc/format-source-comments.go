@@ -15,9 +15,10 @@ var _ Cmd = (*FormatSourceComments)(nil)
 
 type FormatSourceComments struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *FormatSourceComments) error
 }
 
 type UsageDataFormatSourceComments struct {
@@ -82,8 +83,12 @@ func (c *FormatSourceComments) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.FormatSourceComments(c.dir); err != nil {
-		return fmt.Errorf("format-source-comments failed: %w", err)
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("format-source-comments failed: %w", err)
+		}
+	} else {
+		c.Usage()
 	}
 
 	return nil
@@ -99,6 +104,14 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *FormatSourceComments) error {
+
+		if err := go_subcommand.FormatSourceComments(c.dir); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
