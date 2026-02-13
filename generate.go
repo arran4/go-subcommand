@@ -16,8 +16,8 @@ import (
 	"golang.org/x/text/language"
 )
 
-//go:embed templates/*.gotmpl
-var templatesFS embed.FS
+//go:embed templates
+var TemplatesFS embed.FS
 
 var templates *template.Template
 
@@ -130,7 +130,12 @@ func parse(dir string) (*DataModel, error) {
 
 func initTemplates() error {
 	var err error
-	templates = template.New("").Funcs(template.FuncMap{
+	templates, err = ParseTemplates(TemplatesFS)
+	return err
+}
+
+func ParseTemplates(fsys fs.FS) (*template.Template, error) {
+	tmpl := template.New("").Funcs(template.FuncMap{
 		"lower":   strings.ToLower,
 		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":   strings.ToUpper,
@@ -147,11 +152,30 @@ func initTemplates() error {
 			return args
 		},
 	})
-	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
+
+	var patterns []string
+	err := fs.WalkDir(fsys, "templates", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".gotmpl") {
+			patterns = append(patterns, path)
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("error parsing templates: %w", err)
+		return nil, fmt.Errorf("error walking templates: %w", err)
 	}
-	return nil
+
+	if len(patterns) == 0 {
+		return tmpl, nil
+	}
+
+	tmpl, err = tmpl.ParseFS(fsys, patterns...)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing templates: %w", err)
+	}
+	return tmpl, nil
 }
 
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {

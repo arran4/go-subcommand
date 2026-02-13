@@ -7,41 +7,16 @@ import (
 	"go/format"
 	"strings"
 	"testing"
-	"text/template"
-
 	go_subcommand "github.com/arran4/go-subcommand"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"golang.org/x/tools/txtar"
 )
 
 //go:embed testdata/*.go.txtar
 var goTemplatesFS embed.FS
 
-//go:embed *.gotmpl
-var rawTemplatesFS embed.FS
-
 func TestGoTemplates(t *testing.T) {
 	// Parse all templates
-	funcs := template.FuncMap{
-		"lower":   strings.ToLower,
-		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":   strings.ToUpper,
-		"replace": strings.ReplaceAll,
-		"add":     func(a, b int) int { return a + b },
-		"until": func(n int) []int {
-			res := make([]int, n)
-			for i := 0; i < n; i++ {
-				res[i] = i
-			}
-			return res
-		},
-		"slice": func(args ...interface{}) []interface{} {
-			return args
-		},
-	}
-
-	tmpl, err := template.New("").Funcs(funcs).ParseFS(rawTemplatesFS, "*.gotmpl")
+	tmpl, err := go_subcommand.ParseTemplates(go_subcommand.TemplatesFS)
 	if err != nil {
 		t.Fatalf("failed to parse templates: %v", err)
 	}
