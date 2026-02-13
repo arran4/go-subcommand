@@ -79,6 +79,7 @@ type RootCmd struct {
 	{{- range .Parameters}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
 	{{- end}}
+	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
@@ -197,6 +198,25 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
 		},
 	}
+	c.CommandAction = func(c *RootCmd) error {
+		{{if .FunctionName}}
+		{{if .ReturnsError}}
+		{{- if gt .ReturnCount 1 }}
+		if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+		}
+		{{- else }}
+		if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+		}
+		{{- end }}
+		{{else}}
+		{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{end -}}
+		{{else}}
+		{{end}}
+		return nil
+	}
 	return c, nil
 }
 
@@ -295,20 +315,7 @@ func (c *RootCmd) Execute(args []string) error {
 		{{- end }}
 	{{- end }}
 
-	{{if .ReturnsError}}
-	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
-	}
-	{{- else }}
-	if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
-	}
-	{{- end }}
-	{{else}}
-	{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
-	{{end -}}
-	return nil
+	return c.CommandAction(c)
 
 	{{- else}}
 	if err := c.FlagSet.Parse(args); err != nil {

@@ -15,9 +15,10 @@ var _ Cmd = (*Toplevel)(nil)
 
 type Toplevel struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	name        string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	name          string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Toplevel) error
 }
 
 type UsageDataToplevel struct {
@@ -82,9 +83,7 @@ func (c *Toplevel) Execute(args []string) error {
 		}
 	}
 
-	complex.TopLevel(c.name)
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewToplevel() *Toplevel {
@@ -126,6 +125,12 @@ func (c *RootCmd) NewToplevel() *Toplevel {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *Toplevel) error {
+
+		complex.TopLevel(c.name)
+
+		return nil
 	}
 	return v
 }

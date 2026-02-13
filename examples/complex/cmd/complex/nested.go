@@ -16,10 +16,11 @@ var _ Cmd = (*Nested)(nil)
 
 type Nested struct {
 	*Toplevel
-	Flags       *flag.FlagSet
-	count       int
-	verbose     bool
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	count         int
+	verbose       bool
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Nested) error
 }
 
 type UsageDataNested struct {
@@ -99,9 +100,7 @@ func (c *Nested) Execute(args []string) error {
 		}
 	}
 
-	complex.Nested(c.count, c.verbose)
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *Toplevel) NewNested() *Nested {
@@ -144,6 +143,12 @@ func (c *Toplevel) NewNested() *Nested {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *Nested) error {
+
+		complex.Nested(c.count, c.verbose)
+
+		return nil
 	}
 	return v
 }

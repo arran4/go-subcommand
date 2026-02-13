@@ -16,9 +16,10 @@ var _ Cmd = (*Another)(nil)
 
 type Another struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	wait        time.Duration
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	wait          time.Duration
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Another) error
 }
 
 type UsageDataAnother struct {
@@ -87,9 +88,7 @@ func (c *Another) Execute(args []string) error {
 		}
 	}
 
-	complex.Another(c.wait)
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewAnother() *Another {
@@ -137,6 +136,12 @@ func (c *RootCmd) NewAnother() *Another {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *Another) error {
+
+		complex.Another(c.wait)
+
+		return nil
 	}
 	return v
 }

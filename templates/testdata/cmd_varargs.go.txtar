@@ -45,10 +45,11 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	verbose     bool
-	files       []string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	verbose       bool
+	files         []string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *MyCmd) error
 }
 
 type UsageDataMyCmd struct {
@@ -126,9 +127,7 @@ func (c *MyCmd) Execute(args []string) error {
 		c.files = varArgs
 	}
 
-	mypkg.MyCmdFunc(c.verbose, c.files...)
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewMyCmd() *MyCmd {
@@ -167,6 +166,12 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *MyCmd) error {
+
+		mypkg.MyCmdFunc(c.verbose, c.files...)
+
+		return nil
 	}
 	return v
 }

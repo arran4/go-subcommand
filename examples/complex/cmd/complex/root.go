@@ -51,10 +51,11 @@ func executeUsage(out io.Writer, templateName string, data interface{}) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands map[string]Cmd
-	Version  string
-	Commit   string
-	Date     string
+	Commands      map[string]Cmd
+	Version       string
+	Commit        string
+	Date          string
+	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
@@ -120,6 +121,10 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		UsageFunc: func() {
 			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
 		},
+	}
+	c.CommandAction = func(c *RootCmd) error {
+
+		return nil
 	}
 	return c, nil
 }
