@@ -38,9 +38,10 @@ var _ Cmd = (*MyCmd)(nil)
 
 type MyCmd struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	verbose     bool
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	verbose       bool
+	SubCommands   map[string]Cmd
+	CommandAction func(c *MyCmd) error
 }
 
 type UsageDataMyCmd struct {
@@ -105,7 +106,13 @@ func (c *MyCmd) Execute(args []string) error {
 		}
 	}
 
-	mypkg.MyCmdFunc(c.verbose)
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("mycmd failed: %w", err)
+		}
+	} else {
+		c.Usage()
+	}
 
 	return nil
 }
@@ -120,6 +127,12 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *MyCmd) error {
+
+		mypkg.MyCmdFunc(c.verbose)
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
