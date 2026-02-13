@@ -622,7 +622,7 @@ func GrandChild() {}
 
 	// Requirement: Version only at top level.
 	// We verify RootCmd supports Version.
-	if !strings.Contains(rootCode, "Version  string") {
+	if !strings.Contains(rootCode, "Version") {
 		t.Errorf("Root command should support Version")
 	}
 

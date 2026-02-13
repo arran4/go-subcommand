@@ -15,8 +15,9 @@ var _ Cmd = (*Example1)(nil)
 
 type Example1 struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Example1) error
 }
 
 type UsageDataExample1 struct {
@@ -62,7 +63,13 @@ func (c *Example1) Execute(args []string) error {
 		}
 	}
 
-	basic1.ExampleCmd1()
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("example1 failed: %w", err)
+		}
+	} else {
+		c.Usage()
+	}
 
 	return nil
 }
@@ -75,6 +82,12 @@ func (c *RootCmd) NewExample1() *Example1 {
 		SubCommands: make(map[string]Cmd),
 	}
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Example1) error {
+
+		basic1.ExampleCmd1()
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

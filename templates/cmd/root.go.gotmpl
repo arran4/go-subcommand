@@ -62,6 +62,7 @@ type RootCmd struct {
 	{{- range .Parameters}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
 	{{- end}}
+	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
@@ -98,6 +99,25 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 {{- template "flag_definitions" (slice "c" "c" .Parameters) }}
+	{{if .FunctionName}}
+	c.CommandAction = func(c *RootCmd) error {
+		{{if .ReturnsError}}
+		{{- if gt .ReturnCount 1 }}
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		if err != nil {
+			return err
+		}
+		{{- else }}
+		if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+			return err
+		}
+		{{- end }}
+		{{else}}
+		{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{end -}}
+		return nil
+	}
+	{{end}}
 	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
@@ -151,19 +171,11 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 {{- template "positional_args_parsing" .Parameters }}
 
-	{{if .ReturnsError}}
-	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+		}
 	}
-	{{- else }}
-	if err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
-	}
-	{{- end }}
-	{{else}}
-	{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
-	{{end -}}
 	return nil
 
 	{{- else}}

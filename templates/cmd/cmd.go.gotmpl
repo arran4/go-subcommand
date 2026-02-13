@@ -21,6 +21,7 @@ type {{.SubCommandStructName}} struct {
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
 	{{- end}}
 	SubCommands map[string]Cmd
+	CommandAction func(c *{{.SubCommandStructName}}) error
 }
 
 type UsageData{{.SubCommandStructName}} struct {
@@ -156,19 +157,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 {{- template "positional_args_parsing" .Parameters }}
 
 	{{if .SubCommandFunctionName}}
-	{{if .ReturnsError}}
-	{{- if gt .ReturnCount 1 }}
-	if {{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
+		}
+	} else {
+		c.Usage()
 	}
-	{{- else }}
-	if err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-		return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
-	}
-	{{- end }}
-	{{else}}
-	{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
-	{{end -}}
 	{{else}}
 	c.Usage()
 	{{end}}
@@ -184,6 +179,25 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	}
 {{- template "flag_definitions" (slice "set" "v" .Parameters) }}
 	set.Usage = v.Usage
+	{{if .SubCommandFunctionName}}
+	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
+		{{if .ReturnsError}}
+		{{- if gt .ReturnCount 1 }}
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		if err != nil {
+			return err
+		}
+		{{- else }}
+		if err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
+			return err
+		}
+		{{- end }}
+		{{else}}
+		{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{end -}}
+		return nil
+	}
+	{{end}}
 	{{range .SubCommands}}
 	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
 	{{end}}
