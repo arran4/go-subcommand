@@ -72,15 +72,10 @@ jobs:
           go vet ./...
           cd ../..
 
-      - name: Install & Run golangci-lint
-        run: |
-          # Install golangci-lint from source to ensure compatibility with the current Go toolchain
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-          # Run lint on root module only
-          # Generated examples are currently skipped due to "no export data" errors
-          # caused by toolchain mismatch in the CI environment.
-          golangci-lint run
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9.2.0
+        with:
+          version: v1.64
 
       - name: Check for changes
         id: check_changes
