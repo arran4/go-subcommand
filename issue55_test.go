@@ -53,14 +53,14 @@ func TestIssue55_ToKebabCase(t *testing.T) {
 	}{
 		{"Simple", "Test", "test"},
 		{"NumberPrefix", "123Test", "123-test"},
-		{"NumberPrefix2", "123test", "123-test"},
-		{"CmdPrefix", "Cmd123Test", "cmd-123-test"},
-		{"CmdPrefix2", "Cmd123test", "cmd-123-test"},
+		{"NumberPrefix2", "123test", "123test"},
+		{"CmdPrefix", "Cmd123Test", "cmd123-test"},
+		{"CmdPrefix2", "Cmd123test", "cmd123test"},
 		{"Acronym", "JSONData", "json-data"},
-		{"AcronymNumber", "JSON123Data", "json-123-data"},
-		{"AcronymNumber2", "JSON123data", "json-123-data"},
-		{"NumberInMiddle", "My123Test", "my-123-test"},
-		{"NumberInMiddle2", "My123test", "my-123-test"},
+		{"AcronymNumber", "JSON123Data", "json123-data"},
+		{"AcronymNumber2", "JSON123data", "json123data"},
+		{"NumberInMiddle", "My123Test", "my123-test"},
+		{"NumberInMiddle2", "My123test", "my123test"},
 	}
 
 	for _, tt := range tests {

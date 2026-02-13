@@ -5,18 +5,35 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/arran4/strings2"
 )
 
 // ToKebabCase converts a CamelCase string to kebab-case.
 // It handles acronyms (e.g. JSONData -> json-data) and simple cases (CamelCase -> camel-case).
 func ToKebabCase(s string) string {
-	res, err := strings2.ToKebab(s, strings2.WithNumberSplitting(true))
-	if err != nil {
-		return strings.ToLower(s)
+	var builder strings.Builder
+	runes := []rune(s)
+	length := len(runes)
+
+	for i := 0; i < length; i++ {
+		r := runes[i]
+		if i > 0 {
+			prev := runes[i-1]
+			if unicode.IsUpper(r) {
+				// Case 1: camelCase -> camel-case
+				// If previous is lower or digit, insert hyphen
+				if unicode.IsLower(prev) || unicode.IsDigit(prev) {
+					builder.WriteRune('-')
+				} else if unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1]) {
+					// Case 2: Acronyms. JSONData -> JSON-Data.
+					// Current is Upper (D). Prev is Upper (N). Next is Lower (a).
+					// Insert hyphen before D.
+					builder.WriteRune('-')
+				}
+			}
+		}
+		builder.WriteRune(unicode.ToLower(r))
 	}
-	return strings.ToLower(res)
+	return builder.String()
 }
 
 // SanitizeToIdentifier converts a string into a valid Go identifier (CamelCase).
@@ -24,29 +41,23 @@ func ToKebabCase(s string) string {
 // acting as delimiters for CamelCasing.
 func SanitizeToIdentifier(name string) string {
 	var builder strings.Builder
+	nextUpper := true // First character should always be upper (Exported)
+
 	for _, r := range name {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			builder.WriteRune(r)
+			if nextUpper {
+				builder.WriteRune(unicode.ToUpper(r))
+				nextUpper = false
+			} else {
+				builder.WriteRune(r)
+			}
 		} else {
-			builder.WriteRune('_')
-		}
-	}
-	input := builder.String()
-
-	res, err := strings2.ToPascal(input)
-	if err != nil {
-		res = name
-	}
-
-	builder.Reset()
-
-	for _, r := range res {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			builder.WriteRune(r)
+			// Treat any non-alphanumeric char as a delimiter
+			nextUpper = true
 		}
 	}
 
-	res = builder.String()
+	res := builder.String()
 	// Ensure it doesn't start with a digit
 	if len(res) > 0 {
 		r, _ := utf8.DecodeRuneInString(res)
