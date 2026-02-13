@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/parser"
+	goparser "go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -13,6 +13,9 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parser"
 )
 
 // FormatSourceComments is a subcommand `gosubc format-source-comments` that formats source comments to match gofmt style
@@ -42,7 +45,7 @@ func FormatSourceComments(dir string) error {
 			return err
 		}
 
-		f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+		f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 		if err != nil {
 			return err
 		}
@@ -72,9 +75,9 @@ func FormatSourceComments(dir string) error {
 
 			// Extract existing parameters info to preserve descriptions/defaults not in signature
 			// ParseSubCommandComments returns map[name]ParsedParam
-			_, _, _, _, parsedParams, _ := ParseSubCommandComments(text)
+			_, _, _, _, parsedParams, _ := parser.ParseSubCommandComments(text)
 
-			var params []*FunctionParameter
+			var params []*model.FunctionParameter
 			for _, p := range funcDecl.Type.Params.List {
 				for _, name := range p.Names {
 					typeName := ""
@@ -97,7 +100,7 @@ func FormatSourceComments(dir string) error {
 						}
 					}
 
-					fp := &FunctionParameter{
+					fp := &model.FunctionParameter{
 						Name:     name.Name,
 						Type:     typeName,
 						IsVarArg: isVarArg,
@@ -121,7 +124,7 @@ func FormatSourceComments(dir string) error {
 					}
 
 					if len(fp.FlagAliases) == 0 {
-						kebab := ToKebabCase(name.Name)
+						kebab := parser.ToKebabCase(name.Name)
 						if kebab != name.Name {
 							fp.FlagAliases = []string{kebab}
 						} else {

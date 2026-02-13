@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	"testing"
+
+	"github.com/arran4/go-subcommand/parser"
 )
 
 func TestIssue55_SanitizeToIdentifier(t *testing.T) {
@@ -36,7 +38,7 @@ func TestIssue55_SanitizeToIdentifier(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := SanitizeToIdentifier(tt.input); got != tt.expected {
+			if got := parser.SanitizeToIdentifier(tt.input); got != tt.expected {
 				t.Errorf("SanitizeToIdentifier(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})
@@ -63,7 +65,7 @@ func TestIssue55_ToKebabCase(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ToKebabCase(tt.input); got != tt.expected {
+			if got := parser.ToKebabCase(tt.input); got != tt.expected {
 				t.Errorf("ToKebabCase(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})

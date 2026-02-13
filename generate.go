@@ -12,6 +12,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parser"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -41,20 +43,26 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //
 // Flags:
 //
-//	dir:    --dir     (default: ".") Project root directory containing go.mod
-//	manDir: --man-dir                Directory to generate man pages in optional
-func Generate(dir string, manDir string) error {
-	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir)
+//	dir:        --dir         (default: ".") Project root directory containing go.mod
+//	manDir:     --man-dir                    Directory to generate man pages in optional
+//	parserName: --parser-name (default: "comment") Name of the parser to use
+func Generate(dir string, manDir string, parserName string) error {
+	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName)
 }
 
 // GenerateWithFS generates code using provided FS and Writer
-func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string) error {
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string) error {
 	if err := initTemplates(); err != nil {
 		return err
 	}
 
+	p, err := parser.Get(parserName)
+	if err != nil {
+		return err
+	}
+
 	// inputFS is already rooted at the source directory, so we parse from "."
-	dataModel, err := ParseGoFiles(inputFS, ".")
+	dataModel, err := p.Parse(inputFS, ".")
 	if err != nil {
 		return err
 	}
@@ -88,7 +96,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 	}
 	return nil
 }
-func assignUsageFileNames(subCommands []*SubCommand) {
+func assignUsageFileNames(subCommands []*model.SubCommand) {
 	seen := make(map[string]int)
 	for _, sc := range subCommands {
 		lower := strings.ToLower(sc.SubCommandName)
@@ -105,7 +113,7 @@ func assignUsageFileNames(subCommands []*SubCommand) {
 		}
 	}
 }
-func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
+func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
 	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
 		return err
 	}
@@ -130,11 +138,15 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 }
 
 // Helper to bridge legacy parse calls
-func parse(dir string) (*DataModel, error) {
+func parse(dir string, parserName string) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
 	}
-	return ParseGoFiles(os.DirFS(dir), ".")
+	p, err := parser.Get(parserName)
+	if err != nil {
+		return nil, err
+	}
+	return p.Parse(os.DirFS(dir), ".")
 }
 func initTemplates() error {
 	var err error

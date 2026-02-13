@@ -8,9 +8,10 @@ import (
 //
 // Flags:
 //
-//	dir: --dir (default: ".") The project root directory containing go.mod
-func Validate(dir string) error {
-	_, err := parse(dir)
+//	dir:        --dir         (default: ".") The project root directory containing go.mod
+//	parserName: --parser-name (default: "comment") Name of the parser to use
+func Validate(dir string, parserName string) error {
+	_, err := parse(dir, parserName)
 	if err != nil {
 		return err
 	}
@@ -22,9 +23,10 @@ func Validate(dir string) error {
 //
 // Flags:
 //
-//	dir: --dir (default: ".") The project root directory containing go.mod
-func List(dir string) error {
-	dataModel, err := parse(dir)
+//	dir:        --dir         (default: ".") The project root directory containing go.mod
+//	parserName: --parser-name (default: "comment") Name of the parser to use
+func List(dir string, parserName string) error {
+	dataModel, err := parse(dir, parserName)
 	if err != nil {
 		return err
 	}

@@ -20,6 +20,7 @@ type Generate struct {
 	Flags         *flag.FlagSet
 	dir           string
 	manDir        string
+	parserName    string
 	SubCommands   map[string]Cmd
 	CommandAction func(c *Generate) error
 }
@@ -88,6 +89,17 @@ func (c *Generate) Execute(args []string) error {
 					}
 				}
 				c.manDir = value
+
+			case "parserName", "parser-name":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.parserName = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -119,11 +131,13 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
+
+	set.StringVar(&v.parserName, "parser-name", "comment", "Name of the parser to use")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

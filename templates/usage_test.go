@@ -8,7 +8,7 @@ import (
 	"testing"
 	"text/template"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/model"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/tools/txtar"
@@ -70,7 +70,7 @@ func TestUsageTemplate(t *testing.T) {
 			}
 
 			var input struct {
-				go_subcommand.SubCommand
+				model.SubCommand
 				Recursive bool
 			}
 			if err := json.Unmarshal(inputData, &input); err != nil {
@@ -84,7 +84,7 @@ func TestUsageTemplate(t *testing.T) {
 
 			// Wrapper for template
 			data := struct {
-				*go_subcommand.SubCommand
+				*model.SubCommand
 				Recursive bool
 			}{
 				SubCommand: &input.SubCommand,
@@ -105,7 +105,7 @@ func TestUsageTemplate(t *testing.T) {
 	}
 }
 
-func populateParentsUsage(sc *go_subcommand.SubCommand, parent *go_subcommand.SubCommand) {
+func populateParentsUsage(sc *model.SubCommand, parent *model.SubCommand) {
 	sc.Parent = parent
 	for _, child := range sc.SubCommands {
 		populateParentsUsage(child, sc)

@@ -1,4 +1,4 @@
-package go_subcommand
+package parser
 
 import (
 	"embed"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/arran4/go-subcommand/model"
 	"golang.org/x/tools/txtar"
 )
 
@@ -92,7 +93,7 @@ func TestParserOrder(t *testing.T) {
 	}
 }
 
-func getSubCommandNames(subs []*SubCommand) []string {
+func getSubCommandNames(subs []*model.SubCommand) []string {
 	var names []string
 	for _, s := range subs {
 		names = append(names, s.SubCommandName)
