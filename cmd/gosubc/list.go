@@ -17,9 +17,10 @@ var _ Cmd = (*List)(nil)
 
 type List struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *List) error
 }
 
 type UsageDataList struct {
@@ -84,16 +85,12 @@ func (c *List) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.List(c.dir); err != nil {
-		if errors.Is(err, cmd.ErrPrintHelp) {
-			c.Usage()
-			return nil
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("list failed: %w", err)
 		}
-		if errors.Is(err, cmd.ErrHelp) {
-			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
-			return nil
-		}
-		return fmt.Errorf("list failed: %w", err)
+	} else {
+		c.Usage()
 	}
 
 	return nil
@@ -109,6 +106,23 @@ func (c *RootCmd) NewList() *List {
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *List) error {
+
+		err := go_subcommand.List(c.dir)
+		if err != nil {
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			return fmt.Errorf("list failed: %w", err)
+		}
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

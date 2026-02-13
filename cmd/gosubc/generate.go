@@ -17,10 +17,11 @@ var _ Cmd = (*Generate)(nil)
 
 type Generate struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	manDir      string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	manDir        string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Generate) error
 }
 
 type UsageDataGenerate struct {
@@ -96,16 +97,12 @@ func (c *Generate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
-		if errors.Is(err, cmd.ErrPrintHelp) {
-			c.Usage()
-			return nil
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return fmt.Errorf("generate failed: %w", err)
 		}
-		if errors.Is(err, cmd.ErrHelp) {
-			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
-			return nil
-		}
-		return fmt.Errorf("generate failed: %w", err)
+	} else {
+		c.Usage()
 	}
 
 	return nil
@@ -123,6 +120,23 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Generate) error {
+
+		err := go_subcommand.Generate(c.dir, c.manDir)
+		if err != nil {
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			return fmt.Errorf("generate failed: %w", err)
+		}
+		return nil
+	}
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
