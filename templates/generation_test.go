@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	go_subcommand "github.com/arran4/go-subcommand"
 	"go/format"
+	"golang.org/x/tools/txtar"
 	"strings"
 	"testing"
-	go_subcommand "github.com/arran4/go-subcommand"
-	"golang.org/x/tools/txtar"
 )
 
 //go:embed testdata/*.go.txtar

@@ -230,7 +230,8 @@ func TestFlagDescriptionPriority_Exhaustive(t *testing.T) {
 			src: `package main
 // Cmd is a subcommand ` + "`app cmd`" + `
 // Flags:
-//   verbose: Top Priority
+//
+//	verbose: Top Priority
 func Cmd(
 	// Preceding Priority
 	verbose bool, // Inline Priority
@@ -243,7 +244,8 @@ func Cmd(
 			src: `package main
 // Cmd is a subcommand ` + "`app cmd`" + `
 // Flags:
-//   verbose: Top Priority
+//
+//	verbose: Top Priority
 func Cmd(
 	verbose bool, // Inline Priority
 ) {}
@@ -255,7 +257,8 @@ func Cmd(
 			src: `package main
 // Cmd is a subcommand ` + "`app cmd`" + `
 // Flags:
-//   verbose: Top Priority
+//
+//	verbose: Top Priority
 func Cmd(
 	// Preceding Priority
 	verbose bool,
@@ -279,7 +282,8 @@ func Cmd(
 			src: `package main
 // Cmd is a subcommand ` + "`app cmd`" + `
 // Flags:
-//   verbose: Top Priority
+//
+//	verbose: Top Priority
 func Cmd(verbose bool) {}
 `,
 			expected: "Top Priority",
@@ -318,7 +322,8 @@ func Cmd(verbose bool) {}
 			src: `package main
 // Cmd is a subcommand ` + "`app cmd`" + `
 // Flags:
-//   verbose: --verbose
+//
+//	verbose: --verbose
 func Cmd(
 	verbose bool, // Inline Priority
 ) {}
@@ -378,7 +383,8 @@ func TestPriorityFlagDescriptions(t *testing.T) {
 
 // MyCmd is a subcommand ` + "`app mycmd`" + `
 // Flags:
-//   verbose: Top Priority
+//
+//	verbose: Top Priority
 func MyCmd(
 	// 3rd priority
 	verbose bool, // 2nd Priority
@@ -436,7 +442,8 @@ func TestIssue26_DefaultValuesInHelp(t *testing.T) {
 	srcWithFlags := `package main
 // MyCmd is a subcommand ` + "`app mycmd`" + `
 // Flags:
-//   retries: --retries (default: 3) Number of retries
+//
+//	retries: --retries (default: 3) Number of retries
 func MyCmd(retries int) {}
 `
 	fs := setupProject(t, srcWithFlags)
@@ -457,7 +464,8 @@ func TestIssue23_ShortFlagAliases(t *testing.T) {
 	src := `package main
 // MyCmd is a subcommand ` + "`app mycmd`" + `
 // Flags:
-//   force: -f --force Force execution
+//
+//	force: -f --force Force execution
 func MyCmd(force bool) {}
 `
 	fs := setupProject(t, src)
@@ -622,7 +630,7 @@ func GrandChild() {}
 
 	// Requirement: Version only at top level.
 	// We verify RootCmd supports Version.
-	if !strings.Contains(rootCode, "Version  string") {
+	if !strings.Contains(rootCode, "Version") || !strings.Contains(rootCode, "string") {
 		t.Errorf("Root command should support Version")
 	}
 

@@ -19,7 +19,7 @@ import (
 //
 // Flags:
 //
-// 	dir: --dir (default: ".") The project root directory containing go.mod
+//	dir: --dir (default: ".") The project root directory containing go.mod
 func FormatSourceComments(dir string) error {
 	fset := token.NewFileSet()
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
