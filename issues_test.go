@@ -7,7 +7,8 @@ import (
 	"testing/fstest"
 
 	"github.com/arran4/go-subcommand/model"
-	"github.com/arran4/go-subcommand/parser"
+	"github.com/arran4/go-subcommand/parsers"
+	_ "github.com/arran4/go-subcommand/parsers/common"
 )
 
 // MockWriter implements FileWriter for in-memory testing
@@ -42,7 +43,7 @@ func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	writer := NewMockWriter()
 	// We use a dummy dir name like "." or "/app"
-	if err := GenerateWithFS(inputFS, writer, ".", "", "comment"); err != nil {
+	if err := GenerateWithFS(inputFS, writer, ".", "", "comment-v1"); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	return writer
@@ -57,8 +58,10 @@ func ListHeads() {}
 	fs := setupProject(t, src)
 	writer := NewMockWriter()
 
-	err := GenerateWithFS(fs, writer, ".", "", "comment")
+	err := GenerateWithFS(fs, writer, ".", "", "comment-v1")
 
+	p, err := parsers.Get("comment-v1"); if err != nil { t.Fatal(err) };
+	_, err = p.Parse(fs, ".")
 	if err != nil {
 		// This test verifies that the issue is still present (OPEN).
 		// The generator currently produces invalid Go code for hyphenated commands,
@@ -123,7 +126,9 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
-	dataModel, err := parser.ParseGoFiles(fs, ".")
+
+	p, err := parsers.Get("comment-v1"); if err != nil { t.Fatal(err) };
+dataModel, err := p.Parse(fs, ".")
 	if err != nil {
 		t.Fatalf("ParseGoFiles failed: %v", err)
 	}

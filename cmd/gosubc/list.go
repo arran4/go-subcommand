@@ -111,7 +111,7 @@ func (c *RootCmd) NewList() *List {
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
-	set.StringVar(&v.parserName, "parser-name", "comment", "Parser to use")
+	set.StringVar(&v.parserName, "parser-name", "comment-v1", "Parser to use")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

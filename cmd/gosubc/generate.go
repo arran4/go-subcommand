@@ -125,7 +125,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 
-	set.StringVar(&v.parserName, "parser-name", "comment", "Parser to use")
+	set.StringVar(&v.parserName, "parser-name", "comment-v1", "Parser to use")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

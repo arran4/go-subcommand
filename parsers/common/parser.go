@@ -1,4 +1,4 @@
-package parser
+package common
 
 import (
 	"bufio"
@@ -15,30 +15,14 @@ import (
 	"strings"
 
 	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/mod/modfile"
 )
-
-type Parser interface {
-	Parse(fsys fs.FS, root string) (*model.DataModel, error)
-}
-
-var parsers = make(map[string]Parser)
-
-func Register(name string, p Parser) {
-	parsers[name] = p
-}
-
-func Get(name string) (Parser, error) {
-	if p, ok := parsers[name]; ok {
-		return p, nil
-	}
-	return nil, fmt.Errorf("parser %s not found", name)
-}
 
 type CommentParser struct{}
 
 func init() {
-	Register("comment", &CommentParser{})
+	parsers.Register("comment-v1", &CommentParser{})
 }
 
 type SubCommandTree struct {
@@ -100,7 +84,7 @@ func NewSubCommandTree(subCommand *model.SubCommand) *SubCommandTree {
 // ParseGoFiles parses the Go files in the provided filesystem to build the command model.
 // It expects a go.mod file at the root of the filesystem (or root directory).
 func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
-	p, err := Get("comment")
+	p, err := parsers.Get("comment-v1")
 	if err != nil {
 		return nil, err
 	}

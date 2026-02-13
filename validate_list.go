@@ -6,7 +6,7 @@ import (
 
 // Validate is a subcommand `gosubc validate` that validates the subcommand code
 // param dir (default: ".") The project root directory containing go.mod
-// param parserName (default: "comment") Parser to use
+// param parserName (default: "comment-v1") Parser to use
 func Validate(dir string, parserName string) error {
 	_, err := parse(dir, parserName)
 	if err != nil {
@@ -18,7 +18,7 @@ func Validate(dir string, parserName string) error {
 
 // List is a subcommand `gosubc list` that lists the subcommands
 // param dir (default: ".") The project root directory containing go.mod
-// param parserName (default: "comment") Parser to use
+// param parserName (default: "comment-v1") Parser to use
 func List(dir string, parserName string) error {
 	dataModel, err := parse(dir, parserName)
 	if err != nil {
