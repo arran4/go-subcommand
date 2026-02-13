@@ -58,9 +58,10 @@ func TestUsageTemplate(t *testing.T) {
 			var expectedOutput []byte
 
 			for _, f := range archive.Files {
-				if f.Name == "input.json" {
+				switch f.Name {
+				case "input.json":
 					inputData = f.Data
-				} else if f.Name == "output.txt" {
+				case "output.txt":
 					expectedOutput = f.Data
 				}
 			}
@@ -76,7 +77,6 @@ func TestUsageTemplate(t *testing.T) {
 			if err := json.Unmarshal(inputData, &input); err != nil {
 				t.Fatalf("failed to unmarshal input.json: %v", err)
 			}
-			input.SubCommand.Command = input.Command // fix embedding? json.Unmarshal usually handles embedded structs if flat.
 			// Actually, SubCommand embeds *Command. JSON unmarshal might populate Command fields into SubCommand if they are top level.
 			// But Command field is *Command.
 			// Let's assume inputData structure matches what we expect.
