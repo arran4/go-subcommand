@@ -46,11 +46,12 @@ func TestGoTemplates(t *testing.T) {
 
 			// Look for specific files in the archive
 			for _, f := range archive.Files {
-				if f.Name == "input.json" {
+				switch f.Name {
+				case "input.json":
 					inputData = f.Data
-				} else if f.Name == "output.go" {
+				case "output.go":
 					expectedOutput = f.Data
-				} else if f.Name == "template_name" {
+				case "template_name":
 					templateName = strings.TrimSpace(string(f.Data))
 				}
 			}

@@ -140,7 +140,9 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 
 		if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
 			return err
@@ -193,10 +195,10 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 	}
 	sort.Strings(subCommandNames)
 	if sct.SubCommand != nil {
-		sct.SubCommand.Command = cmd
-		sct.SubCommand.Parent = parent
+		sct.Command = cmd
+		sct.Parent = parent
 		// Allocate unique struct name
-		sct.SubCommand.SubCommandStructName = allocator.Allocate(sct.SubCommand.SubCommandName)
+		sct.SubCommandStructName = allocator.Allocate(sct.SubCommandName)
 
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
