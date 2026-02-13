@@ -77,10 +77,6 @@ func TestUsageTemplate(t *testing.T) {
 			if err := json.Unmarshal(inputData, &input); err != nil {
 				t.Fatalf("failed to unmarshal input.json: %v", err)
 			}
-			// Actually, SubCommand embeds *Command. JSON unmarshal might populate Command fields into SubCommand if they are top level.
-			// But Command field is *Command.
-			// Let's assume inputData structure matches what we expect.
-			// However, `Recursive` is not in SubCommand.
 
 			// Wrapper for template
 			data := struct {

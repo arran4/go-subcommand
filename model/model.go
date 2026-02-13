@@ -1,26 +1,31 @@
 package model
 
 import (
+	"go/token"
 	"strings"
 )
 
 type DataModel struct {
+	FileSet     *token.FileSet
 	PackageName string
 	Commands    []*Command
 }
 
 type Command struct {
 	*DataModel
-	MainCmdName  string
-	SubCommands  []*SubCommand
-	PackagePath  string
-	ImportPath   string
-	Description  string
-	ExtendedHelp string
-	FunctionName string
-	Parameters   []*FunctionParameter
-	ReturnsError bool
-	ReturnCount  int
+	MainCmdName    string
+	SubCommands    []*SubCommand
+	PackagePath    string
+	ImportPath     string
+	Description    string
+	ExtendedHelp   string
+	FunctionName   string
+	DefinitionFile string
+	DocStart       token.Pos
+	DocEnd         token.Pos
+	Parameters     []*FunctionParameter
+	ReturnsError   bool
+	ReturnCount    int
 }
 
 type FunctionParameter struct {
@@ -74,6 +79,9 @@ type SubCommand struct {
 	ImportPath             string
 	SubCommandPackageName  string
 	UsageFileName          string
+	DefinitionFile         string
+	DocStart               token.Pos
+	DocEnd                 token.Pos
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int

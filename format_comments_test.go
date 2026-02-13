@@ -22,7 +22,9 @@ func TestFormatSourceComments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
 
 	var inputFile string
 	var outputContent []byte

@@ -19,11 +19,10 @@ import (
 	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
 
-// FormatSourceComments is a subcommand `gosubc format-source-comments` that formats source comments to match gofmt style
+// FormatSourceComments is a subcommand `gosubc format-source-comments` formats source comments to match gofmt style
 //
 // Flags:
-//
-//	dir: --dir (default: ".") The project root directory containing go.mod
+//   dir: --dir (default: ".") The project root directory containing go.mod
 func FormatSourceComments(dir string) error {
 	fset := token.NewFileSet()
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {

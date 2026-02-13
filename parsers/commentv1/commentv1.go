@@ -44,12 +44,15 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
-	FunctionName string
-	Parameters   []*model.FunctionParameter
-	ReturnsError bool
-	ReturnCount  int
-	Description  string
-	ExtendedHelp string
+	FunctionName   string
+	DefinitionFile string
+	DocStart       token.Pos
+	DocEnd         token.Pos
+	Parameters     []*model.FunctionParameter
+	ReturnsError   bool
+	ReturnCount    int
+	Description    string
+	ExtendedHelp   string
 }
 
 type CommandsTree struct {
@@ -140,7 +143,9 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = f.Close() }()
+		defer func() {
+			_ = f.Close()
+		}()
 
 		if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
 			return err
@@ -152,6 +157,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 	}
 
 	d := &model.DataModel{
+		FileSet:     fset,
 		PackageName: "main",
 	}
 
@@ -164,16 +170,19 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &model.Command{
-			DataModel:    d,
-			MainCmdName:  cmdName,
-			PackagePath:  rootCommands.PackagePath,
-			ImportPath:   rootCommands.PackagePath, // Root command logic usually in root package
-			FunctionName: cmdTree.FunctionName,
-			Parameters:   cmdTree.Parameters,
-			ReturnsError: cmdTree.ReturnsError,
-			ReturnCount:  cmdTree.ReturnCount,
-			Description:  cmdTree.Description,
-			ExtendedHelp: cmdTree.ExtendedHelp,
+			DataModel:      d,
+			MainCmdName:    cmdName,
+			PackagePath:    rootCommands.PackagePath,
+			ImportPath:     rootCommands.PackagePath, // Root command logic usually in root package
+			FunctionName:   cmdTree.FunctionName,
+			DefinitionFile: cmdTree.DefinitionFile,
+			DocStart:       cmdTree.DocStart,
+			DocEnd:         cmdTree.DocEnd,
+			Parameters:     cmdTree.Parameters,
+			ReturnsError:   cmdTree.ReturnsError,
+			ReturnCount:    cmdTree.ReturnCount,
+			Description:    cmdTree.Description,
+			ExtendedHelp:   cmdTree.ExtendedHelp,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -469,6 +478,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					cmdTree.Commands[cmdName] = ct
 				}
 				ct.FunctionName = s.Name.Name
+				ct.DefinitionFile = filename
+				ct.DocStart = s.Doc.Pos()
+				ct.DocEnd = s.Doc.End()
 				ct.Parameters = params
 				ct.ReturnsError = returnsError
 				ct.ReturnCount = returnCount
@@ -484,9 +496,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
 				// SubCommandStructName is assigned during collection
-				Parameters:   params,
-				ReturnsError: returnsError,
-				ReturnCount:  returnCount,
+				DefinitionFile: filename,
+				DocStart:       s.Doc.Pos(),
+				DocEnd:         s.Doc.End(),
+				Parameters:     params,
+				ReturnsError:   returnsError,
+				ReturnCount:    returnCount,
 			})
 		}
 	}
