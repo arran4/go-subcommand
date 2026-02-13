@@ -73,11 +73,12 @@ func executeUsage(out io.Writer, templateName string, data interface{}) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands map[string]Cmd
-	Version  string
-	Commit   string
-	Date     string
-	verbose  bool
+	Commands      map[string]Cmd
+	Version       string
+	Commit        string
+	Date          string
+	verbose       bool
+	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
@@ -107,6 +108,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.FlagSet.Usage = c.Usage
 
 	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
+
 	c.Commands["sub1"] = c.NewSub1()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
