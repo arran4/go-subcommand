@@ -15,9 +15,10 @@ var _ Cmd = (*List)(nil)
 
 type List struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *List) error
 }
 
 type UsageDataList struct {
@@ -82,11 +83,7 @@ func (c *List) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.List(c.dir); err != nil {
-		return fmt.Errorf("list failed: %w", err)
-	}
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewList() *List {
@@ -125,6 +122,14 @@ func (c *RootCmd) NewList() *List {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *List) error {
+
+		if err := go_subcommand.List(c.dir); err != nil {
+			return fmt.Errorf("list failed: %w", err)
+		}
+
+		return nil
 	}
 	return v
 }
