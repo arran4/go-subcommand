@@ -13,13 +13,6 @@ func TestRecursiveTemplateParsing(t *testing.T) {
 		"templates/subdir/ignore.txt":    {Data: []byte("should be ignored")},
 	}
 
-	// Call the parsing function (exported for test or using a helper if private)
-	// Since parseTemplates will be private in generate.go (part of go_subcommand package),
-	// we can access it here if this test is in the same package.
-
-	// Note: We haven't implemented parseTemplates yet, so this test will fail to compile
-	// if we run it now. But we are preparing it.
-
 	tmpl, err := ParseTemplates(mockFS)
 	if err != nil {
 		t.Fatalf("ParseTemplates failed: %v", err)
