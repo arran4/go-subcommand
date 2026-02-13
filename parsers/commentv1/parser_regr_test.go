@@ -39,9 +39,10 @@ func TestParserRegression(t *testing.T) {
 			var expectedJSON []byte
 
 			for _, f := range archive.Files {
-				if f.Name == "input.go" {
+				switch f.Name {
+				case "input.go":
 					inputSrc = f.Data
-				} else if f.Name == "expected.json" {
+				case "expected.json":
 					expectedJSON = f.Data
 				}
 			}
