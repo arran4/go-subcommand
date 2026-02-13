@@ -9,9 +9,8 @@ import (
 //
 // Flags:
 //
-// 	dir:            --dir                         (default: ".")
-// 	githubWorkflow: --go-releaser-github-workflow
-
+//	dir:            --dir                         (default: ".")
+//	githubWorkflow: --go-releaser-github-workflow
 func Goreleaser(dir string, githubWorkflow bool) error {
 	writer := &OSFileWriter{}
 	return GoreleaserWithWriter(writer, dir, githubWorkflow)

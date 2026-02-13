@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -19,7 +20,6 @@ import (
 // Flags:
 //
 // 	dir: --dir (default: ".") The project root directory containing go.mod
-
 func FormatSourceComments(dir string) error {
 	fset := token.NewFileSet()
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -264,7 +264,22 @@ func FormatSourceComments(dir string) error {
 			}
 
 			if oldTextBuilder.String() != newTextBuilder.String() {
+				// Remove old Doc from f.Comments to avoid duplication/misplacement
+				if funcDecl.Doc != nil {
+					var newCommentsList []*ast.CommentGroup
+					for _, cg := range f.Comments {
+						if cg != funcDecl.Doc {
+							newCommentsList = append(newCommentsList, cg)
+						}
+					}
+					f.Comments = newCommentsList
+				}
+
 				funcDecl.Doc.List = newComments
+				// Strip positions from the function declaration to ensure the printer
+				// uses default formatting/spacing instead of original line numbers,
+				// avoiding insertion of blank lines when comment length changes.
+				stripPositions(funcDecl)
 				modified = true
 			}
 		}
@@ -278,5 +293,28 @@ func FormatSourceComments(dir string) error {
 			return os.WriteFile(path, buf.Bytes(), info.Mode())
 		}
 		return nil
+	})
+}
+func stripPositions(node ast.Node) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		if n == nil {
+			return false
+		}
+		val := reflect.ValueOf(n)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+		if val.Kind() != reflect.Struct {
+			return true
+		}
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if field.Type() == reflect.TypeOf(token.NoPos) {
+				if field.CanSet() {
+					field.SetInt(int64(token.NoPos))
+				}
+			}
+		}
+		return true
 	})
 }

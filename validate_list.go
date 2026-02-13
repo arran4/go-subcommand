@@ -9,7 +9,6 @@ import (
 // Flags:
 //
 // 	dir: --dir (default: ".") The project root directory containing go.mod
-
 func Validate(dir string) error {
 	_, err := parse(dir)
 	if err != nil {
@@ -24,7 +23,6 @@ func Validate(dir string) error {
 // Flags:
 //
 // 	dir: --dir (default: ".") The project root directory containing go.mod
-
 func List(dir string) error {
 	dataModel, err := parse(dir)
 	if err != nil {
