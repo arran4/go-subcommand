@@ -1,6 +1,6 @@
 module github.com/arran4/go-subcommand/examples/issue50
 
-go 1.25.3
+go 1.24
 
 replace github.com/arran4/go-subcommand => ../../
 

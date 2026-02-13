@@ -14,7 +14,7 @@ MODULE_NAME="example.com/integration"
 cat <<EOF > "$TEMP_DIR/go.mod"
 module $MODULE_NAME
 
-go 1.25
+go 1.24
 EOF
 
 # Create pkg directory
