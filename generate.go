@@ -29,18 +29,19 @@ type FileWriter interface {
 
 // OSFileWriter implements FileWriter using os package
 type OSFileWriter struct{}
-
 func (w *OSFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
 	return os.WriteFile(path, content, perm)
 }
-
 func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
 // Generate is a subcommand `gosubc generate` that generates the subcommand code
-// param dir (default: ".") Project root directory containing go.mod
-// param manDir (--man-dir) Directory to generate man pages in (optional)
+//
+// Flags:
+//
+// 	dir:    --dir     (default: ".") Project root directory containing go.mod
+// 	manDir: --man-dir                Directory to generate man pages in optional
 func Generate(dir string, manDir string) error {
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir)
 }
@@ -80,7 +81,6 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 	}
 	return nil
 }
-
 func assignUsageFileNames(subCommands []*SubCommand) {
 	seen := make(map[string]int)
 	for _, sc := range subCommands {
@@ -98,7 +98,6 @@ func assignUsageFileNames(subCommands []*SubCommand) {
 		}
 	}
 }
-
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
 	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
 		return err
@@ -127,7 +126,6 @@ func parse(dir string) (*DataModel, error) {
 	}
 	return ParseGoFiles(os.DirFS(dir), ".")
 }
-
 func initTemplates() error {
 	var err error
 	templates, err = ParseTemplates(TemplatesFS)
@@ -177,7 +175,6 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	}
 	return tmpl, nil
 }
-
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {

@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"io"
 	"io/fs"
+	"log"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -505,10 +506,18 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 	var extendedHelpLines []string
 
 	inFlagsBlock := false
+	justEnteredFlagsBlock := false
 
 	for scanner.Scan() {
 		line := scanner.Text() // Keep whitespace for indentation check
 		trimmedLine := strings.TrimSpace(line)
+
+		if justEnteredFlagsBlock {
+			if trimmedLine != "" {
+				log.Printf("Warning: 'Flags:' block for command '%s' should be followed by an empty line", cmdName)
+			}
+			justEnteredFlagsBlock = false
+		}
 
 		if trimmedLine == "" {
 			if len(extendedHelpLines) > 0 {
@@ -545,6 +554,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 		if trimmedLine == "Flags:" {
 			inFlagsBlock = true
+			justEnteredFlagsBlock = true
 			continue
 		}
 
@@ -554,6 +564,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		if inFlagsBlock {
 			// Check if line is indented (starts with space or tab)
 			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+				if strings.HasPrefix(line, " ") {
+					log.Printf("Warning: Parameter '%s' in command '%s' uses spaces for indentation. Use tabs.", trimmedLine, cmdName)
+				}
 				paramLine = trimmedLine
 				parsedParam = true
 			} else {
