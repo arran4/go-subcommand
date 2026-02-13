@@ -51,7 +51,7 @@ func TestToKebabCase(t *testing.T) {
 		{"GetURLForThing", "get-url-for-thing"},
 		{"Simple", "simple"},
 		{"ALLCAPS", "allcaps"},
-		{"StartWithDigit123", "start-with-digit123"},
+		{"StartWithDigit123", "start-with-digit-123"},
 		{"123StartWithDigit", "123-start-with-digit"},
 	}
 
