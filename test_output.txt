@@ -1,6 +1,0 @@
-=== RUN   TestIssue11_RootLevelHelpUsageVersion
-    issues_test.go:626: Root command should support Version
---- FAIL: TestIssue11_RootLevelHelpUsageVersion (0.01s)
-FAIL
-exit status 1
-FAIL	github.com/arran4/go-subcommand	0.021s
