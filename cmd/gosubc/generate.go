@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"errors"
 	"github.com/arran4/go-subcommand"
 )
 
@@ -95,6 +96,14 @@ func (c *Generate) Execute(args []string) error {
 	}
 
 	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
+		if errors.Is(err, go_subcommand.ErrPrintHelp) {
+			c.Usage()
+			return nil
+		}
+		if errors.Is(err, go_subcommand.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+			return nil
+		}
 		return fmt.Errorf("generate failed: %w", err)
 	}
 
