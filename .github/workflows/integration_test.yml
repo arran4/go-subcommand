@@ -1,0 +1,31 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  integration-test:
+    name: Run Integration Script
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build and Install gosubc
+        run: go install ./cmd/gosubc
+
+      - name: Make script executable
+        run: chmod +x test_integration.sh
+
+      - name: Run Integration Script
+        run: ./test_integration.sh

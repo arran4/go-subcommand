@@ -70,7 +70,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 			break
 		}
-		if strings.HasPrefix(arg, "-") {
+		if strings.HasPrefix(arg, "-") && arg != "-" {
 			name := arg
 			{{- $hasFlags := false }}
 			{{- range .Parameters }}
