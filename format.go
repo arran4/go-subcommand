@@ -11,14 +11,12 @@ import (
 )
 
 // Format is a subcommand `gosubc format` formats the subcommand definitions
-//
 // Format updates the documentation comments for subcommands in the codebase
 // to match the defined parameters and standard formatting.
 //
 // Flags:
-//
-//	dir:     --dir string (default: ".") The project root directory
-//	inplace: --inplace                   Modify files in place
+//   dir:     --dir     (default: ".") The project root directory
+//   inplace: --inplace                Modify files in place
 func Format(dir string, inplace bool) error {
 	dataModel, err := parse(dir, "commentv1")
 	if err != nil {
@@ -181,7 +179,25 @@ func generateDocComment(funcName, commandSeq, description, extendedHelp string, 
 
 		for _, p := range params {
 			nameCol := p.Name + ":"
-			flagCol := p.FlagString()
+			// Reconstruct flag string without type
+			var parts []string
+			if len(p.FlagAliases) > 0 {
+				for _, f := range p.FlagAliases {
+					prefix := "-"
+					if len(f) > 1 {
+						prefix = "--"
+					}
+					parts = append(parts, prefix+f)
+				}
+			} else {
+				prefix := "-"
+				if len(p.Name) > 1 {
+					prefix = "--"
+				}
+				parts = append(parts, prefix+p.Name)
+			}
+			flagCol := strings.Join(parts, ", ")
+
 			defCol := ""
 			if p.Default != "" {
 				if p.Type == "string" && !strings.HasPrefix(p.Default, "\"") {

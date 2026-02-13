@@ -10,5 +10,5 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --dir string   string The project root directory (default: .)
+    --dir string   The project root directory (default: .)
     --inplace      Modify files in place

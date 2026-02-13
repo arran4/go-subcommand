@@ -117,7 +117,7 @@ func (c *RootCmd) NewFormat() *Format {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "string The project root directory")
+	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
 	set.BoolVar(&v.inplace, "inplace", false, "Modify files in place")
 	set.Usage = v.Usage

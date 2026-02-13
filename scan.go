@@ -7,14 +7,12 @@ import (
 	"github.com/arran4/go-subcommand/model"
 )
 
-// Scan is a subcommand `gosubc scan` that lists all available subcommands and their flags
-//
+// Scan is a subcommand `gosubc scan` lists all available subcommands and their flags
 // Scan lists all available subcommands and their flags from the parsed codebase.
 // It is useful for verifying the command structure and configuration.
 //
 // Flags:
-//
-//	dir: --dir string (default: ".") The project root directory
+//   dir: --dir (default: ".") string The project root directory
 func Scan(dir string) error {
 	dataModel, err := parse(dir, "commentv1")
 	if err != nil {

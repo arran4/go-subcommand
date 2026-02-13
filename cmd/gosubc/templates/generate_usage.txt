@@ -7,6 +7,6 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --dir string           string Project root directory containing go.mod (default: .)
-    --man-dir string       string Directory to generate man pages in optional
-    --parser-name string   string Name of the parser to use (default: commentv1)
+    --dir string           Project root directory containing go.mod (default: .)
+    --man-dir string       Directory to generate man pages in optional
+    --parser-name string   Name of the parser to use (default: commentv1)

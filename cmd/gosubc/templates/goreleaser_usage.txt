@@ -5,5 +5,5 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    --dir string                    string (default: .)
+    --dir string                     (default: .)
     --go-releaser-github-workflow   
