@@ -69,7 +69,8 @@ func (c *RootCmd) Usage() {
 
 func (c *RootCmd) UsageRecursive() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.FlagSet.PrintDefaults()
+	c.PrintDefaults()
+	c.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
 	fmt.Fprintf(os.Stderr, "    %s\n", "format")
 	fmt.Fprintf(os.Stderr, "    %s\n", "format-source-comments")

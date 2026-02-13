@@ -64,38 +64,6 @@ func Format(dir string, inplace bool) error {
 			}
 
 			// Replace
-
-			// We need to construct the new byte slice carefully.
-			// Using append on newContent (which is sharing backing array potentially) is dangerous if we are doing multiple edits?
-			// Actually, since we process edits in descending order, we are safe if we re-slice properly.
-			// But wait, `newContent` changes size.
-			// If I use `newContent` which is shrinking/growing, the `startOffset` (from original file) is valid only for the original file.
-			// But since I iterate descending, the `startOffset` of the *current* edit (which is earlier in file) is NOT affected by previous edits (which were later in file).
-			// However, `newContent` is modified.
-			// The `startOffset` is relative to the *original* file.
-			// So `prefix` should be from `content` (original), not `newContent`.
-			// Wait, no.
-			// If I edit the end of the file, `newContent` changes.
-			// Then I edit the middle. The middle offset is valid for the *original* file.
-			// The edits later in the file have already been applied to `newContent`.
-			// So `suffix` should be taken from `newContent`?
-			// No. `suffix` is the part AFTER the edit.
-			// If I edited later, `suffix` should contain that edited part.
-			// But `endOffset` refers to the original file.
-			// So `suffix` needs to account for the shift.
-
-			// Let's rethink.
-			// `newContent` starts as `content`.
-			// Iteration 1 (last edit): replace range [S1, E1] with T1.
-			// `newContent` becomes `content[:S1] + T1 + content[E1:]`.
-			// Iteration 2 (previous edit): replace range [S2, E2] with T2. S2 < S1.
-			// `newContent` currently holds the edit at S1.
-			// S2 and E2 are valid indices into `content` (original).
-			// And they are also valid indices into `newContent` because everything before S1 is untouched.
-			// So `prefix` is `newContent[:S2]`.
-			// `suffix` is `newContent[E2:]`.
-			// Yes, this works because we are going backwards. The indices before the modification point are stable.
-
 			var buf []byte
 			buf = append(buf, newContent[:startOffset]...)
 			buf = append(buf, []byte(edit.text)...)
@@ -125,7 +93,7 @@ type fileEdit struct {
 func collectSubCommandEdits(subCmds []*model.SubCommand, editsByFile map[string][]fileEdit) {
 	for _, sc := range subCmds {
 		if sc.DefinitionFile != "" {
-			fullSeq := sc.Command.MainCmdName + " " + sc.SubCommandSequence()
+			fullSeq := sc.MainCmdName + " " + sc.SubCommandSequence()
 
 			newDoc := generateDocComment(sc.SubCommandFunctionName, fullSeq, sc.SubCommandDescription, sc.SubCommandExtendedHelp, sc.Parameters)
 			editsByFile[sc.DefinitionFile] = append(editsByFile[sc.DefinitionFile], fileEdit{
