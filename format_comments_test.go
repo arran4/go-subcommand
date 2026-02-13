@@ -19,18 +19,19 @@ func TestFormatSourceComments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	var inputFile string
 	var outputContent []byte
 
 	for _, f := range archive.Files {
-		if f.Name == "input.go" {
+		switch f.Name {
+		case "input.go":
 			inputFile = filepath.Join(tempDir, "main.go")
 			if err := os.WriteFile(inputFile, f.Data, 0644); err != nil {
 				t.Fatal(err)
 			}
-		} else if f.Name == "output.go" {
+		case "output.go":
 			outputContent = f.Data
 		}
 	}
