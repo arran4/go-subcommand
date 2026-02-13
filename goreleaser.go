@@ -28,7 +28,7 @@ func GoreleaserWithWriter(writer FileWriter, dir string, githubWorkflow bool) er
 
 	if githubWorkflow {
 		workflowsDir := filepath.Join(dir, ".github", "workflows")
-		if err := generateFile(writer, workflowsDir, "release.yml", "github_release.yml.gotmpl", nil, false); err != nil {
+		if err := generateFile(writer, workflowsDir, "release.yml", "release.yml.gotmpl", nil, false); err != nil {
 			return err
 		}
 		fmt.Printf("Generated %s\n", filepath.Join(workflowsDir, "release.yml"))

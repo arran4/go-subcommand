@@ -14,12 +14,12 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
-//go:embed usage.txt.gotmpl testdata/*.txtar
+//go:embed cmd/templates/usage.txt.gotmpl testdata/*.txtar
 var templatesFS embed.FS
 
 func TestUsageTemplate(t *testing.T) {
 	// Parse the template
-	tmplContent, err := templatesFS.ReadFile("usage.txt.gotmpl")
+	tmplContent, err := templatesFS.ReadFile("cmd/templates/usage.txt.gotmpl")
 	if err != nil {
 		t.Fatalf("failed to read usage.txt.gotmpl: %v", err)
 	}
