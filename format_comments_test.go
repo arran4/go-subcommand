@@ -5,60 +5,53 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/txtar"
 )
 
 func TestFormatSourceComments(t *testing.T) {
+	archive, err := txtar.ParseFile("testdata/format_regr.txtar")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tempDir, err := os.MkdirTemp("", "format_test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	src := `package main
+	var inputFile string
+	var outputContent []byte
 
-// MyCmd is a subcommand ` + "`" + `test mycmd` + "`" + `
-// Flags:
-//   verbose: -v --verbose (default: false) Enable verbose output
-//   name: -n --name (default: "world") Name to greet
-func MyCmd(verbose bool, name string) {}
-`
-	err = os.WriteFile(filepath.Join(tempDir, "main.go"), []byte(src), 0644)
+	for _, f := range archive.Files {
+		if f.Name == "input.go" {
+			inputFile = filepath.Join(tempDir, "main.go")
+			if err := os.WriteFile(inputFile, f.Data, 0644); err != nil {
+				t.Fatal(err)
+			}
+		} else if f.Name == "output.go" {
+			outputContent = f.Data
+		}
+	}
+
+	if inputFile == "" || outputContent == nil {
+		t.Fatal("input.go or output.go not found in txtar")
+	}
+
+	if err := FormatSourceComments(tempDir); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(inputFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = FormatSourceComments(tempDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	gotStr := strings.TrimSpace(string(got))
+	wantStr := strings.TrimSpace(string(outputContent))
 
-	content, err := os.ReadFile(filepath.Join(tempDir, "main.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := string(content)
-
-	// Check for empty line after Flags:
-	if !strings.Contains(got, "// Flags:\n//\n") {
-		t.Errorf("Expected empty line after Flags:. Got:\n%s", got)
-	}
-
-	// Check for tab indentation
-	if !strings.Contains(got, "// \tverbose:") {
-		t.Errorf("Expected tab indentation for 'verbose'. Got:\n%s", got)
-	}
-
-	// Check alignment
-	// verbose: (8) + 1 space = 9
-	// name:    (5) + 4 spaces = 9
-	// So "name:    -n"
-	if !strings.Contains(got, "name:    -n") {
-		t.Errorf("Expected alignment for 'name'. Got:\n%s", got)
-	}
-
-	// Check quoting
-	if !strings.Contains(got, "(default: \"world\")") {
-		t.Errorf("Expected quoted default string. Got:\n%s", got)
+	if gotStr != wantStr {
+		t.Errorf("FormatSourceComments() mismatch:\nGot:\n%s\nWant:\n%s", string(got), string(outputContent))
 	}
 }

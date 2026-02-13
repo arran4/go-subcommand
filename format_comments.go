@@ -15,11 +15,11 @@ import (
 )
 
 // FormatSourceComments is a subcommand `gosubc format-source-comments` that formats source comments to match gofmt style
-// param dir (default: ".") The project root directory containing go.mod
 //
 // Flags:
 //
-//	dir: --dir (default: ".") The project root directory containing go.mod
+// 	dir: --dir (default: ".") The project root directory containing go.mod
+
 func FormatSourceComments(dir string) error {
 	fset := token.NewFileSet()
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -189,6 +189,10 @@ func FormatSourceComments(dir string) error {
 
 			for _, line := range lines {
 				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "param ") || strings.HasPrefix(trimmed, "flag ") {
+					continue
+				}
+
 				if trimmed == "Flags:" {
 					inFlags = true
 					// We will insert our new block here

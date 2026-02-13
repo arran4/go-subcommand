@@ -1,0 +1,20 @@
+-- input.go --
+package main
+
+// MyCmd is a subcommand `test mycmd`
+// param verbose (default: false) Enable verbose output
+// param name (default: "world") Name to greet
+// Flags:
+//   verbose: -v --verbose (default: false) Enable verbose output
+//   name: -n --name (default: "world") Name to greet
+func MyCmd(verbose bool, name string) {}
+-- output.go --
+package main
+
+// MyCmd is a subcommand `test mycmd`
+// Flags:
+//
+// 	verbose: -v --verbose (default: false)   Enable verbose output
+// 	name:    -n --name    (default: "world") Name to greet
+
+func MyCmd(verbose bool, name string) {}
