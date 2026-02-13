@@ -15,9 +15,10 @@ var _ Cmd = (*Validate)(nil)
 
 type Validate struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Validate) error
 }
 
 type UsageDataValidate struct {
@@ -82,11 +83,7 @@ func (c *Validate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Validate(c.dir); err != nil {
-		return fmt.Errorf("validate failed: %w", err)
-	}
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewValidate() *Validate {
@@ -125,6 +122,14 @@ func (c *RootCmd) NewValidate() *Validate {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *Validate) error {
+
+		if err := go_subcommand.Validate(c.dir); err != nil {
+			return fmt.Errorf("validate failed: %w", err)
+		}
+
+		return nil
 	}
 	return v
 }

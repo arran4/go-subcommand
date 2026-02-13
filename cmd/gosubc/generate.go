@@ -15,10 +15,11 @@ var _ Cmd = (*Generate)(nil)
 
 type Generate struct {
 	*RootCmd
-	Flags       *flag.FlagSet
-	dir         string
-	manDir      string
-	SubCommands map[string]Cmd
+	Flags         *flag.FlagSet
+	dir           string
+	manDir        string
+	SubCommands   map[string]Cmd
+	CommandAction func(c *Generate) error
 }
 
 type UsageDataGenerate struct {
@@ -94,11 +95,7 @@ func (c *Generate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
-		return fmt.Errorf("generate failed: %w", err)
-	}
-
-	return nil
+	return c.CommandAction(c)
 }
 
 func (c *RootCmd) NewGenerate() *Generate {
@@ -139,6 +136,14 @@ func (c *RootCmd) NewGenerate() *Generate {
 			return nil
 		},
 		UsageFunc: v.Usage,
+	}
+	v.CommandAction = func(c *Generate) error {
+
+		if err := go_subcommand.Generate(c.dir, c.manDir); err != nil {
+			return fmt.Errorf("generate failed: %w", err)
+		}
+
+		return nil
 	}
 	return v
 }
