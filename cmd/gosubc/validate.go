@@ -53,7 +53,7 @@ func (c *Validate) Execute(args []string) error {
 		if arg == "--" {
 			break
 		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
+		if strings.HasPrefix(arg, "-") {
 			name := arg
 			value := ""
 			hasValue := false
