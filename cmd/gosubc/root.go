@@ -60,7 +60,7 @@ type RootCmd struct {
 
 func (c *RootCmd) Usage() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
+	c.FlagSet.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
 	for name := range c.Commands {
 		fmt.Fprintf(os.Stderr, "    %s\n", name)
@@ -69,8 +69,7 @@ func (c *RootCmd) Usage() {
 
 func (c *RootCmd) UsageRecursive() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	c.PrintDefaults()
+	c.FlagSet.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "  Commands:")
 	fmt.Fprintf(os.Stderr, "    %s\n", "format")
 	fmt.Fprintf(os.Stderr, "    %s\n", "format-source-comments")

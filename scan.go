@@ -12,7 +12,7 @@ import (
 // It is useful for verifying the command structure and configuration.
 //
 // Flags:
-//   dir: --dir (default: ".") string The project root directory
+//   dir: --dir (default: ".") The project root directory
 func Scan(dir string) error {
 	dataModel, err := parse(dir, "commentv1")
 	if err != nil {

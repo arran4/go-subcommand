@@ -77,19 +77,6 @@ func TestUsageTemplate(t *testing.T) {
 			if err := json.Unmarshal(inputData, &input); err != nil {
 				t.Fatalf("failed to unmarshal input.json: %v", err)
 			}
-			// input.SubCommand.Command is redundant if json unmarshal works correctly or if we just set it.
-			// But staticcheck QF1008 complains about selector.
-			// If input embeds SubCommand, and SubCommand embeds Command (ptr).
-			// input.Command is accessing embedded Command via input->SubCommand->Command.
-			// input.SubCommand.Command is explicit.
-			// If I change to input.Command, it might refer to the embedded field.
-			// However, here we are assigning TO it.
-			// input.Command = input.Command? That's a no-op if they are the same path.
-			// The issue might be that json.Unmarshal populated the anonymous embedded fields, but maybe the *pointer* wasn't set up how we want?
-			// Let's just remove the assignment if it's redundant, or use the short form.
-			// Removing the assignment as it seems redundant and triggers potential staticcheck warnings.
-			// Let's assume inputData structure matches what we expect.
-			// However, `Recursive` is not in SubCommand.
 
 			// Wrapper for template
 			data := struct {
