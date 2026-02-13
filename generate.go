@@ -100,7 +100,7 @@ func assignUsageFileNames(subCommands []*SubCommand) {
 }
 
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *SubCommand) error {
-	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.gotmpl", subCmd, true); err != nil {
+	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
 		return err
 	}
 	if err := generateFile(writer, cmdTemplatesDir, subCmd.UsageFileName, "usage.txt.gotmpl", subCmd, false); err != nil {
@@ -142,6 +142,9 @@ func initTemplates() error {
 				res[i] = i
 			}
 			return res
+		},
+		"slice": func(args ...interface{}) []interface{} {
+			return args
 		},
 	})
 	templates, err = templates.ParseFS(templatesFS, "templates/*.gotmpl")
