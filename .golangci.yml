@@ -1,8 +1,13 @@
 version: "2"
 
 run:
-  go: '1.25'
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  timeout: 5m
 
+issues:
+  exclude-dirs:
+    - examples
+    - testdata
 linters:
   exclusions:
     paths:
