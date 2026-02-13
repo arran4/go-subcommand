@@ -169,10 +169,6 @@ func FormatSourceComments(dir string) error {
 						p.Default = fmt.Sprintf("%q", p.Default)
 					}
 					defaultPart = fmt.Sprintf("(default: %s)", p.Default)
-				} else if p.Type != "bool" && p.Type != "" {
-					if p.Type == "string" && !strings.Contains(p.Default, "\"") {
-						// Quote string defaults if not quoted
-					}
 				}
 
 				// Description:
