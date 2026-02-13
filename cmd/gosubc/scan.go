@@ -13,37 +13,36 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
-var _ Cmd = (*Validate)(nil)
+var _ Cmd = (*Scan)(nil)
 
-type Validate struct {
+type Scan struct {
 	*RootCmd
 	Flags         *flag.FlagSet
 	dir           string
-	parserName    string
 	SubCommands   map[string]Cmd
-	CommandAction func(c *Validate) error
+	CommandAction func(c *Scan) error
 }
 
-type UsageDataValidate struct {
-	*Validate
+type UsageDataScan struct {
+	*Scan
 	Recursive bool
 }
 
-func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+func (c *Scan) Usage() {
+	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
+func (c *Scan) UsageRecursive() {
+	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) Execute(args []string) error {
+func (c *Scan) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -77,17 +76,6 @@ func (c *Validate) Execute(args []string) error {
 					}
 				}
 				c.dir = value
-
-			case "parserName", "parser-name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.parserName = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -99,7 +87,7 @@ func (c *Validate) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("validate failed: %w", err)
+			return fmt.Errorf("scan failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -108,22 +96,20 @@ func (c *Validate) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewValidate() *Validate {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &Validate{
+func (c *RootCmd) NewScan() *Scan {
+	set := flag.NewFlagSet("scan", flag.ContinueOnError)
+	v := &Scan{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "string The project root directory containing go.mod")
-
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "string Name of the parser to use")
+	set.StringVar(&v.dir, "dir", ".", "string The project root directory")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Validate) error {
+	v.CommandAction = func(c *Scan) error {
 
-		err := go_subcommand.Validate(c.dir, c.parserName)
+		err := go_subcommand.Scan(c.dir)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -133,7 +119,7 @@ func (c *RootCmd) NewValidate() *Validate {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			return fmt.Errorf("validate failed: %w", err)
+			return fmt.Errorf("scan failed: %w", err)
 		}
 		return nil
 	}

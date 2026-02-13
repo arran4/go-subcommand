@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -13,37 +14,37 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
-var _ Cmd = (*Validate)(nil)
+var _ Cmd = (*Format)(nil)
 
-type Validate struct {
+type Format struct {
 	*RootCmd
 	Flags         *flag.FlagSet
 	dir           string
-	parserName    string
+	inplace       bool
 	SubCommands   map[string]Cmd
-	CommandAction func(c *Validate) error
+	CommandAction func(c *Format) error
 }
 
-type UsageDataValidate struct {
-	*Validate
+type UsageDataFormat struct {
+	*Format
 	Recursive bool
 }
 
-func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+func (c *Format) Usage() {
+	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
+func (c *Format) UsageRecursive() {
+	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) Execute(args []string) error {
+func (c *Format) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -78,16 +79,16 @@ func (c *Validate) Execute(args []string) error {
 				}
 				c.dir = value
 
-			case "parserName", "parser-name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+			case "inplace":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
+					c.inplace = b
+				} else {
+					c.inplace = true
 				}
-				c.parserName = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -99,7 +100,7 @@ func (c *Validate) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("validate failed: %w", err)
+			return fmt.Errorf("format failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -108,22 +109,22 @@ func (c *Validate) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewValidate() *Validate {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &Validate{
+func (c *RootCmd) NewFormat() *Format {
+	set := flag.NewFlagSet("format", flag.ContinueOnError)
+	v := &Format{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "string The project root directory containing go.mod")
+	set.StringVar(&v.dir, "dir", ".", "string The project root directory")
 
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "string Name of the parser to use")
+	set.BoolVar(&v.inplace, "inplace", false, "Modify files in place")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Validate) error {
+	v.CommandAction = func(c *Format) error {
 
-		err := go_subcommand.Validate(c.dir, c.parserName)
+		err := go_subcommand.Format(c.dir, c.inplace)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -133,7 +134,7 @@ func (c *RootCmd) NewValidate() *Validate {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			return fmt.Errorf("validate failed: %w", err)
+			return fmt.Errorf("format failed: %w", err)
 		}
 		return nil
 	}

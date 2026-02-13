@@ -40,13 +40,13 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// Generate is a subcommand `gosubc generate` that generates the subcommand code
+// Generate is a subcommand `gosubc generate` generates the subcommand code
 //
 // Flags:
 //
-//	dir:        --dir         (default: ".") Project root directory containing go.mod
-//	manDir:     --man-dir                    Directory to generate man pages in optional
-//	parserName: --parser-name (default: "commentv1") Name of the parser to use
+//	dir:        --dir string         (default: ".") Project root directory containing go.mod
+//	manDir:     --man-dir string                    Directory to generate man pages in optional
+//	parserName: --parser-name string (default: "commentv1") Name of the parser to use
 func Generate(dir string, manDir string, parserName string) error {
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName)
 }
