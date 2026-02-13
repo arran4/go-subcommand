@@ -29,6 +29,7 @@ type FileWriter interface {
 
 // OSFileWriter implements FileWriter using os package
 type OSFileWriter struct{}
+
 func (w *OSFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
 	return os.WriteFile(path, content, perm)
 }
@@ -40,8 +41,8 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //
 // Flags:
 //
-// 	dir:    --dir     (default: ".") Project root directory containing go.mod
-// 	manDir: --man-dir                Directory to generate man pages in optional
+//	dir:    --dir     (default: ".") Project root directory containing go.mod
+//	manDir: --man-dir                Directory to generate man pages in optional
 func Generate(dir string, manDir string) error {
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir)
 }
