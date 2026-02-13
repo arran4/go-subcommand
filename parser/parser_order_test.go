@@ -1,4 +1,4 @@
-package go_subcommand
+package parser
 
 import (
 	"embed"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/arran4/go-subcommand/model"
 	"golang.org/x/tools/txtar"
 )
 
@@ -56,34 +57,34 @@ func TestParserOrder(t *testing.T) {
 			}
 
 			// Run ParseGoFiles
-			model, err := ParseGoFiles(fsys, ".")
+			dm, err := ParseGoFiles(fsys, ".")
 			if err != nil {
 				t.Fatalf("ParseGoFiles failed: %v", err)
 			}
 
 			if len(expectedAliases) > 0 {
-				if len(model.Commands) == 0 {
+				if len(dm.Commands) == 0 {
 					t.Fatalf("Model has no commands")
 				}
-				if len(model.Commands[0].SubCommands) == 0 {
+				if len(dm.Commands[0].SubCommands) == 0 {
 					t.Fatalf("Model has no subcommands")
 				}
-				if len(model.Commands[0].SubCommands[0].Parameters) == 0 {
+				if len(dm.Commands[0].SubCommands[0].Parameters) == 0 {
 					t.Fatalf("Subcommand has no parameters")
 				}
 
 				// Assumption: The first parameter of the first subcommand is what we are testing for aliases
-				got := model.Commands[0].SubCommands[0].Parameters[0].FlagAliases
+				got := dm.Commands[0].SubCommands[0].Parameters[0].FlagAliases
 				if !slicesEqual(got, expectedAliases) {
 					t.Errorf("Aliases mismatch. Got: %v, Expected: %v", got, expectedAliases)
 				}
 			}
 
 			if len(expectedSubCommands) > 0 {
-				if len(model.Commands) == 0 {
+				if len(dm.Commands) == 0 {
 					t.Fatalf("Model has no commands")
 				}
-				got := getSubCommandNames(model.Commands[0].SubCommands)
+				got := getSubCommandNames(dm.Commands[0].SubCommands)
 				if !slicesEqual(got, expectedSubCommands) {
 					t.Errorf("Subcommands mismatch. Got: %v, Expected: %v", got, expectedSubCommands)
 				}
@@ -92,7 +93,7 @@ func TestParserOrder(t *testing.T) {
 	}
 }
 
-func getSubCommandNames(subs []*SubCommand) []string {
+func getSubCommandNames(subs []*model.SubCommand) []string {
 	var names []string
 	for _, s := range subs {
 		names = append(names, s.SubCommandName)

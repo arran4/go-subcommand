@@ -17,6 +17,7 @@ type Validate struct {
 	*RootCmd
 	Flags       *flag.FlagSet
 	dir         string
+	parserName  string
 	SubCommands map[string]Cmd
 }
 
@@ -73,6 +74,17 @@ func (c *Validate) Execute(args []string) error {
 					}
 				}
 				c.dir = value
+
+			case "parserName", "parser-name":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.parserName = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -82,7 +94,7 @@ func (c *Validate) Execute(args []string) error {
 		}
 	}
 
-	if err := go_subcommand.Validate(c.dir); err != nil {
+	if err := go_subcommand.Validate(c.dir, c.parserName); err != nil {
 		return fmt.Errorf("validate failed: %w", err)
 	}
 
@@ -98,6 +110,8 @@ func (c *RootCmd) NewValidate() *Validate {
 	}
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+
+	set.StringVar(&v.parserName, "parser-name", "comment", "Parser to use")
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = &InternalCommand{

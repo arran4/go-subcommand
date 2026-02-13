@@ -8,7 +8,7 @@ import (
 	"testing"
 	"text/template"
 
-	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/model"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/tools/txtar"
@@ -30,6 +30,13 @@ func TestUsageTemplate(t *testing.T) {
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },
+		"until": func(n int) []int {
+			res := make([]int, n)
+			for i := 0; i < n; i++ {
+				res[i] = i
+			}
+			return res
+		},
 	}
 
 	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))
@@ -70,21 +77,17 @@ func TestUsageTemplate(t *testing.T) {
 			}
 
 			var input struct {
-				go_subcommand.SubCommand
+				model.SubCommand
 				Recursive bool
 			}
 			if err := json.Unmarshal(inputData, &input); err != nil {
 				t.Fatalf("failed to unmarshal input.json: %v", err)
 			}
-			input.SubCommand.Command = input.Command // fix embedding? json.Unmarshal usually handles embedded structs if flat.
-			// Actually, SubCommand embeds *Command. JSON unmarshal might populate Command fields into SubCommand if they are top level.
-			// But Command field is *Command.
-			// Let's assume inputData structure matches what we expect.
-			// However, `Recursive` is not in SubCommand.
+			input.SubCommand.Command = input.Command
 
 			// Wrapper for template
 			data := struct {
-				*go_subcommand.SubCommand
+				*model.SubCommand
 				Recursive bool
 			}{
 				SubCommand: &input.SubCommand,
@@ -105,7 +108,7 @@ func TestUsageTemplate(t *testing.T) {
 	}
 }
 
-func populateParentsUsage(sc *go_subcommand.SubCommand, parent *go_subcommand.SubCommand) {
+func populateParentsUsage(sc *model.SubCommand, parent *model.SubCommand) {
 	sc.Parent = parent
 	for _, child := range sc.SubCommands {
 		populateParentsUsage(child, sc)

@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parser"
 )
 
 // MockWriter implements FileWriter for in-memory testing
@@ -39,7 +42,7 @@ func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	writer := NewMockWriter()
 	// We use a dummy dir name like "." or "/app"
-	if err := GenerateWithFS(inputFS, writer, ".", ""); err != nil {
+	if err := GenerateWithFS(inputFS, writer, ".", "", "comment"); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	return writer
@@ -54,7 +57,7 @@ func ListHeads() {}
 	fs := setupProject(t, src)
 	writer := NewMockWriter()
 
-	err := GenerateWithFS(fs, writer, ".", "")
+	err := GenerateWithFS(fs, writer, ".", "", "comment")
 
 	if err != nil {
 		// This test verifies that the issue is still present (OPEN).
@@ -120,17 +123,17 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
-	model, err := ParseGoFiles(fs, ".")
+	dataModel, err := parser.ParseGoFiles(fs, ".")
 	if err != nil {
 		t.Fatalf("ParseGoFiles failed: %v", err)
 	}
 
-	if len(model.Commands) != 1 {
-		t.Fatalf("Expected 1 root command, got %d", len(model.Commands))
+	if len(dataModel.Commands) != 1 {
+		t.Fatalf("Expected 1 root command, got %d", len(dataModel.Commands))
 	}
-	root := model.Commands[0]
+	root := dataModel.Commands[0]
 
-	var admin *SubCommand
+	var admin *model.SubCommand
 	for _, sub := range root.SubCommands {
 		if sub.SubCommandName == "admin" {
 			admin = sub
