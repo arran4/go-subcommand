@@ -1,4 +1,4 @@
-package go_subcommand
+package commentv1
 
 import (
 	"bufio"
@@ -15,15 +15,17 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/mod/modfile"
 )
 
 type SubCommandTree struct {
 	SubCommands map[string]*SubCommandTree
-	*SubCommand
+	*model.SubCommand
 }
 
-func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []string, s *SubCommand) {
+func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []string, s *model.SubCommand) {
 	if len(sequence) == 0 {
 		s.ImportPath = importPath
 		s.SubCommandPackageName = packageName
@@ -43,7 +45,7 @@ type CommandTree struct {
 	CommandName string
 	*SubCommandTree
 	FunctionName string
-	Parameters   []*FunctionParameter
+	Parameters   []*model.FunctionParameter
 	ReturnsError bool
 	ReturnCount  int
 	Description  string
@@ -55,7 +57,7 @@ type CommandsTree struct {
 	PackagePath string
 }
 
-func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcommandSequence []string, s *SubCommand) {
+func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcommandSequence []string, s *model.SubCommand) {
 	ct, ok := cst.Commands[cmdName]
 	if !ok {
 		ct = &CommandTree{
@@ -67,16 +69,26 @@ func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcomm
 	ct.Insert(importPath, packageName, subcommandSequence, s)
 }
 
-func NewSubCommandTree(subCommand *SubCommand) *SubCommandTree {
+func NewSubCommandTree(subCommand *model.SubCommand) *SubCommandTree {
 	return &SubCommandTree{
 		SubCommands: map[string]*SubCommandTree{},
 		SubCommand:  subCommand,
 	}
 }
 
+func init() {
+	parsers.Register("commentv1", &CommentParser{})
+}
+
+type CommentParser struct{}
+
 // ParseGoFiles parses the Go files in the provided filesystem to build the command model.
 // It expects a go.mod file at the root of the filesystem (or root directory).
-func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
+func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
+	return (&CommentParser{}).Parse(fsys, root)
+}
+
+func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error) {
 	fset := token.NewFileSet()
 
 	// Read go.mod from FS
@@ -139,11 +151,11 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 		return nil, err
 	}
 
-	d := &DataModel{
+	d := &model.DataModel{
 		PackageName: "main",
 	}
 
-	var commands []*Command
+	var commands []*model.Command
 	var cmdNames []string
 	for cmdName := range rootCommands.Commands {
 		cmdNames = append(cmdNames, cmdName)
@@ -151,7 +163,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	sort.Strings(cmdNames)
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
-		cmd := &Command{
+		cmd := &model.Command{
 			DataModel:    d,
 			MainCmdName:  cmdName,
 			PackagePath:  rootCommands.PackagePath,
@@ -164,7 +176,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 			ExtendedHelp: cmdTree.ExtendedHelp,
 		}
 
-		allocator := NewNameAllocator()
+		allocator := parsers.NewNameAllocator()
 		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
@@ -173,8 +185,8 @@ func ParseGoFiles(fsys fs.FS, root string) (*DataModel, error) {
 	return d, nil
 }
 
-func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *SubCommand, allocator *NameAllocator) []*SubCommand {
-	var subCommands []*SubCommand
+func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *parsers.NameAllocator) []*model.SubCommand {
+	var subCommands []*model.SubCommand
 	var subCommandNames []string
 	for name := range sct.SubCommands {
 		subCommandNames = append(subCommandNames, name)
@@ -199,7 +211,7 @@ func collectSubCommands(cmd *Command, name string, sct *SubCommandTree, parent *
 			}
 		} else {
 			// Missing intermediate node -> Synthetic command
-			syntheticCmd := &SubCommand{
+			syntheticCmd := &model.SubCommand{
 				Command:                cmd,
 				Parent:                 parent,
 				SubCommandName:         name,
@@ -238,7 +250,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 
-			var params []*FunctionParameter
+			var params []*model.FunctionParameter
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
@@ -270,7 +282,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
 						}
-						fp := &FunctionParameter{
+						fp := &model.FunctionParameter{
 							Name:     name.Name,
 							Type:     typeName,
 							IsVarArg: isVarArg,
@@ -413,7 +425,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if len(fp.FlagAliases) == 0 {
-							kebab := ToKebabCase(name.Name)
+							kebab := parsers.ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
 							}
@@ -466,7 +478,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
-			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &SubCommand{
+			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &model.SubCommand{
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,

@@ -2,12 +2,12 @@ package go_subcommand
 
 import (
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	goparser "go/parser"
 )
 
 func TestFormatSourceComments_NoBlankLine(t *testing.T) {
@@ -49,7 +49,7 @@ func MyCmd(verbose bool) {}
 
 	// Verify parsing
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
+	f, err := goparser.ParseFile(fset, filename, content, goparser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}

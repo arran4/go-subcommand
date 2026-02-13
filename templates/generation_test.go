@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
-	go_subcommand "github.com/arran4/go-subcommand"
 	"go/format"
-	"golang.org/x/tools/txtar"
 	"strings"
 	"testing"
+
+	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/model"
+	"golang.org/x/tools/txtar"
 )
 
 //go:embed testdata/*.go.txtar
@@ -73,7 +75,7 @@ func TestGoTemplates(t *testing.T) {
 			var data interface{}
 
 			if templateName == "cmd.go.gotmpl" {
-				var sc go_subcommand.SubCommand
+				var sc model.SubCommand
 				if err := json.Unmarshal(inputData, &sc); err != nil {
 					t.Fatalf("failed to unmarshal input.json into SubCommand: %v", err)
 				}
@@ -87,7 +89,7 @@ func TestGoTemplates(t *testing.T) {
 				data = &sc
 			} else {
 				// root.go.gotmpl and main.go.gotmpl use *Command
-				var cmd go_subcommand.Command
+				var cmd model.Command
 				if err := json.Unmarshal(inputData, &cmd); err != nil {
 					t.Fatalf("failed to unmarshal input.json into Command: %v", err)
 				}
@@ -167,7 +169,7 @@ func TestGoTemplates(t *testing.T) {
 	}
 }
 
-func populateParents(sc *go_subcommand.SubCommand, parent *go_subcommand.SubCommand) {
+func populateParents(sc *model.SubCommand, parent *model.SubCommand) {
 	sc.Parent = parent
 	for _, child := range sc.SubCommands {
 		populateParents(child, sc)

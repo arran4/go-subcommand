@@ -1,4 +1,4 @@
-package go_subcommand
+package parsers
 
 import (
 	"testing"
