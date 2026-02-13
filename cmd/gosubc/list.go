@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"errors"
 	"github.com/arran4/go-subcommand"
 )
 
@@ -83,6 +84,14 @@ func (c *List) Execute(args []string) error {
 	}
 
 	if err := go_subcommand.List(c.dir); err != nil {
+		if errors.Is(err, go_subcommand.ErrPrintHelp) {
+			c.Usage()
+			return nil
+		}
+		if errors.Is(err, go_subcommand.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+			return nil
+		}
 		return fmt.Errorf("list failed: %w", err)
 	}
 
