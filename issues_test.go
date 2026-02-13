@@ -804,3 +804,42 @@ func CatTail() {}
 		t.Errorf("Expected %s to exist (mitigation for collision)", cattailUsage)
 	}
 }
+
+func TestErrorHandlingGeneration(t *testing.T) {
+	src := `package main
+
+import "errors"
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() error { return nil }
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	cmdPath := "cmd/app/mycmd.go"
+	content, ok := writer.Files[cmdPath]
+	if !ok {
+		t.Fatalf("Generated file not found: %s", cmdPath)
+	}
+
+	code := string(content)
+	if !strings.Contains(code, "errors.Is(err, cmd.ErrPrintHelp)") {
+		t.Errorf("Generated code should handle ErrPrintHelp")
+	}
+	if !strings.Contains(code, "errors.Is(err, cmd.ErrHelp)") {
+		t.Errorf("Generated code should handle ErrHelp")
+	}
+	if !strings.Contains(code, "\"example.com/test/cmd\"") {
+		t.Errorf("Generated code should import the cmd package")
+	}
+
+	// Verify errors.go was generated
+	errorsPath := "cmd/errors.go"
+	errorsContent, ok := writer.Files[errorsPath]
+	if !ok {
+		t.Fatalf("Generated file not found: %s", errorsPath)
+	}
+	if !strings.Contains(string(errorsContent), "var ErrPrintHelp = errors.New(\"print help\")") {
+		t.Errorf("errors.go should define ErrPrintHelp")
+	}
+}

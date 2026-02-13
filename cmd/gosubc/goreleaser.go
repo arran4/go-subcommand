@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"errors"
 	"github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/cmd"
 )
 
 var _ Cmd = (*Goreleaser)(nil)
@@ -96,6 +98,14 @@ func (c *Goreleaser) Execute(args []string) error {
 	}
 
 	if err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow); err != nil {
+		if errors.Is(err, cmd.ErrPrintHelp) {
+			c.Usage()
+			return nil
+		}
+		if errors.Is(err, cmd.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+			return nil
+		}
 		return fmt.Errorf("goreleaser failed: %w", err)
 	}
 

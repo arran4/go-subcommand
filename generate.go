@@ -68,6 +68,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string)
 		if err := generateFile(writer, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		if err := generateFile(writer, path.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
 		if err := generateFile(writer, cmdOutDir, "root_test.go", "root_test.go.gotmpl", cmd, true); err != nil {
 			return err
 		}

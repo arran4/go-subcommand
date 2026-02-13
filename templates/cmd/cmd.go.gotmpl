@@ -10,6 +10,10 @@ import (
 {{- template "common_imports" (slice .Parameters true) }}
 
 	"{{.ImportPath}}"
+	{{- if and .SubCommandFunctionName .ReturnsError}}
+	"errors"
+	"{{.PackagePath}}/cmd"
+	{{- end}}
 )
 
 var _ Cmd = (*{{.SubCommandStructName}})(nil)
@@ -184,14 +188,20 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
 		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
-		if err != nil {
-			return err
-		}
 		{{- else }}
-		if err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}}); err != nil {
-			return err
-		}
+    err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
+		if err != nil {
+      if errors.Is(err, cmd.ErrPrintHelp) {
+        c.Usage()
+        return nil
+      }
+      if errors.Is(err, cmd.ErrHelp) {
+        fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+        return nil
+      }
+      return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
+		}
 		{{else}}
 		{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{end -}}
