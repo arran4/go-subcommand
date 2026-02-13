@@ -1,4 +1,4 @@
-package parser
+package commentv1
 
 import (
 	"bufio"
@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/mod/modfile"
 )
 
@@ -76,7 +77,7 @@ func NewSubCommandTree(subCommand *model.SubCommand) *SubCommandTree {
 }
 
 func init() {
-	Register("comment", &CommentParser{})
+	parsers.Register("commentv1", &CommentParser{})
 }
 
 type CommentParser struct{}
@@ -175,7 +176,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 			ExtendedHelp: cmdTree.ExtendedHelp,
 		}
 
-		allocator := NewNameAllocator()
+		allocator := parsers.NewNameAllocator()
 		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
@@ -184,7 +185,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 	return d, nil
 }
 
-func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *NameAllocator) []*model.SubCommand {
+func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *parsers.NameAllocator) []*model.SubCommand {
 	var subCommands []*model.SubCommand
 	var subCommandNames []string
 	for name := range sct.SubCommands {
@@ -424,7 +425,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if len(fp.FlagAliases) == 0 {
-							kebab := ToKebabCase(name.Name)
+							kebab := parsers.ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
 							}

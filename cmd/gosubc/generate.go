@@ -132,7 +132,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 
-	set.StringVar(&v.parserName, "parser-name", "comment", "Name of the parser to use")
+	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {

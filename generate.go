@@ -13,7 +13,8 @@ import (
 	"text/template"
 
 	"github.com/arran4/go-subcommand/model"
-	"github.com/arran4/go-subcommand/parser"
+	"github.com/arran4/go-subcommand/parsers"
+	_ "github.com/arran4/go-subcommand/parsers/commentv1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -45,7 +46,7 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //
 //	dir:        --dir         (default: ".") Project root directory containing go.mod
 //	manDir:     --man-dir                    Directory to generate man pages in optional
-//	parserName: --parser-name (default: "comment") Name of the parser to use
+//	parserName: --parser-name (default: "commentv1") Name of the parser to use
 func Generate(dir string, manDir string, parserName string) error {
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName)
 }
@@ -56,7 +57,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return err
 	}
 
-	p, err := parser.Get(parserName)
+	p, err := parsers.Get(parserName)
 	if err != nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func parse(dir string, parserName string) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
 	}
-	p, err := parser.Get(parserName)
+	p, err := parsers.Get(parserName)
 	if err != nil {
 		return nil, err
 	}

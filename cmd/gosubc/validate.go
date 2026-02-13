@@ -118,7 +118,7 @@ func (c *RootCmd) NewValidate() *Validate {
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
-	set.StringVar(&v.parserName, "parser-name", "comment", "Name of the parser to use")
+	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Validate) error {

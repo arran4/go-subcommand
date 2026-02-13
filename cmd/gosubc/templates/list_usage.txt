@@ -8,4 +8,4 @@ Subcommands:
 
 Flags:
     --dir string           The project root directory containing go.mod (default: .)
-    --parser-name string   Name of the parser to use (default: comment)
+    --parser-name string   Name of the parser to use (default: commentv1)

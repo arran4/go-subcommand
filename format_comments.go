@@ -15,7 +15,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/arran4/go-subcommand/model"
-	"github.com/arran4/go-subcommand/parser"
+	"github.com/arran4/go-subcommand/parsers"
+	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
 
 // FormatSourceComments is a subcommand `gosubc format-source-comments` that formats source comments to match gofmt style
@@ -75,7 +76,7 @@ func FormatSourceComments(dir string) error {
 
 			// Extract existing parameters info to preserve descriptions/defaults not in signature
 			// ParseSubCommandComments returns map[name]ParsedParam
-			_, _, _, _, parsedParams, _ := parser.ParseSubCommandComments(text)
+			_, _, _, _, parsedParams, _ := commentv1.ParseSubCommandComments(text)
 
 			var params []*model.FunctionParameter
 			for _, p := range funcDecl.Type.Params.List {
@@ -124,7 +125,7 @@ func FormatSourceComments(dir string) error {
 					}
 
 					if len(fp.FlagAliases) == 0 {
-						kebab := parser.ToKebabCase(name.Name)
+						kebab := parsers.ToKebabCase(name.Name)
 						if kebab != name.Name {
 							fp.FlagAliases = []string{kebab}
 						} else {

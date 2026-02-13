@@ -7,7 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/arran4/go-subcommand/model"
-	"github.com/arran4/go-subcommand/parser"
+	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
 
 // MockWriter implements FileWriter for in-memory testing
@@ -42,7 +42,7 @@ func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	writer := NewMockWriter()
 	// We use a dummy dir name like "." or "/app"
-	if err := GenerateWithFS(inputFS, writer, ".", "", "comment"); err != nil {
+	if err := GenerateWithFS(inputFS, writer, ".", "", "commentv1"); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	return writer
@@ -57,7 +57,7 @@ func ListHeads() {}
 	fs := setupProject(t, src)
 	writer := NewMockWriter()
 
-	err := GenerateWithFS(fs, writer, ".", "", "comment")
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1")
 
 	if err != nil {
 		// This test verifies that the issue is still present (OPEN).
@@ -123,7 +123,7 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
-	m, err := parser.ParseGoFiles(fs, ".")
+	m, err := commentv1.ParseGoFiles(fs, ".")
 	if err != nil {
 		t.Fatalf("ParseGoFiles failed: %v", err)
 	}

@@ -1,4 +1,4 @@
-package parser
+package commentv1
 
 import (
 	"bytes"
