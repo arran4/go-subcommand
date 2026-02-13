@@ -1,8 +1,7 @@
 run:
-  go: '1.25'
+  # go: '1.25' # Removed to avoid configuration errors with linter versions that don't support it yet
 
 issues:
   exclude-dirs:
     - examples
     - testdata
-

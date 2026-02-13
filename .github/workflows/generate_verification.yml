@@ -73,9 +73,11 @@ jobs:
           cd ../..
 
       - name: Install & Run golangci-lint
+        env:
+          GOTOOLCHAIN: local
         run: |
           # Install golangci-lint from source to ensure compatibility with the current Go toolchain
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 
           # Run lint on root module only
           # Generated examples are currently skipped due to "no export data" errors
