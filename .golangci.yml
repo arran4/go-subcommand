@@ -3,13 +3,6 @@ version: "2"
 run:
   # timeout for analysis, e.g. 30s, 5m, default is 1m
   timeout: 5m
-
-issues:
-  exclude-dirs:
+  skip-dirs:
     - examples
     - testdata
-linters:
-  exclusions:
-    paths:
-      - examples
-      - testdata
