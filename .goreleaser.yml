@@ -1,4 +1,5 @@
 # .goreleaser.yml
+project_name: gosubc
 before:
   hooks:
     - go mod tidy
@@ -18,10 +19,6 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 archives:
   - format: tar.gz
-    name_template: "gosubc_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files:
-      - LICENSE
-      - README.md
 checksum:
   name_template: 'checksums.txt'
 snapshot:
