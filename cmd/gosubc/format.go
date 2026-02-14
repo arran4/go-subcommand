@@ -55,7 +55,7 @@ func (c *Format) Execute(args []string) error {
 		if arg == "--" {
 			break
 		}
-		if strings.HasPrefix(arg, "-") {
+		if strings.HasPrefix(arg, "-") && arg != "-" {
 			name := arg
 			value := ""
 			hasValue := false
@@ -133,6 +133,9 @@ func (c *RootCmd) NewFormat() *Format {
 			if errors.Is(err, cmd.ErrHelp) {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
+			}
+			if e, ok := err.(*cmd.ErrExitCode); ok {
+				return e
 			}
 			return fmt.Errorf("format failed: %w", err)
 		}
