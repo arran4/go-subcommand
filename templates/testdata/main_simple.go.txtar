@@ -1,7 +1,14 @@
 -- input.json --
 {
   "PackageName": "main",
-  "MainCmdName": "mycmd"
+  "MainCmdName": "mycmd",
+  "Version": "1.0.0",
+  "ReturnsError": true,
+  "ReturnCount": 1,
+  "FunctionName": "MyRootFunc",
+  "Parameters": [],
+  "PackagePath": "example.com/myproject",
+  "ImportPath": "example.com/myproject/rootpkg"
 }
 -- template_name --
 main.go.gotmpl
@@ -15,6 +22,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"example.com/myproject/cmd"
 )
 
 var (
@@ -31,6 +40,12 @@ func main() {
 	}
 
 	if err := root.Execute(os.Args[1:]); err != nil {
+		if e, ok := err.(*cmd.ErrExitCode); ok {
+			if e.Err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", e.Err)
+			}
+			os.Exit(e.Code)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

@@ -16,7 +16,7 @@ The `gosubc` command line tool (`cmd/gosubc`) is self-hosting: it uses the libra
 
 *   **Generating Examples:**
     Examples typically include a `//go:generate` directive (e.g., `examples/complex`, `examples/returns`). This directive usually attempts to use a locally installed `gosubc` or falls back to `go run`.
-    
+
     **Important:** Because examples are standalone modules that may rely on the local root module, it is recommended to use `go work` to ensure `go generate` can locate dependencies correctly without publishing changes.
     ```bash
     go work init . ./examples/returns ./examples/complex
@@ -55,3 +55,10 @@ To ensure the integrity of the codebase and generated artifacts, follow these ve
 4.  **Regenerate Tooling (Optional):**
     If explicit regeneration verification is needed, refer to the **Tooling Generation** section above.
 * `go-subcommand` should never be a dependency of generated code.
+
+## Troubleshooting
+
+*   **golangci-lint Issues:**
+    *   If you encounter issues with `golangci-lint` in CI or locally, focus first on the configuration file (`.golangci.yml`) and then on the Go version.
+    *   **DO NOT** change the `golangci-lint` version or the `golangci-lint-action` version in workflows, even if they appear to be failing. Downgrading or pinning versions is generally discouraged unless directed otherwise.
+    *   Ensure the `.golangci.yml` configuration (if present) is compatible with the version of the linter being used.
