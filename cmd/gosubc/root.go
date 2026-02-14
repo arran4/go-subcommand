@@ -77,6 +77,7 @@ func (c *RootCmd) UsageRecursive() {
 	fmt.Fprintf(os.Stderr, "    %s\n", "goreleaser")
 	fmt.Fprintf(os.Stderr, "    %s\n", "list")
 	fmt.Fprintf(os.Stderr, "    %s\n", "scan")
+	fmt.Fprintf(os.Stderr, "    %s\n", "syntax")
 	fmt.Fprintf(os.Stderr, "    %s\n", "validate")
 }
 
@@ -96,6 +97,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["goreleaser"] = c.NewGoreleaser()
 	c.Commands["list"] = c.NewList()
 	c.Commands["scan"] = c.NewScan()
+	c.Commands["syntax"] = c.NewSyntax()
 	c.Commands["validate"] = c.NewValidate()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
