@@ -200,6 +200,12 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
+      if e, ok := err.(*cmd.ErrExitCode); ok {
+        if e.Err == nil {
+          return nil
+        }
+        return err
+      }
       return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
 		{{else}}
