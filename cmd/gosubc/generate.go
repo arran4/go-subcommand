@@ -147,6 +147,9 @@ func (c *RootCmd) NewGenerate() *Generate {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
+			if e, ok := err.(*cmd.ErrExitCode); ok {
+				return e
+			}
 			return fmt.Errorf("generate failed: %w", err)
 		}
 		return nil

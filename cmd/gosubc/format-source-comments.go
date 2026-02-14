@@ -119,6 +119,9 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
+			if e, ok := err.(*cmd.ErrExitCode); ok {
+				return e
+			}
 			return fmt.Errorf("format-source-comments failed: %w", err)
 		}
 		return nil
