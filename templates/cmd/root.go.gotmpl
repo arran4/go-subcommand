@@ -121,10 +121,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
         return nil
       }
       if e, ok := err.(*cmd.ErrExitCode); ok {
-        if e.Err == nil {
-          return nil
-        }
-        return err
+        return e
       }
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
