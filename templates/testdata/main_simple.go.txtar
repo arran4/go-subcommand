@@ -22,6 +22,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"example.com/myproject/cmd"
 )
 
 var (
