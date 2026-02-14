@@ -18,11 +18,12 @@ var _ Cmd = (*Goreleaser)(nil)
 
 type Goreleaser struct {
 	*RootCmd
-	Flags          *flag.FlagSet
-	dir            string
-	githubWorkflow bool
-	SubCommands    map[string]Cmd
-	CommandAction  func(c *Goreleaser) error
+	Flags                *flag.FlagSet
+	dir                  string
+	githubWorkflow       bool
+	verificationWorkflow bool
+	SubCommands          map[string]Cmd
+	CommandAction        func(c *Goreleaser) error
 }
 
 type UsageDataGoreleaser struct {
@@ -89,6 +90,17 @@ func (c *Goreleaser) Execute(args []string) error {
 				} else {
 					c.githubWorkflow = true
 				}
+
+			case "verificationWorkflow", "verification-workflow":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.verificationWorkflow = b
+				} else {
+					c.verificationWorkflow = true
+				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -119,12 +131,14 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 
 	set.StringVar(&v.dir, "dir", ".", "TODO: Add usage text")
 
-	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "TODO: Add usage text")
+	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "Generate GitHub Actions release workflow")
+
+	set.BoolVar(&v.verificationWorkflow, "verification-workflow", false, "Generate verification workflow")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Goreleaser) error {
 
-		err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow)
+		err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow, c.verificationWorkflow)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

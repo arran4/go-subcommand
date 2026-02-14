@@ -6,4 +6,5 @@ Subcommands:
 
 Flags:
     --dir string                     (default: .)
-    --go-releaser-github-workflow   
+    --go-releaser-github-workflow   Generate GitHub Actions release workflow (default: false)
+    --verification-workflow         Generate verification workflow (default: false)
