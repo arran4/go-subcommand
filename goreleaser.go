@@ -9,7 +9,7 @@ import (
 //
 // Flags:
 //   dir:                  --dir                         (default: ".")
-//   githubWorkflow:       --go-releaser-github-workflow
+//   githubWorkflow:       --go-releaser-github-workflow (default: false) Generate GitHub Actions release workflow
 //   verificationWorkflow: --verification-workflow       (default: false) Generate verification workflow
 func Goreleaser(dir string, githubWorkflow bool, verificationWorkflow bool) error {
 	writer := &OSFileWriter{}

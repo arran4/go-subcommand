@@ -20,7 +20,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
 
       - name: Install gosubc
         run: go install github.com/arran4/go-subcommand/cmd/gosubc@latest

@@ -131,7 +131,7 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 
 	set.StringVar(&v.dir, "dir", ".", "TODO: Add usage text")
 
-	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "TODO: Add usage text")
+	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "Generate GitHub Actions release workflow")
 
 	set.BoolVar(&v.verificationWorkflow, "verification-workflow", false, "Generate verification workflow")
 	set.Usage = v.Usage
