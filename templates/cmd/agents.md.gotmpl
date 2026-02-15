@@ -1,0 +1,29 @@
+All code under /cmd is generated code, do not place files here.
+
+# Go Subcommand Information
+
+Go Subcommand (`gosubc`) generates subcommand code for command-line interfaces (CLIs) in Go from source code comments.
+
+## Key Features
+
+- **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
+- **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
+- **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
+
+## How it works
+
+1.  **Define Your Commands**: Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// FunctionName is a subcommand 'root-command sub-command...'`.
+2.  **Generate**: Run `gosubc generate` (or via `go generate`).
+3.  **Result**: `gosubc` creates a `cmd/<app-name>` directory containing the generated CLI code.
+
+## Comment Syntax
+
+- `// FuncName is a subcommand 'root-cmd parent child'` defines the command.
+- `Flags:` block defines flags.
+  - `name: --flag -f (default: val) Description`
+- `@N` maps positional arguments.
+- `...` maps variadic arguments.
+
+## Important Note
+
+Do not edit files in this directory directly if you can avoid it. They are overwritten on every generation. Modify the source code comments instead.
