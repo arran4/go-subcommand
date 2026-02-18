@@ -29,10 +29,10 @@ Subcommands:
     usage        Print this usage message
 {{- end}}
 {{end}}{{/* End Subcommands block */}}{{$hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end}}{{if $hasFlags}}
-Flags:{{$max := add .MaxFlagLength 2 -}}
+Flags:{{$maxFlag := add .MaxFlagLength 2}}{{$maxDef := .MaxDefaultLength}}{{if gt $maxDef 0}}{{$maxDef = add $maxDef 2}}{{end}}
 {{- range .Parameters}}
 {{- if not .IsPositional -}}
-{{printf "\n    %-*s %s" $max .FlagString .Description}}{{if .Default}} (default: {{.Default}}){{end}}
+{{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
 {{- end}}
 {{- end}}
 {{end}}{{$hasPositional := false}}{{range .Parameters}}{{if .IsPositional}}{{$hasPositional = true}}{{end}}{{end}}{{if $hasPositional}}
