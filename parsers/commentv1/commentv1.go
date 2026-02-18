@@ -91,7 +91,7 @@ func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
 	return (&CommentParser{}).Parse(fsys, root)
 }
 
-func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error) {
+func (p *CommentParser) Parse(fsys fs.FS, root string, opts ...interface{}) (*model.DataModel, error) {
 	fset := token.NewFileSet()
 
 	// Read go.mod from FS
