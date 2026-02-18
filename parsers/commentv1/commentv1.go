@@ -271,7 +271,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						typeName := ""
 						isVarArg := false
 
-						var typeExpr ast.Expr = p.Type
+						typeExpr := p.Type
 						if ellipsis, ok := p.Type.(*ast.Ellipsis); ok {
 							isVarArg = true
 							typeExpr = ellipsis.Elt

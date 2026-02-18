@@ -83,7 +83,7 @@ func FormatSourceComments(dir string) error {
 					typeName := ""
 					isVarArg := false
 
-					var typeExpr ast.Expr = p.Type
+					typeExpr := p.Type
 					if ellipsis, ok := p.Type.(*ast.Ellipsis); ok {
 						isVarArg = true
 						typeExpr = ellipsis.Elt
@@ -91,9 +91,8 @@ func FormatSourceComments(dir string) error {
 
 					var err error
 					typeName, err = commentv1.FormatType(typeExpr)
-					if err != nil {
-						// Ignore error as we are just formatting comments and old behavior was ignoring unsupported types
-					}
+					// Ignore error as we are just formatting comments and old behavior was ignoring unsupported types
+					_ = err
 
 					fp := &model.FunctionParameter{
 						Name:     name.Name,
