@@ -259,6 +259,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 
+			if len(subCommandSequence) > 0 && description == "" {
+				fullCmdName := cmdName + " " + strings.Join(subCommandSequence, " ")
+				log.Printf("Warning: Subcommand '%s' (function %s) is missing a short description.", fullCmdName, s.Name.Name)
+			}
+
 			var params []*model.FunctionParameter
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
@@ -448,6 +453,19 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						params = append(params, fp)
 					}
 				}
+			}
+
+			hasDescription := false
+			var missingDescription []string
+			for _, p := range params {
+				if p.Description != "" {
+					hasDescription = true
+				} else {
+					missingDescription = append(missingDescription, p.Name)
+				}
+			}
+			if hasDescription && len(missingDescription) > 0 {
+				log.Printf("Warning: In command '%s' (function %s), the following parameters are missing descriptions while others have them: %s", cmdName, s.Name.Name, strings.Join(missingDescription, ", "))
 			}
 
 			returnsError := false
