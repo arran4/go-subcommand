@@ -12,6 +12,9 @@
 		{{- $hasStrconv = true }}
 		{{- end }}
 	{{- end }}
+	{{- if or (eq .Type "*int") (eq .Type "*bool") }}
+		{{- $hasStrconv = true }}
+	{{- end }}
 	{{- end }}
 	{{- if $hasStrconv }}
 	"strconv"
@@ -37,10 +40,38 @@
 			{{- else if eq .Type "bool" }}{{ $default = "false" }}
 			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
 			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
+			{{- else if eq .Type "*string" }}{{ $default = "" }}
+			{{- else if eq .Type "*int" }}{{ $default = "" }}
+			{{- else if eq .Type "*bool" }}{{ $default = "" }}
+			{{- else if eq .Type "*time.Duration" }}{{ $default = "" }}
 			{{- else }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+			{{- else if eq .Type "*string" }}{{ $default = printf "%q" .Default }}
 			{{- else }}{{ $default = .Default }}{{ end -}}
+		{{- end -}}
+
+		{{- if ne $default "" -}}
+			{{- if eq $param.Type "*string" }}
+	{
+		val := {{$default}}
+		{{$struct}}.{{$param.Name}} = &val
+	}
+			{{- else if eq $param.Type "*int" }}
+	{
+		val := {{$default}}
+		{{$struct}}.{{$param.Name}} = &val
+	}
+			{{- else if eq $param.Type "*bool" }}
+	{
+		val := {{$default}}
+		{{$struct}}.{{$param.Name}} = &val
+	}
+			{{- else if eq $param.Type "*time.Duration" }}
+	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		{{$struct}}.{{$param.Name}} = &d
+	}
+			{{- end }}
 		{{- end -}}
 
 		{{- $typeTitle := $param.Type | title -}}
@@ -56,6 +87,38 @@
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
 			{{- else if eq $param.Type "[]string" }}
+			{{- else if eq $param.Type "*string" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		{{$struct}}.{{$param.Name}} = &s
+		return nil
+	})
+			{{- else if eq $param.Type "*int" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &i
+		return nil
+	})
+			{{- else if eq $param.Type "*bool" }}
+	{{$set}}.BoolFunc("{{.}}", "{{$desc}}", func(s string) error {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &b
+		return nil
+	})
+			{{- else if eq $param.Type "*time.Duration" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &d
+		return nil
+	})
 			{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 			{{- end }}
@@ -68,6 +131,38 @@
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
 	}
 		{{- else if eq $param.Type "[]string" }}
+		{{- else if eq $param.Type "*string" }}
+	{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error {
+		{{$struct}}.{{$param.Name}} = &s
+		return nil
+	})
+		{{- else if eq $param.Type "*int" }}
+	{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &i
+		return nil
+	})
+		{{- else if eq $param.Type "*bool" }}
+	{{$set}}.BoolFunc("{{$param.Name}}", "{{$desc}}", func(s string) error {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &b
+		return nil
+	})
+		{{- else if eq $param.Type "*time.Duration" }}
+	{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &d
+		return nil
+	})
 		{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}

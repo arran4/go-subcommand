@@ -868,7 +868,7 @@ func Child() {}
 
 	writer := NewMockWriter()
 	// Generate code
-	if err := GenerateWithFS(fs, writer, ".", "", "commentv1"); err != nil {
+	if err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
