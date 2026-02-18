@@ -51,7 +51,7 @@ func Generate(dir string, manDir string, parserName string) error {
 }
 
 // GenerateWithFS generates code using provided FS and Writer
-func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string) error {
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, opts ...interface{}) error {
 	if err := initTemplates(); err != nil {
 		return err
 	}
