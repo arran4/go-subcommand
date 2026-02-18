@@ -7,7 +7,6 @@ import (
 	"go/format"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -47,6 +46,11 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //   manDir:     --man-dir                            Directory to generate man pages in optional
 //   parserName: --parser-name (default: "commentv1") Name of the parser to use
 func Generate(dir string, manDir string, parserName string) error {
+	if dir == "." || dir == "" {
+		if d, err := findModuleRoot(dir); err == nil {
+			dir = d
+		}
+	}
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName)
 }
 
@@ -70,23 +74,23 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 	for _, cmd := range dataModel.Commands {
-		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
+		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
 		if err := generateFile(writer, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
 		if err := generateFile(writer, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(writer, path.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
+		if err := generateFile(writer, filepath.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(writer, path.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
+		if err := generateFile(writer, filepath.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
 		if err := generateFile(writer, cmdOutDir, "root_test.go", "root_test.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		cmdTemplatesDir := path.Join(cmdOutDir, "templates")
+		cmdTemplatesDir := filepath.Join(cmdOutDir, "templates")
 		if err := generateFile(writer, cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
@@ -144,6 +148,11 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 func parse(dir string, parserName string) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
+	}
+	if dir == "." {
+		if d, err := findModuleRoot(dir); err == nil {
+			dir = d
+		}
 	}
 	p, err := parsers.Get(parserName)
 	if err != nil {
@@ -228,4 +237,21 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
 	return nil
+}
+
+func findModuleRoot(dir string) (string, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(absDir, "go.mod")); err == nil {
+			return absDir, nil
+		}
+		parent := filepath.Dir(absDir)
+		if parent == absDir {
+			return "", fmt.Errorf("go.mod not found")
+		}
+		absDir = parent
+	}
 }
