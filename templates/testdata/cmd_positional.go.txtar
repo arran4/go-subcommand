@@ -78,7 +78,7 @@ func (c *MyCmd) Execute(args []string) error {
 		}
 	}
 	var remainingArgs []string
-	for i := range args {
+	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
 			remainingArgs = append(remainingArgs, args[i+1:]...)

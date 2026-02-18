@@ -62,7 +62,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- if $needsRemainingArgs }}
 	var remainingArgs []string
 	{{- end }}
-	for i := range args {
+	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
 			{{- if $needsRemainingArgs }}

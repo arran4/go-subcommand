@@ -65,7 +65,7 @@ func (c *MyCmd) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	for i := range args {
+	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
 			break
