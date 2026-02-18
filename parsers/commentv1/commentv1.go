@@ -205,7 +205,11 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 		sct.Command = cmd
 		sct.Parent = parent
 		// Allocate unique struct name
-		sct.SubCommandStructName = allocator.Allocate(sct.SubCommandName)
+		if sct.SubCommandFunctionName != "" {
+			sct.SubCommandStructName = allocator.Allocate(sct.SubCommandFunctionName)
+		} else {
+			sct.SubCommandStructName = allocator.Allocate(sct.SubCommandName)
+		}
 
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
