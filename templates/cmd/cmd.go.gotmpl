@@ -12,8 +12,16 @@ import (
 
 	"{{.ImportPath}}"
 {{- end}}
+	{{- $hasSlice := false }}
+	{{- range .Parameters }}
+	{{- if or (eq .Type "[]string") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]time.Duration") }}
+	{{- $hasSlice = true }}
+	{{- end }}
+	{{- end }}
+	{{- if or (and .SubCommandFunctionName .ReturnsError) $hasSlice}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
+	{{- end}}
 	"{{.PackagePath}}/cmd"
 	{{- end}}
 )

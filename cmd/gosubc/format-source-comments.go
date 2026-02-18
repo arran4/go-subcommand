@@ -131,6 +131,8 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
+	set.Var((*cmd.StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
+
 	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 	set.Usage = v.Usage
 
