@@ -26,6 +26,8 @@ func TestList_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--parserName")
 	args = append(args, "test")
+	args = append(args, "--paths")
+	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -40,5 +42,8 @@ func TestList_Execute(t *testing.T) {
 	}
 	if cmd.parserName != "test" {
 		t.Errorf("Expected parserName to be 'test', got '%v'", cmd.parserName)
+	}
+	if cmd.recursive != true {
+		t.Errorf("Expected recursive to be true, got '%v'", cmd.recursive)
 	}
 }
