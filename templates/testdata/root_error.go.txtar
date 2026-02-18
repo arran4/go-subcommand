@@ -55,6 +55,10 @@ func (c *LazyCommand) Usage() {
 	c.cmd.Usage()
 }
 
+func NewLazyCommand(init func() Cmd) *LazyCommand {
+	return &LazyCommand{Init: init}
+}
+
 type InternalCommand struct {
 	Exec      func(args []string) error
 	UsageFunc func()

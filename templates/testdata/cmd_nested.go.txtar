@@ -108,7 +108,7 @@ func (c *RootCmd) NewParent() *Parent {
 		return nil
 	}
 
-	v.SubCommands["child"] = &LazyCommand{Init: func() Cmd { return v.NewChild() }}
+	v.SubCommands["child"] = NewLazyCommand(func() Cmd { return v.NewChild() })
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

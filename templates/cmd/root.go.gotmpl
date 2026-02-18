@@ -45,6 +45,10 @@ func (c *LazyCommand) Usage() {
 	c.cmd.Usage()
 }
 
+func NewLazyCommand(init func() Cmd) *LazyCommand {
+	return &LazyCommand{Init: init}
+}
+
 type InternalCommand struct {
 	Exec      func(args []string) error
 	UsageFunc func()
@@ -152,7 +156,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		return nil
 	}
 	{{end}}
-	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = &LazyCommand{Init: func() Cmd { return c.New{{.SubCommandStructName}}() }}
+	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = NewLazyCommand(func() Cmd { return c.New{{.SubCommandStructName}}() })
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
