@@ -270,32 +270,19 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					for _, name := range p.Names {
 						typeName := ""
 						isVarArg := false
-						switch t := p.Type.(type) {
-						case *ast.Ident:
-							typeName = t.Name
-						case *ast.SelectorExpr:
-							if ident, ok := t.X.(*ast.Ident); ok {
-								typeName = fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name)
-							} else {
-								// Fallback or panic, for now panic to discover what's wrong
-								panic(fmt.Sprintf("Unsupported selector type: %T", t.X))
-							}
-						case *ast.Ellipsis:
+
+						var typeExpr ast.Expr = p.Type
+						if ellipsis, ok := p.Type.(*ast.Ellipsis); ok {
 							isVarArg = true
-							if ident, ok := t.Elt.(*ast.Ident); ok {
-								typeName = ident.Name
-							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-								if ident, ok := sel.X.(*ast.Ident); ok {
-									typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
-								} else {
-									panic(fmt.Sprintf("Unsupported selector type in ellipsis: %T", sel.X))
-								}
-							} else {
-								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
-							}
-						default:
-							panic(fmt.Sprintf("Unsupported type: %T", t))
+							typeExpr = ellipsis.Elt
 						}
+
+						var err error
+						typeName, err = FormatType(typeExpr)
+						if err != nil {
+							return fmt.Errorf("error parsing parameter '%s' in function '%s': %w", name.Name, s.Name.Name, err)
+						}
+
 						fp := &model.FunctionParameter{
 							Name:     name.Name,
 							Type:     typeName,
@@ -749,4 +736,42 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	return p
+}
+
+func FormatType(expr ast.Expr) (string, error) {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name, nil
+	case *ast.SelectorExpr:
+		if ident, ok := t.X.(*ast.Ident); ok {
+			return fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name), nil
+		}
+		return "", fmt.Errorf("unsupported selector type: %T", t.X)
+	case *ast.StarExpr:
+		inner, err := FormatType(t.X)
+		if err != nil {
+			return "", err
+		}
+		return "*" + inner, nil
+	case *ast.ArrayType:
+		inner, err := FormatType(t.Elt)
+		if err != nil {
+			return "", err
+		}
+		lenStr := ""
+		if t.Len != nil {
+			if lit, ok := t.Len.(*ast.BasicLit); ok {
+				lenStr = lit.Value
+			}
+		}
+		return "[" + lenStr + "]" + inner, nil
+	case *ast.Ellipsis:
+		inner, err := FormatType(t.Elt)
+		if err != nil {
+			return "", err
+		}
+		return inner, nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", t)
+	}
 }

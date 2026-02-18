@@ -82,22 +82,17 @@ func FormatSourceComments(dir string) error {
 				for _, name := range p.Names {
 					typeName := ""
 					isVarArg := false
-					switch t := p.Type.(type) {
-					case *ast.Ident:
-						typeName = t.Name
-					case *ast.SelectorExpr:
-						if ident, ok := t.X.(*ast.Ident); ok {
-							typeName = fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name)
-						}
-					case *ast.Ellipsis:
+
+					var typeExpr ast.Expr = p.Type
+					if ellipsis, ok := p.Type.(*ast.Ellipsis); ok {
 						isVarArg = true
-						if ident, ok := t.Elt.(*ast.Ident); ok {
-							typeName = ident.Name
-						} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-							if ident, ok := sel.X.(*ast.Ident); ok {
-								typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
-							}
-						}
+						typeExpr = ellipsis.Elt
+					}
+
+					var err error
+					typeName, err = commentv1.FormatType(typeExpr)
+					if err != nil {
+						// Ignore error as we are just formatting comments and old behavior was ignoring unsupported types
 					}
 
 					fp := &model.FunctionParameter{
