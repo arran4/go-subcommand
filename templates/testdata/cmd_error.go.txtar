@@ -65,6 +65,15 @@ func (c *MyCmd) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
+	processFlag := func(i *int, args []string, flagName string, flagValue string, flagHasValue bool, suffix string) (bool, bool, bool, error) {
+		switch flagName {
+		case "help", "h":
+			c.Usage()
+			return true, false, true, nil
+		}
+		return false, false, false, nil
+	}
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -73,13 +82,52 @@ func (c *MyCmd) Execute(args []string) error {
 		if strings.HasPrefix(arg, "-") && arg != "-" {
 			name := arg
 			trimmedName := strings.TrimLeft(name, "-")
-			switch trimmedName {
-			case "help", "h":
-				c.Usage()
+
+			found, _, stop, err := processFlag(&i, args, trimmedName, value, hasValue, "")
+			if err != nil {
+				return err
+			}
+			if stop {
 				return nil
-			default:
+			}
+			if found {
+				continue
+			}
+
+			if strings.HasPrefix(arg, "--") {
 				return fmt.Errorf("unknown flag: %s", name)
 			}
+
+			remaining := trimmedName
+			for len(remaining) > 0 {
+				shortName := remaining[0:1]
+				loopSuffix := remaining[1:]
+
+				var flagValue string
+				var flagHasValue bool
+
+				if len(loopSuffix) == 0 && hasValue {
+					flagValue = value
+					flagHasValue = true
+				}
+
+				found, usedSuffix, stop, err := processFlag(&i, args, shortName, flagValue, flagHasValue, loopSuffix)
+				if err != nil {
+					return err
+				}
+				if stop {
+					return nil
+				}
+				if !found {
+					return fmt.Errorf("unknown flag: %s", shortName)
+				}
+
+				if usedSuffix {
+					break
+				}
+				remaining = loopSuffix
+			}
+
 		}
 	}
 

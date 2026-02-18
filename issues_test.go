@@ -868,7 +868,7 @@ func Child() {}
 
 	writer := NewMockWriter()
 	// Generate code
-	if err := GenerateWithFS(fs, writer, ".", "", "commentv1"); err != nil {
+	if err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -886,7 +886,7 @@ func Child() {}
 	// The diff shows removal of blank line.
 	// But generated code also contains invalid empty import `""` for synthetic commands.
 
-	if strings.Contains(nestedCode, `""`) {
+	if strings.Contains(nestedCode, "\t\"\"\n") {
 		t.Errorf("Issue 221: Generated code contains empty import `\"\"`")
 	}
 
