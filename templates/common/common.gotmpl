@@ -40,10 +40,10 @@
 			{{- else if eq .Type "bool" }}{{ $default = "false" }}
 			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
 			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
-			{{- else if eq .Type "*string" }}{{ $default = "" }}
-			{{- else if eq .Type "*int" }}{{ $default = "" }}
-			{{- else if eq .Type "*bool" }}{{ $default = "" }}
-			{{- else if eq .Type "*time.Duration" }}{{ $default = "" }}
+			{{- else if eq .Type "*string" }}{{ $default = "nil" }}
+			{{- else if eq .Type "*int" }}{{ $default = "nil" }}
+			{{- else if eq .Type "*bool" }}{{ $default = "nil" }}
+			{{- else if eq .Type "*time.Duration" }}{{ $default = "nil" }}
 			{{- else }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
@@ -51,7 +51,7 @@
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
 
-		{{- if ne $default "" -}}
+		{{- if and (ne $default "") (ne $default "nil") -}}
 			{{- if eq $param.Type "*string" }}
 	{
 		val := {{$default}}
