@@ -129,11 +129,14 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "TODO: Add usage text")
+	dirDefault := "."
+	set.StringVar(&v.dir, "dir", dirDefault, "TODO: Add usage text")
 
-	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "Generate GitHub Actions release workflow")
+	githubWorkflowDefault := false
+	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", githubWorkflowDefault, "Generate GitHub Actions release workflow")
 
-	set.BoolVar(&v.verificationWorkflow, "verification-workflow", false, "Generate verification workflow")
+	verificationWorkflowDefault := false
+	set.BoolVar(&v.verificationWorkflow, "verification-workflow", verificationWorkflowDefault, "Generate verification workflow")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Goreleaser) error {

@@ -141,11 +141,14 @@ func (c *RootCmd) NewFormat() *Format {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory")
+	dirDefault := "."
+	set.StringVar(&v.dir, "dir", dirDefault, "The project root directory")
 
-	set.BoolVar(&v.inplace, "inplace", false, "Modify files in place")
+	inplaceDefault := false
+	set.BoolVar(&v.inplace, "inplace", inplaceDefault, "Modify files in place")
 
-	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
+	recursiveDefault := true
+	set.BoolVar(&v.recursive, "recursive", recursiveDefault, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Format) error {

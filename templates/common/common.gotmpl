@@ -8,7 +8,7 @@
 	{{- $hasDuration = true }}
 	{{- end }}
 	{{- if or (eq .Type "int") (eq .Type "bool") }}
-		{{- if or .IsPositional $needStrconvForFlags }}
+		{{- if or .IsPositional $needStrconvForFlags .EnvVars }}
 		{{- $hasStrconv = true }}
 		{{- end }}
 	{{- end }}
@@ -47,29 +47,58 @@
 		{{- if eq $param.Type "time.Duration" -}}
 			{{- $typeTitle = "Duration" -}}
 		{{- end -}}
+
+		{{- $defaultVar := printf "%sDefault" $param.Name -}}
+
+		{{- if eq $param.Type "time.Duration" }}
+	var {{$defaultVar}} time.Duration
+	if d, err := time.ParseDuration("{{$param.Default}}"); err == nil {
+		{{$defaultVar}} = d
+	} else {
+		{{$defaultVar}} = 0
+	}
+		{{- else if eq $param.Type "[]string" }}
+		{{- else }}
+	{{$defaultVar}} := {{$default}}
+		{{- end }}
+
+		{{- if .EnvVars }}
+		{{- range .EnvVars }}
+	if v := os.Getenv("{{.}}"); v != "" {
+			{{- if eq $param.Type "string" }}
+		{{$defaultVar}} = v
+			{{- else if eq $param.Type "int" }}
+		if i, err := strconv.Atoi(v); err == nil {
+			{{$defaultVar}} = i
+		}
+			{{- else if eq $param.Type "bool" }}
+		if b, err := strconv.ParseBool(v); err == nil {
+			{{$defaultVar}} = b
+		}
+			{{- else if eq $param.Type "time.Duration" }}
+		if d, err := time.ParseDuration(v); err == nil {
+			{{$defaultVar}} = d
+		}
+			{{- end }}
+	}
+		{{- end }}
+		{{- end }}
+
 		{{- if .FlagAliases -}}
 			{{- range .FlagAliases }}
 			{{- if eq $param.Type "time.Duration" }}
-	if d, err := time.ParseDuration("{{$default}}"); err == nil {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
-	} else {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
-	}
+	{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$defaultVar}}, "{{$desc}}")
 			{{- else if eq $param.Type "[]string" }}
 			{{- else }}
-	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$defaultVar}}, "{{$desc}}")
 			{{- end }}
 			{{- end -}}
 		{{- else -}}
 		{{- if eq $param.Type "time.Duration" }}
-	if d, err := time.ParseDuration("{{$default}}"); err == nil {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
-	} else {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
-	}
+	{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$defaultVar}}, "{{$desc}}")
 		{{- else if eq $param.Type "[]string" }}
 		{{- else }}
-	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$defaultVar}}, "{{$desc}}")
 		{{- end }}
 		{{- end }}
 		{{- end }}

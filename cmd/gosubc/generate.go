@@ -153,13 +153,17 @@ func (c *RootCmd) NewGenerate() *Generate {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
+	dirDefault := "."
+	set.StringVar(&v.dir, "dir", dirDefault, "Project root directory containing go.mod")
 
-	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
+	manDirDefault := ""
+	set.StringVar(&v.manDir, "man-dir", manDirDefault, "Directory to generate man pages in optional")
 
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
+	parserNameDefault := "commentv1"
+	set.StringVar(&v.parserName, "parser-name", parserNameDefault, "Name of the parser to use")
 
-	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
+	recursiveDefault := true
+	set.BoolVar(&v.recursive, "recursive", recursiveDefault, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {

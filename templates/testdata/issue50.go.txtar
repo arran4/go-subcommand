@@ -107,7 +107,8 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
+	verboseDefault := false
+	c.BoolVar(&c.verbose, "verbose", verboseDefault, "Enable verbose output")
 
 	c.Commands["sub1"] = c.NewSub1()
 	c.Commands["help"] = &InternalCommand{

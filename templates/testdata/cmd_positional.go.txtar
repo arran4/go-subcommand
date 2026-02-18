@@ -148,7 +148,8 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
+	verboseDefault := false
+	set.BoolVar(&v.verbose, "v", verboseDefault, "Enable verbose output")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *MyCmd) error {

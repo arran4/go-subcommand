@@ -129,9 +129,11 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+	dirDefault := "."
+	set.StringVar(&v.dir, "dir", dirDefault, "The project root directory containing go.mod")
 
-	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
+	recursiveDefault := true
+	set.BoolVar(&v.recursive, "recursive", recursiveDefault, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *FormatSourceComments) error {

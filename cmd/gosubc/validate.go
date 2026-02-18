@@ -141,11 +141,14 @@ func (c *RootCmd) NewValidate() *Validate {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+	dirDefault := "."
+	set.StringVar(&v.dir, "dir", dirDefault, "The project root directory containing go.mod")
 
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
+	parserNameDefault := "commentv1"
+	set.StringVar(&v.parserName, "parser-name", parserNameDefault, "Name of the parser to use")
 
-	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
+	recursiveDefault := true
+	set.BoolVar(&v.recursive, "recursive", recursiveDefault, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Validate) error {

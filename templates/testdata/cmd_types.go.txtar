@@ -171,15 +171,19 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
+	var timeoutDefault time.Duration
 	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.timeout, "t", d, "Timeout duration")
+		timeoutDefault = d
 	} else {
-		set.DurationVar(&v.timeout, "t", 0, "Timeout duration")
+		timeoutDefault = 0
 	}
+	set.DurationVar(&v.timeout, "t", timeoutDefault, "Timeout duration")
 
-	set.IntVar(&v.count, "count", 3, "Retry count")
+	countDefault := 3
+	set.IntVar(&v.count, "count", countDefault, "Retry count")
 
-	set.StringVar(&v.config, "config", "config.yaml", "Config file")
+	configDefault := "config.yaml"
+	set.StringVar(&v.config, "config", configDefault, "Config file")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *MyCmd) error {

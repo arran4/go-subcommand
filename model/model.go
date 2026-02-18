@@ -34,6 +34,7 @@ type FunctionParameter struct {
 	Name               string
 	Type               string
 	FlagAliases        []string
+	EnvVars            []string
 	Default            string
 	Description        string
 	IsPositional       bool

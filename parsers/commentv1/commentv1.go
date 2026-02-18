@@ -379,6 +379,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
+							if len(c.EnvVars) > 0 {
+								fp.EnvVars = c.EnvVars
+							}
 							if c.Default != "" {
 								fp.Default = c.Default
 							}
@@ -402,6 +405,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
+							if len(c.EnvVars) > 0 {
+								fp.EnvVars = c.EnvVars
+							}
 							if c.Default != "" {
 								fp.Default = c.Default
 							}
@@ -424,6 +430,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							c := candidates[0]
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
+							}
+							if len(c.EnvVars) > 0 {
+								fp.EnvVars = c.EnvVars
 							}
 							if c.Default != "" {
 								fp.Default = c.Default
@@ -535,10 +544,12 @@ var (
 	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	envRegex          = regexp.MustCompile(`(?:env:\s*)((?:"[^"]*"|[^),]+))`)
 )
 
 type ParsedParam struct {
 	Flags              []string
+	EnvVars            []string
 	Default            string
 	Description        string
 	IsPositional       bool
@@ -682,6 +693,15 @@ func parseParamDetails(text string) ParsedParam {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 	}
 
+	envMatches := envRegex.FindAllStringSubmatch(text, -1)
+	for _, match := range envMatches {
+		val := strings.TrimSpace(match[1])
+		if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") {
+			val = strings.Trim(val, "\"")
+		}
+		p.EnvVars = append(p.EnvVars, val)
+	}
+
 	// Positional arguments: @1, @2, etc.
 	posArgRegex := regexp.MustCompile(`@(\d+)`)
 	posArgMatches := posArgRegex.FindStringSubmatch(text)
@@ -731,6 +751,7 @@ func parseParamDetails(text string) ParsedParam {
 
 	clean := flagRegex.ReplaceAllString(text, "")
 	clean = defaultRegex.ReplaceAllString(clean, "")
+	clean = envRegex.ReplaceAllString(clean, "")
 	clean = posArgRegex.ReplaceAllString(clean, "")
 	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 
