@@ -41,7 +41,11 @@ EOF
 # Assuming gosubc is in the PATH or we build it first.
 # The workflow should ensure gosubc is available.
 echo "Generating code..."
-gosubc generate --dir "$TEMP_DIR"
+if command -v gosubc &> /dev/null; then
+    gosubc generate --dir "$TEMP_DIR"
+else
+    go run ./cmd/gosubc generate --dir "$TEMP_DIR"
+fi
 
 # Tidy dependencies
 echo "Running go mod tidy..."

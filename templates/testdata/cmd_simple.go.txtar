@@ -101,7 +101,24 @@ func (c *MyCmd) Execute(args []string) error {
 				c.Usage()
 				return nil
 			default:
-				return fmt.Errorf("unknown flag: %s", name)
+				if strings.HasPrefix(arg, "--") {
+					return fmt.Errorf("unknown flag: %s", name)
+				}
+				remaining := trimmedName
+				for len(remaining) > 0 {
+					char := string(remaining[0])
+					remaining = remaining[1:]
+					switch char {
+
+					case "v":
+						c.verbose = true
+					case "h":
+						c.Usage()
+						return nil
+					default:
+						return fmt.Errorf("unknown flag: %s", name)
+					}
+				}
 			}
 		}
 	}

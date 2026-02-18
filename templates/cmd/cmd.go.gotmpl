@@ -151,7 +151,108 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				c.Usage()
 				return nil
 			default:
-				return fmt.Errorf("unknown flag: %s", name)
+				if strings.HasPrefix(arg, "--") {
+					return fmt.Errorf("unknown flag: %s", name)
+				}
+				remaining := trimmedName
+				for len(remaining) > 0 {
+					char := string(remaining[0])
+					remaining = remaining[1:]
+					switch char {
+					{{- range .Parameters }}
+					{{- if not .IsPositional }}
+					{{$param := .}}
+					{{- $hasShort := false }}
+					{{- if eq (len .Name) 1 }}{{ $hasShort = true }}{{ end }}
+					{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $hasShort = true }}{{ end }}{{ end }}
+					{{- if $hasShort }}
+						case
+						{{- $first := true }}
+						{{- if eq (len .Name) 1 }}
+							"{{.Name}}"
+							{{- $first = false }}
+						{{- end }}
+						{{- range .FlagAliases }}
+							{{- if and (eq (len .) 1) (ne . $param.Name) }}
+								{{- if not $first }}, {{end}}"{{.}}"
+								{{- $first = false }}
+							{{- end }}
+						{{- end }}:
+						{{- if eq .Type "bool" }}
+						c.{{.Name}} = true
+						{{- else if eq .Type "string" }}
+						if len(remaining) == 0 {
+							if i+1 < len(args) {
+								c.{{.Name}} = args[i+1]
+								i++
+							} else {
+								return fmt.Errorf("flag %s requires a value", char)
+							}
+						} else {
+							if strings.HasPrefix(remaining, "=") {
+								c.{{.Name}} = remaining[1:]
+							} else {
+								c.{{.Name}} = remaining
+							}
+							remaining = ""
+						}
+						{{- else if eq .Type "int" }}
+						var valStr string
+						if len(remaining) == 0 {
+							if i+1 < len(args) {
+								valStr = args[i+1]
+								i++
+							} else {
+								return fmt.Errorf("flag %s requires a value", char)
+							}
+						} else {
+							if strings.HasPrefix(remaining, "=") {
+								valStr = remaining[1:]
+							} else {
+								valStr = remaining
+							}
+							remaining = ""
+						}
+						iv, err := strconv.Atoi(valStr)
+						if err != nil {
+							return fmt.Errorf("invalid integer value for flag %s: %s", char, valStr)
+						}
+						c.{{.Name}} = iv
+						{{- else if eq .Type "time.Duration" }}
+						var valStr string
+						if len(remaining) == 0 {
+							if i+1 < len(args) {
+								valStr = args[i+1]
+								i++
+							} else {
+								return fmt.Errorf("flag %s requires a value", char)
+							}
+						} else {
+							if strings.HasPrefix(remaining, "=") {
+								valStr = remaining[1:]
+							} else {
+								valStr = remaining
+							}
+							remaining = ""
+						}
+						d, err := time.ParseDuration(valStr)
+						if err != nil {
+							return fmt.Errorf("invalid duration value for flag %s: %s", char, valStr)
+						}
+						c.{{.Name}} = d
+						{{- else }}
+						// TODO: Implement parsing for flag type {{.Type}}
+						{{- end }}
+					{{- end }}
+					{{- end }}
+					{{- end }}
+					case "h":
+						c.Usage()
+						return nil
+					default:
+						return fmt.Errorf("unknown flag: %s", name)
+					}
+				}
 			}
 		}{{ if $needsRemainingArgs }} else {
 			remainingArgs = append(remainingArgs, arg)

@@ -147,7 +147,45 @@ func (c *MyCmd) Execute(args []string) error {
 				c.Usage()
 				return nil
 			default:
-				return fmt.Errorf("unknown flag: %s", name)
+				if strings.HasPrefix(arg, "--") {
+					return fmt.Errorf("unknown flag: %s", name)
+				}
+				remaining := trimmedName
+				for len(remaining) > 0 {
+					char := string(remaining[0])
+					remaining = remaining[1:]
+					switch char {
+
+					case "t":
+						var valStr string
+						if len(remaining) == 0 {
+							if i+1 < len(args) {
+								valStr = args[i+1]
+								i++
+							} else {
+								return fmt.Errorf("flag %s requires a value", char)
+							}
+						} else {
+							if strings.HasPrefix(remaining, "=") {
+								valStr = remaining[1:]
+							} else {
+								valStr = remaining
+							}
+							remaining = ""
+						}
+						d, err := time.ParseDuration(valStr)
+						if err != nil {
+							return fmt.Errorf("invalid duration value for flag %s: %s", char, valStr)
+						}
+						c.timeout = d
+
+					case "h":
+						c.Usage()
+						return nil
+					default:
+						return fmt.Errorf("unknown flag: %s", name)
+					}
+				}
 			}
 		}
 	}
