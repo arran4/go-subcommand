@@ -77,6 +77,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(writer, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		if err := generateFile(writer, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
 		if err := generateFile(writer, path.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
@@ -174,6 +177,8 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"slice": func(args ...interface{}) []interface{} {
 			return args
 		},
+		"hasPrefix":  strings.HasPrefix,
+		"trimPrefix": strings.TrimPrefix,
 	})
 
 	var patterns []string

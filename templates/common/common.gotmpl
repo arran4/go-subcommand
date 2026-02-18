@@ -4,10 +4,10 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if eq .Type "time.Duration" }}
+	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "[]int") (eq .Type "[]bool") }}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
@@ -42,6 +42,30 @@
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
 
+		{{- if hasPrefix $param.Type "[]" -}}
+			{{- $elementType := trimPrefix $param.Type "[]" -}}
+			{{- $helperType := "" -}}
+			{{- if eq $elementType "string" -}}
+				{{- $helperType = "StringSlice" -}}
+			{{- else if eq $elementType "int" -}}
+				{{- $helperType = "IntSlice" -}}
+			{{- else if eq $elementType "bool" -}}
+				{{- $helperType = "BoolSlice" -}}
+			{{- else if eq $elementType "time.Duration" -}}
+				{{- $helperType = "DurationSlice" -}}
+			{{- end -}}
+			{{- if ne $helperType "" -}}
+				{{- if .FlagAliases -}}
+					{{- range .FlagAliases }}
+	{{$set}}.Var((*{{$helperType}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+					{{- end -}}
+				{{- else -}}
+	{{$set}}.Var((*{{$helperType}})(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
+				{{- end -}}
+			{{- else -}}
+				// TODO: Unsupported slice type {{ $param.Type }}
+			{{- end -}}
+		{{- else -}}
 		{{- $typeTitle := $param.Type | title -}}
 		{{- if eq $param.Type "time.Duration" -}}
 			{{- $typeTitle = "Duration" -}}
@@ -67,6 +91,7 @@
 	}
 		{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+		{{- end }}
 		{{- end }}
 		{{- end }}
 		{{- end }}

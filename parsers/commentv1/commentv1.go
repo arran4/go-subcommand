@@ -293,6 +293,19 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							} else {
 								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
 							}
+						case *ast.ArrayType:
+							typeName = "[]"
+							if ident, ok := t.Elt.(*ast.Ident); ok {
+								typeName += ident.Name
+							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
+								if ident, ok := sel.X.(*ast.Ident); ok {
+									typeName += fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
+								} else {
+									panic(fmt.Sprintf("Unsupported selector type in array element: %T", sel.X))
+								}
+							} else {
+								panic(fmt.Sprintf("Unsupported array element type: %T", t.Elt))
+							}
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
 						}
