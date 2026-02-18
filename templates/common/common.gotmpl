@@ -36,6 +36,7 @@
 			{{- if eq .Type "string" }}{{ $default = "\"\"" }}
 			{{- else if eq .Type "bool" }}{{ $default = "false" }}
 			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
+			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
 			{{- else }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
@@ -54,6 +55,7 @@
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
+			{{- else if eq $param.Type "[]string" }}
 			{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 			{{- end }}
@@ -65,6 +67,7 @@
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
 	}
+		{{- else if eq $param.Type "[]string" }}
 		{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}
