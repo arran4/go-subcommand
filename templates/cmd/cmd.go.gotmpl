@@ -96,17 +96,32 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- if not .IsPositional }}
 			{{$param := .}}
 			case "{{.Name}}"{{ range $i, $a := .FlagAliases }}{{if ne $a $param.Name}}, "{{$a}}"{{end}}{{ end }}:
-				{{- if eq .Type "bool" }}
+				{{- $type := .Type }}
+				{{- $isPtr := false }}
+				{{- if hasPrefix $type "*" }}
+					{{- $type = trimPrefix $type "*" }}
+					{{- $isPtr = true }}
+				{{- end }}
+				{{- if eq $type "bool" }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
 						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
+					{{- if $isPtr }}
+					c.{{.Name}} = &b
+					{{- else }}
 					c.{{.Name}} = b
+					{{- end }}
 				} else {
+					{{- if $isPtr }}
+					b := true
+					c.{{.Name}} = &b
+					{{- else }}
 					c.{{.Name}} = true
+					{{- end }}
 				}
-				{{- else if eq .Type "string" }}
+				{{- else if eq $type "string" }}
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -115,8 +130,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
+				{{- if $isPtr }}
+				c.{{.Name}} = &value
+				{{- else }}
 				c.{{.Name}} = value
-				{{- else if eq .Type "int" }}
+				{{- end }}
+				{{- else if eq $type "int" }}
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -129,8 +148,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				if err != nil {
 					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
 				}
+				{{- if $isPtr }}
+				c.{{.Name}} = &iv
+				{{- else }}
 				c.{{.Name}} = iv
-				{{- else if eq .Type "time.Duration" }}
+				{{- end }}
+				{{- else if eq $type "time.Duration" }}
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -143,8 +166,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				if err != nil {
 					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
+				{{- if $isPtr }}
+				c.{{.Name}} = &d
+				{{- else }}
 				c.{{.Name}} = d
-				{{- else if eq .Type "[]string" }}
+				{{- end }}
+				{{- else if eq $type "[]string" }}
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -153,7 +180,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
+				{{- if $isPtr }}
+				// TODO: Implement parsing for slice of pointers if needed
+				{{- else }}
 				c.{{.Name}} = append(c.{{.Name}}, value)
+				{{- end }}
 				{{- else }}
 				// TODO: Implement parsing for flag type {{.Type}}
 				{{- end }}

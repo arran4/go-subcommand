@@ -4,10 +4,14 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if eq .Type "time.Duration" }}
+	{{- $type := .Type }}
+	{{- if hasPrefix $type "*" }}
+		{{- $type = trimPrefix $type "*" }}
+	{{- end }}
+	{{- if eq $type "time.Duration" }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") }}
+	{{- if or (eq $type "int") (eq $type "bool") }}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
@@ -28,48 +32,87 @@
 	{{- range $params}}
 		{{- if not .IsPositional }}
 		{{$param := .}}
+		{{- $type := .Type }}
+		{{- $isPtr := false }}
+		{{- if hasPrefix $type "*" }}
+			{{- $type = trimPrefix $type "*" }}
+			{{- $isPtr = true }}
+		{{- end }}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
 
 		{{- $default := .Default -}}
 		{{- if not $default -}}
-			{{- if eq .Type "string" }}{{ $default = "\"\"" }}
-			{{- else if eq .Type "bool" }}{{ $default = "false" }}
-			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
-			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
+			{{- if eq $type "string" }}{{ $default = "\"\"" }}
+			{{- else if eq $type "bool" }}{{ $default = "false" }}
+			{{- else if eq $type "time.Duration" }}{{ $default = "0" }}
+			{{- else if eq $type "[]string" }}{{ $default = "nil" }}
 			{{- else }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
-			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+			{{- if eq $type "string" }}{{ $default = printf "%q" .Default }}
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
 
-		{{- $typeTitle := $param.Type | title -}}
-		{{- if eq $param.Type "time.Duration" -}}
+		{{- $typeTitle := $type | title -}}
+		{{- if eq $type "time.Duration" -}}
 			{{- $typeTitle = "Duration" -}}
 		{{- end -}}
+
+		{{- if $isPtr }}
+			{{- if eq $type "time.Duration" }}
+	var _{{$param.Name}} time.Duration
+			{{- else}}
+	var _{{$param.Name}} {{$type}}
+			{{- end}}
+		{{- end }}
+
 		{{- if .FlagAliases -}}
 			{{- range .FlagAliases }}
-			{{- if eq $param.Type "time.Duration" }}
+			{{- if eq $type "time.Duration" }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
+		{{- if $isPtr }}
+		{{$set}}.DurationVar(&_{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+		{{- end }}
 	} else {
+		{{- if $isPtr }}
+		{{$set}}.DurationVar(&_{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+		{{- end }}
 	}
-			{{- else if eq $param.Type "[]string" }}
+			{{- else if eq $type "[]string" }}
 			{{- else }}
+	{{- if $isPtr }}
+	{{$set}}.{{$typeTitle}}Var(&_{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{- end }}
 			{{- end }}
 			{{- end -}}
 		{{- else -}}
-		{{- if eq $param.Type "time.Duration" }}
+		{{- if eq $type "time.Duration" }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
-	} else {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
-	}
-		{{- else if eq $param.Type "[]string" }}
+		{{- if $isPtr }}
+		{{$set}}.DurationVar(&_{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
 		{{- else }}
+		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
+		{{- end }}
+	} else {
+		{{- if $isPtr }}
+		{{$set}}.DurationVar(&_{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
+		{{- else }}
+		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
+		{{- end }}
+	}
+		{{- else if eq $type "[]string" }}
+		{{- else }}
+	{{- if $isPtr }}
+	{{$set}}.{{$typeTitle}}Var(&_{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+	{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+	{{- end }}
 		{{- end }}
 		{{- end }}
 		{{- end }}
@@ -95,6 +138,12 @@
 
 	{{- range $params }}
 		{{- if .IsPositional }}
+		{{- $type := .Type }}
+		{{- $isPtr := false }}
+		{{- if hasPrefix $type "*" }}
+			{{- $type = trimPrefix $type "*" }}
+			{{- $isPtr = true }}
+		{{- end }}
 			{{- if .IsVarArg }}
 	// Handle vararg {{.Name}}
 	{
@@ -113,9 +162,9 @@
 			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
-		{{- if eq .Type "string" }}
+		{{- if eq $type "string" }}
 		c.{{.Name}} = varArgs
-		{{- else if eq .Type "int" }}
+		{{- else if eq $type "int" }}
 		for _, arg := range varArgs {
 			i, err := strconv.Atoi(arg)
 			if err != nil {
@@ -133,26 +182,42 @@
 		argIndex := {{.PositionalArgIndex | add -1}}
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
-			{{- if eq .Type "string" }}
+			{{- if eq $type "string" }}
+			{{- if $isPtr }}
+			c.{{.Name}} = &argVal
+			{{- else }}
 			c.{{.Name}} = argVal
-			{{- else if eq .Type "int" }}
+			{{- end }}
+			{{- else if eq $type "int" }}
 			i, err := strconv.Atoi(argVal)
 			if err != nil {
 				return fmt.Errorf("invalid integer argument for {{.Name}} at index %d: %s", argIndex, argVal)
 			}
+			{{- if $isPtr }}
+			c.{{.Name}} = &i
+			{{- else }}
 			c.{{.Name}} = i
-			{{- else if eq .Type "bool" }}
+			{{- end }}
+			{{- else if eq $type "bool" }}
 			b, err := strconv.ParseBool(argVal)
 			if err != nil {
 				return fmt.Errorf("invalid boolean argument for {{.Name}} at index %d: %s", argIndex, argVal)
 			}
+			{{- if $isPtr }}
+			c.{{.Name}} = &b
+			{{- else }}
 			c.{{.Name}} = b
-			{{- else if eq .Type "time.Duration" }}
+			{{- end }}
+			{{- else if eq $type "time.Duration" }}
 			d, err := time.ParseDuration(argVal)
 			if err != nil {
 				return fmt.Errorf("invalid duration argument for {{.Name}} at index %d: %s", argIndex, argVal)
 			}
+			{{- if $isPtr }}
+			c.{{.Name}} = &d
+			{{- else }}
 			c.{{.Name}} = d
+			{{- end }}
 			{{- else }}
 			// TODO: Implement parsing for positional type {{.Type}}
 			{{- end }}

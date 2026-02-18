@@ -202,6 +202,8 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"slice": func(args ...interface{}) []interface{} {
 			return args
 		},
+		"hasPrefix":  strings.HasPrefix,
+		"trimPrefix": strings.TrimPrefix,
 	})
 
 	var patterns []string
