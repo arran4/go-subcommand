@@ -65,7 +65,7 @@ func (c *MyCmd) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		arg := args[i]
 		if arg == "--" {
 			break
@@ -125,11 +125,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slicesContains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil
@@ -138,11 +136,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slicesContains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil
