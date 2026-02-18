@@ -50,7 +50,7 @@ func TestIntegration_Txtar(t *testing.T) {
 			// Generate code
 			writer := &OSFileWriter{}
 			// Use os.DirFS to provide the FS rooted at tempDir
-			if err := GenerateWithFS(os.DirFS(tempDir), writer, tempDir, "", "commentv1"); err != nil {
+			if err := GenerateWithFS(os.DirFS(tempDir), writer, tempDir, "", "commentv1", nil); err != nil {
 				t.Fatalf("GenerateWithFS failed: %v", err)
 			}
 
