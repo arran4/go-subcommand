@@ -29,7 +29,7 @@ Subcommands:
     usage        Print this usage message
 
 Flags:
-    -f              Force action (default: false)
+    -f              (default: false)   Force action
 
 Positional Arguments:
     file       Target file

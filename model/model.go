@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"go/token"
 	"strings"
 )
@@ -67,6 +68,16 @@ func (p *FunctionParameter) FlagString() string {
 	return flags + typeStr
 }
 
+func (p *FunctionParameter) DefaultString() string {
+	if p.Default == "" {
+		return ""
+	}
+	if p.Type == "string" && !strings.HasPrefix(p.Default, "\"") {
+		return fmt.Sprintf("(default: %q)", p.Default)
+	}
+	return fmt.Sprintf("(default: %s)", p.Default)
+}
+
 type SubCommand struct {
 	*Command
 	Parent                 *SubCommand
@@ -113,6 +124,17 @@ func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.Parameters {
 		l := len(p.FlagString())
+		if l > max {
+			max = l
+		}
+	}
+	return max
+}
+
+func (sc *SubCommand) MaxDefaultLength() int {
+	max := 0
+	for _, p := range sc.Parameters {
+		l := len(p.DefaultString())
 		if l > max {
 			max = l
 		}
