@@ -2,6 +2,7 @@ package go_subcommand
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -852,5 +853,73 @@ func MyCmd() error { return nil }
 	}
 	if !strings.Contains(string(errorsContent), "var ErrPrintHelp = errors.New(\"print help\")") {
 		t.Errorf("errors.go should define ErrPrintHelp")
+	}
+}
+
+func TestIssue12_PointerSupport(t *testing.T) {
+	src := `package main
+
+import "time"
+
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+// Flags:
+//
+//	name: --name (default: "default") Name
+func MyCmd(name *string, count *int, verbose *bool, duration *time.Duration) {}
+`
+	fs := setupProject(t, src)
+
+	// No panic expected
+	writer := runGenerateInMemory(t, fs)
+
+	// Check flag_helpers.go exists
+	if _, ok := writer.Files["cmd/app/flag_helpers.go"]; !ok {
+		t.Error("cmd/app/flag_helpers.go not generated")
+	}
+
+	// Check MyCmd implementation
+	cmdPath := "cmd/app/mycmd.go"
+	content, ok := writer.Files[cmdPath]
+	if !ok {
+		t.Fatalf("%s not generated", cmdPath)
+	}
+	code := string(content)
+
+	// Check pointer fields in struct
+	if matched, _ := regexp.MatchString(`name\s+\*string`, code); !matched {
+		t.Errorf("Struct field 'name' should be *string. Got content:\n%s", code)
+	}
+	if matched, _ := regexp.MatchString(`count\s+\*int`, code); !matched {
+		t.Errorf("Struct field 'count' should be *int")
+	}
+	if matched, _ := regexp.MatchString(`duration\s+\*time.Duration`, code); !matched {
+		t.Errorf("Struct field 'duration' should be *time.Duration")
+	}
+
+	// Check manual parsing
+	if !strings.Contains(code, "c.name = &val") {
+		t.Error("Manual parsing should assign address to c.name")
+	}
+	if !strings.Contains(code, "c.count = &iv") {
+		t.Error("Manual parsing should assign address to c.count")
+	}
+	if !strings.Contains(code, "c.duration = &d") {
+		t.Error("Manual parsing should assign address to c.duration")
+	}
+
+	// Check usage generation (flag_definitions usage)
+	if !strings.Contains(code, "StringPtrValue{Target: &v.name}") {
+		t.Error("NewMyCmd should use StringPtrValue for name flag")
+	}
+	if !strings.Contains(code, "IntPtrValue{Target: &v.count}") {
+		t.Error("NewMyCmd should use IntPtrValue for count flag")
+	}
+	if !strings.Contains(code, "DurationPtrValue{Target: &v.duration}") {
+		t.Error("NewMyCmd should use DurationPtrValue for duration flag")
+	}
+
+	// Check default value initialization
+	if !strings.Contains(code, `val := "default"`) {
+		t.Error("Default value for name should be initialized")
 	}
 }

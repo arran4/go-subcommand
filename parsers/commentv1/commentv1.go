@@ -293,6 +293,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							} else {
 								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
 							}
+						case *ast.StarExpr:
+							if ident, ok := t.X.(*ast.Ident); ok {
+								typeName = "*" + ident.Name
+							} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
+								if ident, ok := sel.X.(*ast.Ident); ok {
+									typeName = fmt.Sprintf("*%s.%s", ident.Name, sel.Sel.Name)
+								} else {
+									panic(fmt.Sprintf("Unsupported selector type in star expr: %T", sel.X))
+								}
+							} else {
+								panic(fmt.Sprintf("Unsupported type in star expr: %T", t.X))
+							}
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
 						}
