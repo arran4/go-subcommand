@@ -8,8 +8,10 @@ import (
 	"os"
 	"strings"
 {{- template "common_imports" (slice .Parameters true) }}
+{{- if .ImportPath}}
 
 	"{{.ImportPath}}"
+{{- end}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
 	"{{.PackagePath}}/cmd"

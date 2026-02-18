@@ -854,3 +854,46 @@ func MyCmd() error { return nil }
 		t.Errorf("errors.go should define ErrPrintHelp")
 	}
 }
+
+func TestIssue221_ImportFormatting(t *testing.T) {
+	src := `package main
+
+// Child is a subcommand ` + "`app nested child`" + `
+func Child() {}
+`
+	fs := fstest.MapFS{
+		"go.mod":  &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.25\n")},
+		"main.go": &fstest.MapFile{Data: []byte(src)},
+	}
+
+	writer := NewMockWriter()
+	// Generate code
+	if err := GenerateWithFS(fs, writer, ".", "", "commentv1"); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	// Check cmd/app/nested.go (the synthetic command)
+	nestedPath := "cmd/app/nested.go"
+	content, ok := writer.Files[nestedPath]
+	if !ok {
+		t.Fatalf("File not found: %s", nestedPath)
+	}
+	nestedCode := string(content)
+
+	t.Logf("Generated nested.go:\n%s", nestedCode)
+
+	// Issue 221: "If there is no import needed for a subcommand then the import is not formatted right"
+	// The diff shows removal of blank line.
+	// But generated code also contains invalid empty import `""` for synthetic commands.
+
+	if strings.Contains(nestedCode, `""`) {
+		t.Errorf("Issue 221: Generated code contains empty import `\"\"`")
+	}
+
+	// Also check for trailing blank line in import block
+	// We expect import block to end with `strings"\n)` or `strings")` (if formatted by gofmt)
+	// But definitely NOT `\n\n)`
+	if strings.Contains(nestedCode, "\n\n)") {
+		t.Errorf("Issue 221: Found empty line before closing parenthesis in import block")
+	}
+}
