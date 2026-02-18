@@ -13,38 +13,36 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
-var _ Cmd = (*Generate)(nil)
+var _ Cmd = (*PrGenerate)(nil)
 
-type Generate struct {
+type PrGenerate struct {
 	*RootCmd
 	Flags         *flag.FlagSet
 	dir           string
-	manDir        string
-	parserName    string
 	SubCommands   map[string]Cmd
-	CommandAction func(c *Generate) error
+	CommandAction func(c *PrGenerate) error
 }
 
-type UsageDataGenerate struct {
-	*Generate
+type UsageDataPrGenerate struct {
+	*PrGenerate
 	Recursive bool
 }
 
-func (c *Generate) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, false})
+func (c *PrGenerate) Usage() {
+	err := executeUsage(os.Stderr, "pr-generate_usage.txt", UsageDataPrGenerate{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Generate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
+func (c *PrGenerate) UsageRecursive() {
+	err := executeUsage(os.Stderr, "pr-generate_usage.txt", UsageDataPrGenerate{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Generate) Execute(args []string) error {
+func (c *PrGenerate) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -78,28 +76,6 @@ func (c *Generate) Execute(args []string) error {
 					}
 				}
 				c.dir = value
-
-			case "manDir", "man-dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.manDir = value
-
-			case "parserName", "parser-name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.parserName = value
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -111,7 +87,7 @@ func (c *Generate) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("generate failed: %w", err)
+			return fmt.Errorf("pr-generate failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -120,24 +96,20 @@ func (c *Generate) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewGenerate() *Generate {
-	set := flag.NewFlagSet("generate", flag.ContinueOnError)
-	v := &Generate{
+func (c *RootCmd) NewPrGenerate() *PrGenerate {
+	set := flag.NewFlagSet("pr-generate", flag.ContinueOnError)
+	v := &PrGenerate{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
-
-	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
-
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
+	set.StringVar(&v.dir, "dir", ".", "Project root directory")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Generate) error {
+	v.CommandAction = func(c *PrGenerate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName)
+		err := go_subcommand.PrGenerate(c.dir)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -150,7 +122,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 			if e, ok := err.(*cmd.ErrExitCode); ok {
 				return e
 			}
-			return fmt.Errorf("generate failed: %w", err)
+			return fmt.Errorf("pr-generate failed: %w", err)
 		}
 		return nil
 	}

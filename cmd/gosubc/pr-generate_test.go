@@ -7,16 +7,16 @@ import (
 	"testing"
 )
 
-func TestFormat_Execute(t *testing.T) {
+func TestPrGenerate_Execute(t *testing.T) {
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]Cmd),
 	}
-	cmd := parent.NewFormat()
+	cmd := parent.NewPrGenerate()
 
 	called := false
-	cmd.CommandAction = func(c *Format) error {
+	cmd.CommandAction = func(c *PrGenerate) error {
 		called = true
 		return nil
 	}

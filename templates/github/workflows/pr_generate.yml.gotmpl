@@ -1,0 +1,48 @@
+name: Generate PR
+
+on:
+  push
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verify-generation:
+    name: Verify Generated Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install gosubc
+        run: go install github.com/arran4/go-subcommand/cmd/gosubc@latest
+
+      - name: Run generation
+        run: gosubc generate
+
+      - name: Check for changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected"
+            git diff
+          else
+            echo "No changes detected"
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
+          commit-message: "chore: update generated code"
+          title: "chore: update generated code"
+          body: "This PR updates the generated code to match the current generator logic."
+          branch: update-generated-code-${{ "{{" }} github.ref_name {{ "}}" }}
+          delete-branch: true
