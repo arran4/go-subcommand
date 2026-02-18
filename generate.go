@@ -46,12 +46,17 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //   dir:        --dir         (default: ".")         Project root directory containing go.mod
 //   manDir:     --man-dir                            Directory to generate man pages in optional
 //   parserName: --parser-name (default: "commentv1") Name of the parser to use
-func Generate(dir string, manDir string, parserName string) error {
-	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName)
+//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
+//   recursive:  --recursive   (default: true)        Search recursively
+func Generate(dir string, manDir string, parserName string, paths []string, recursive bool) error {
+	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName, &parsers.ParseOptions{
+		SearchPaths: paths,
+		Recursive:   recursive,
+	})
 }
 
 // GenerateWithFS generates code using provided FS and Writer
-func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string) error {
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions) error {
 	if err := initTemplates(); err != nil {
 		return err
 	}
@@ -62,7 +67,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	// inputFS is already rooted at the source directory, so we parse from "."
-	dataModel, err := p.Parse(inputFS, ".")
+	dataModel, err := p.Parse(inputFS, ".", options)
 	if err != nil {
 		return err
 	}
@@ -141,7 +146,7 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 }
 
 // Helper to bridge legacy parse calls
-func parse(dir string, parserName string) (*model.DataModel, error) {
+func parse(dir string, parserName string, options *parsers.ParseOptions) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -149,7 +154,7 @@ func parse(dir string, parserName string) (*model.DataModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p.Parse(os.DirFS(dir), ".")
+	return p.Parse(os.DirFS(dir), ".", options)
 }
 func initTemplates() error {
 	var err error

@@ -42,7 +42,7 @@ func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
 	writer := NewMockWriter()
 	// We use a dummy dir name like "." or "/app"
-	if err := GenerateWithFS(inputFS, writer, ".", "", "commentv1"); err != nil {
+	if err := GenerateWithFS(inputFS, writer, ".", "", "commentv1", nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	return writer
@@ -57,7 +57,7 @@ func ListHeads() {}
 	fs := setupProject(t, src)
 	writer := NewMockWriter()
 
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1")
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil)
 
 	if err != nil {
 		// This test verifies that the issue is still present (OPEN).
