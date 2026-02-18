@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 {{- template "common_imports" (slice .Parameters false) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -22,6 +23,26 @@ import (
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
+}
+
+type LazyCommand struct {
+	Init func() Cmd
+	cmd  Cmd
+	once sync.Once
+}
+
+func (c *LazyCommand) Execute(args []string) error {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	return c.cmd.Execute(args)
+}
+
+func (c *LazyCommand) Usage() {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	c.cmd.Usage()
 }
 
 type InternalCommand struct {
@@ -131,7 +152,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		return nil
 	}
 	{{end}}
-	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
+	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = &LazyCommand{Init: func() Cmd { return c.New{{.SubCommandStructName}}() }}
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

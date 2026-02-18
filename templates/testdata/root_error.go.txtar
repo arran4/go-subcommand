@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"errors"
 	"example.com/myproject/cmd"
@@ -32,6 +33,26 @@ import (
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
+}
+
+type LazyCommand struct {
+	Init func() Cmd
+	cmd  Cmd
+	once sync.Once
+}
+
+func (c *LazyCommand) Execute(args []string) error {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	return c.cmd.Execute(args)
+}
+
+func (c *LazyCommand) Usage() {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	c.cmd.Usage()
 }
 
 type InternalCommand struct {

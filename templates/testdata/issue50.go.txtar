@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"/cmd/mycmd/templates"
 )
@@ -36,6 +37,26 @@ import (
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
+}
+
+type LazyCommand struct {
+	Init func() Cmd
+	cmd  Cmd
+	once sync.Once
+}
+
+func (c *LazyCommand) Execute(args []string) error {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	return c.cmd.Execute(args)
+}
+
+func (c *LazyCommand) Usage() {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	c.cmd.Usage()
 }
 
 type InternalCommand struct {
@@ -109,7 +130,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
 
-	c.Commands["sub1"] = c.NewSub1()
+	c.Commands["sub1"] = &LazyCommand{Init: func() Cmd { return c.NewSub1() }}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {
