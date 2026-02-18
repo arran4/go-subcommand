@@ -13,14 +13,13 @@ type DataModel struct {
 
 type Command struct {
 	*DataModel
-	MainCmdName        string
-	SubCommands        []*SubCommand
-	PackagePath        string
-	ImportPath         string
-	CommandPackageName string
-	Description        string
-	ExtendedHelp       string
-	FunctionName       string
+	MainCmdName    string
+	SubCommands    []*SubCommand
+	PackagePath    string
+	ImportPath     string
+	Description    string
+	ExtendedHelp   string
+	FunctionName   string
 	DefinitionFile string
 	DocStart       token.Pos
 	DocEnd         token.Pos

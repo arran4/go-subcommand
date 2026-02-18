@@ -44,9 +44,8 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
-	FunctionName       string
-	CommandPackageName string
-	DefinitionFile     string
+	FunctionName   string
+	DefinitionFile string
 	DocStart       token.Pos
 	DocEnd         token.Pos
 	Parameters     []*model.FunctionParameter
@@ -89,10 +88,10 @@ type CommentParser struct{}
 // ParseGoFiles parses the Go files in the provided filesystem to build the command model.
 // It expects a go.mod file at the root of the filesystem (or root directory).
 func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
-	return (&CommentParser{}).Parse(fsys, root, nil)
+	return (&CommentParser{}).Parse(fsys, root)
 }
 
-func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOptions) (*model.DataModel, error) {
+func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error) {
 	fset := token.NewFileSet()
 
 	// Read go.mod from FS
@@ -108,70 +107,53 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		PackagePath: modPath,
 	}
 
-	searchPaths := []string{root}
-	recursive := true
-	if options != nil {
-		if len(options.SearchPaths) > 0 {
-			searchPaths = options.SearchPaths
+	// Walk the FS
+	err = fs.WalkDir(fsys, root, func(pathStr string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		recursive = options.Recursive
-	}
-
-	for _, startDir := range searchPaths {
-		if startDir == "" {
-			startDir = "."
-		}
-		// Walk the FS
-		err = fs.WalkDir(fsys, startDir, func(pathStr string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
+		if d.IsDir() {
+			if d.Name() == "examples" || d.Name() == "testdata" || d.Name() == ".git" {
+				return fs.SkipDir
 			}
-			if d.IsDir() {
-				if d.Name() == "examples" || d.Name() == "testdata" || d.Name() == ".git" {
+			// Skip directories that are submodules (have go.mod, unless it's the root)
+			if pathStr != root {
+				if _, err := fs.Stat(fsys, filepath.Join(pathStr, "go.mod")); err == nil {
 					return fs.SkipDir
 				}
-				// Skip directories that are submodules (have go.mod, unless it's the root)
-				if pathStr != root {
-					if _, err := fs.Stat(fsys, filepath.Join(pathStr, "go.mod")); err == nil {
-						return fs.SkipDir
-					}
-				}
-				if !recursive && pathStr != startDir {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(pathStr, ".go") {
-				return nil
-			}
-
-			// Calculate import path
-			rel, err := filepath.Rel(root, pathStr)
-			if err != nil {
-				rel = pathStr // Fallback
-			}
-			dir := filepath.Dir(rel)
-			if dir == "." {
-				dir = ""
-			}
-			importPath := path.Join(modPath, dir)
-
-			f, err := fsys.Open(pathStr)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = f.Close()
-			}()
-
-			if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
-				return err
 			}
 			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
+		if !strings.HasSuffix(pathStr, ".go") {
+			return nil
+		}
+
+		// Calculate import path
+		rel, err := filepath.Rel(root, pathStr)
+		if err != nil {
+			rel = pathStr // Fallback
+		}
+		dir := filepath.Dir(rel)
+		if dir == "." {
+			dir = ""
+		}
+		importPath := path.Join(modPath, dir)
+
+		f, err := fsys.Open(pathStr)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+
+		if err := ParseGoFile(fset, pathStr, importPath, f, rootCommands); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	d := &model.DataModel{
@@ -188,20 +170,19 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &model.Command{
-			DataModel:          d,
-			MainCmdName:        cmdName,
-			PackagePath:        rootCommands.PackagePath,
-			ImportPath:         rootCommands.PackagePath, // Root command logic usually in root package
-			FunctionName:       cmdTree.FunctionName,
-			CommandPackageName: cmdTree.CommandPackageName,
-			DefinitionFile:     cmdTree.DefinitionFile,
-			DocStart:           cmdTree.DocStart,
-			DocEnd:             cmdTree.DocEnd,
-			Parameters:         cmdTree.Parameters,
-			ReturnsError:       cmdTree.ReturnsError,
-			ReturnCount:        cmdTree.ReturnCount,
-			Description:        cmdTree.Description,
-			ExtendedHelp:       cmdTree.ExtendedHelp,
+			DataModel:      d,
+			MainCmdName:    cmdName,
+			PackagePath:    rootCommands.PackagePath,
+			ImportPath:     rootCommands.PackagePath, // Root command logic usually in root package
+			FunctionName:   cmdTree.FunctionName,
+			DefinitionFile: cmdTree.DefinitionFile,
+			DocStart:       cmdTree.DocStart,
+			DocEnd:         cmdTree.DocEnd,
+			Parameters:     cmdTree.Parameters,
+			ReturnsError:   cmdTree.ReturnsError,
+			ReturnCount:    cmdTree.ReturnCount,
+			Description:    cmdTree.Description,
+			ExtendedHelp:   cmdTree.ExtendedHelp,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -328,18 +309,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								}
 							} else {
 								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
-							}
-						case *ast.ArrayType:
-							if ident, ok := t.Elt.(*ast.Ident); ok {
-								typeName = "[]" + ident.Name
-							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-								if ident, ok := sel.X.(*ast.Ident); ok {
-									typeName = fmt.Sprintf("[]%s.%s", ident.Name, sel.Sel.Name)
-								} else {
-									panic(fmt.Sprintf("Unsupported selector type in array: %T", sel.X))
-								}
-							} else {
-								panic(fmt.Sprintf("Unsupported type in array: %T", t.Elt))
 							}
 						default:
 							panic(fmt.Sprintf("Unsupported type: %T", t))
@@ -544,7 +513,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					cmdTree.Commands[cmdName] = ct
 				}
 				ct.FunctionName = s.Name.Name
-				ct.CommandPackageName = f.Name.Name
 				ct.DefinitionFile = filename
 				ct.DocStart = s.Doc.Pos()
 				ct.DocEnd = s.Doc.End()

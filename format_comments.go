@@ -22,39 +22,24 @@ import (
 // FormatSourceComments is a subcommand `gosubc format-source-comments` formats source comments to match gofmt style
 //
 // Flags:
-//   dir:        --dir         (default: ".")         The project root directory containing go.mod
-//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
-//   recursive:  --recursive   (default: true)        Search recursively
-func FormatSourceComments(dir string, paths []string, recursive bool) error {
+//   dir: --dir (default: ".") The project root directory containing go.mod
+func FormatSourceComments(dir string) error {
 	fset := token.NewFileSet()
-
-	searchPaths := []string{dir}
-	if len(paths) > 0 {
-		searchPaths = make([]string, len(paths))
-		for i, p := range paths {
-			searchPaths[i] = filepath.Join(dir, p)
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
-	}
+		if info.IsDir() {
+			if info.Name() == "examples" || info.Name() == "testdata" || info.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
 
-	for _, startDir := range searchPaths {
-		err := filepath.Walk(startDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				if info.Name() == "examples" || info.Name() == "testdata" || info.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				if !recursive && path != startDir {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(path, ".go") {
-				return nil
-			}
-
-			// Read file content
+		// Read file content
 		src, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -111,14 +96,6 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 						} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
 							if ident, ok := sel.X.(*ast.Ident); ok {
 								typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
-							}
-						}
-					case *ast.ArrayType:
-						if ident, ok := t.Elt.(*ast.Ident); ok {
-							typeName = "[]" + ident.Name
-						} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-							if ident, ok := sel.X.(*ast.Ident); ok {
-								typeName = fmt.Sprintf("[]%s.%s", ident.Name, sel.Sel.Name)
 							}
 						}
 					}
@@ -324,11 +301,6 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	}
-	return nil
 }
 func stripPositions(node ast.Node) {
 	ast.Inspect(node, func(n ast.Node) bool {

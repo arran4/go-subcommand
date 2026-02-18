@@ -11,9 +11,7 @@ import (
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
 	{{- if .FunctionName}}
-	{{- if .ImportPath}}
 	"{{.ImportPath}}"
-	{{- end}}
 	{{- if .ReturnsError}}
 	"errors"
 	"{{.PackagePath}}/cmd"
@@ -109,9 +107,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.CommandAction = func(c *RootCmd) error {
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
-		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- else }}
-    err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+    err := {{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
     if err != nil {
       if errors.Is(err, cmd.ErrPrintHelp) {
@@ -128,7 +126,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
 		{{else}}
-		{{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{if ne .PackageName "main"}}{{.PackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{end -}}
 		return nil
 	}

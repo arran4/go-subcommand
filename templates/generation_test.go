@@ -75,7 +75,7 @@ func TestGoTemplates(t *testing.T) {
 
 			var data interface{}
 
-			if templateName == "cmd.go.gotmpl" || templateName == "cmd_test.go.gotmpl" {
+			if templateName == "cmd.go.gotmpl" {
 				var sc model.SubCommand
 				if err := json.Unmarshal(inputData, &sc); err != nil {
 					t.Fatalf("failed to unmarshal input.json into SubCommand: %v", err)

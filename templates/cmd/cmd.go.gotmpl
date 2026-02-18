@@ -8,10 +8,8 @@ import (
 	"os"
 	"strings"
 {{- template "common_imports" (slice .Parameters true) }}
-{{- if .ImportPath}}
 
 	"{{.ImportPath}}"
-{{- end}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
 	"{{.PackagePath}}/cmd"
@@ -144,16 +142,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
 				c.{{.Name}} = d
-				{{- else if eq .Type "[]string" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.{{.Name}} = append(c.{{.Name}}, value)
 				{{- else }}
 				// TODO: Implement parsing for flag type {{.Type}}
 				{{- end }}

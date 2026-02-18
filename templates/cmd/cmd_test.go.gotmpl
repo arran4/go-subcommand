@@ -63,17 +63,6 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 			args = append(args, "1s")
 			{{- end}}
 		{{- end}}
-	{{- else}}
-		args = append(args, "--{{.Name}}")
-		{{- if ne .Type "bool"}}
-			{{- if eq .Type "string"}}
-			args = append(args, "test")
-			{{- else if eq .Type "int"}}
-			args = append(args, "1")
-			{{- else if eq .Type "time.Duration"}}
-			args = append(args, "1s")
-			{{- end}}
-		{{- end}}
 	{{- end}}
 	{{- end}}
 
@@ -84,64 +73,4 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	if !called {
 		t.Error("CommandAction was not called")
 	}
-
-	{{range .Parameters}}
-	{{- $param := . }}
-	{{- if .IsPositional}}
-		{{- if .IsVarArg}}
-			{{- if gt .VarArgMin 0}}
-				if len(cmd.{{.Name}}) != {{.VarArgMin}} {
-					t.Errorf("Expected {{.Name}} to have length {{.VarArgMin}}, got %d", len(cmd.{{.Name}}))
-				}
-				{{- range $i := until .VarArgMin}}
-					{{- if eq $param.Type "string"}}
-					if cmd.{{$param.Name}}[{{$i}}] != "test" {
-						t.Errorf("Expected {{$param.Name}}[%d] to be 'test', got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
-					}
-					{{- else if eq $param.Type "int"}}
-					if cmd.{{$param.Name}}[{{$i}}] != 1 {
-						t.Errorf("Expected {{$param.Name}}[%d] to be 1, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
-					}
-					{{- end}}
-				{{- end}}
-			{{- end}}
-		{{- else}}
-			{{- if eq .Type "string"}}
-			if cmd.{{.Name}} != "test" {
-				t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "int"}}
-			if cmd.{{.Name}} != 1 {
-				t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "bool"}}
-			if cmd.{{.Name}} != true {
-				t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "time.Duration"}}
-			if cmd.{{.Name}} != 1 * time.Second {
-				t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
-			}
-			{{- end}}
-		{{- end}}
-	{{- else}}
-		{{- if eq .Type "string"}}
-		if cmd.{{.Name}} != "test" {
-			t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "int"}}
-		if cmd.{{.Name}} != 1 {
-			t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "bool"}}
-		if cmd.{{.Name}} != true {
-			t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "time.Duration"}}
-		if cmd.{{.Name}} != 1 * time.Second {
-			t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
-		}
-		{{- end}}
-	{{- end}}
-	{{- end}}
 }
