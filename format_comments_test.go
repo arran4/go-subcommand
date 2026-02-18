@@ -45,7 +45,7 @@ func TestFormatSourceComments(t *testing.T) {
 		t.Fatal("input.go or output.go not found in txtar")
 	}
 
-	if err := FormatSourceComments(tempDir); err != nil {
+	if err := FormatSourceComments(tempDir, nil, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +84,7 @@ func MyCmd(verbose bool) {}
 		t.Fatal(err)
 	}
 
-	if err := FormatSourceComments(tempDir); err != nil {
+	if err := FormatSourceComments(tempDir, nil, true); err != nil {
 		t.Fatal(err)
 	}
 

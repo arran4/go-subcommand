@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	"fmt"
+
+	"github.com/arran4/go-subcommand/parsers"
 )
 
 // Validate is a subcommand `gosubc validate` validates the subcommand code
@@ -9,8 +11,13 @@ import (
 // Flags:
 //   dir:        --dir         (default: ".")         The project root directory containing go.mod
 //   parserName: --parser-name (default: "commentv1") Name of the parser to use
-func Validate(dir string, parserName string) error {
-	_, err := parse(dir, parserName)
+//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
+//   recursive:  --recursive   (default: true)        Search recursively
+func Validate(dir string, parserName string, paths []string, recursive bool) error {
+	_, err := parse(dir, parserName, &parsers.ParseOptions{
+		SearchPaths: paths,
+		Recursive:   recursive,
+	})
 	if err != nil {
 		return err
 	}
@@ -23,8 +30,13 @@ func Validate(dir string, parserName string) error {
 // Flags:
 //   dir:        --dir         (default: ".")         The project root directory containing go.mod
 //   parserName: --parser-name (default: "commentv1") Name of the parser to use
-func List(dir string, parserName string) error {
-	dataModel, err := parse(dir, parserName)
+//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
+//   recursive:  --recursive   (default: true)        Search recursively
+func List(dir string, parserName string, paths []string, recursive bool) error {
+	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
+		SearchPaths: paths,
+		Recursive:   recursive,
+	})
 	if err != nil {
 		return err
 	}
