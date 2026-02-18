@@ -46,6 +46,7 @@ type CommandTree struct {
 	*SubCommandTree
 	FunctionName       string
 	CommandPackageName string
+	ImportPath         string
 	DefinitionFile     string
 	DocStart       token.Pos
 	DocEnd         token.Pos
@@ -191,7 +192,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			DataModel:          d,
 			MainCmdName:        cmdName,
 			PackagePath:        rootCommands.PackagePath,
-			ImportPath:         rootCommands.PackagePath, // Root command logic usually in root package
+			ImportPath:         cmdTree.ImportPath,
 			FunctionName:       cmdTree.FunctionName,
 			CommandPackageName: cmdTree.CommandPackageName,
 			DefinitionFile:     cmdTree.DefinitionFile,
@@ -501,6 +502,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				}
 				ct.FunctionName = s.Name.Name
 				ct.CommandPackageName = f.Name.Name
+				ct.ImportPath = importPath
 				ct.DefinitionFile = filename
 				ct.DocStart = s.Doc.Pos()
 				ct.DocEnd = s.Doc.End()
