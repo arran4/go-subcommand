@@ -8,7 +8,7 @@
 	{{- $hasDuration = true }}
 	{{- end }}
 	{{- if or (eq .Type "int") (eq .Type "bool") }}
-		{{- if or .IsPositional $needStrconvForFlags }}
+		{{- if or .IsPositional $needStrconvForFlags .EnvVar }}
 		{{- $hasStrconv = true }}
 		{{- end }}
 	{{- end }}
@@ -25,10 +25,21 @@
 {{- $set := index . 0 -}}
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
+{{- $parentStructName := "" -}}
+{{- if gt (len .) 3 }}{{ $parentStructName = index . 3 }}{{ end -}}
+{{- $parentObj := false -}}
+{{- if gt (len .) 4 }}{{ $parentObj = index . 4 }}{{ end -}}
 	{{- range $params}}
 		{{- if not .IsPositional }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
+		{{- if and .FromParent $parentObj (not $desc) }}
+			{{- range $parentObj.Parameters }}
+				{{- if eq .Name $param.Name }}
+					{{- $desc = .Description }}
+				{{- end }}
+			{{- end }}
+		{{- end }}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
 
 		{{- $default := .Default -}}
@@ -42,6 +53,37 @@
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
+
+		{{- if and .FromParent $parentStructName }}
+			{{- $default = printf "%s.%s.%s" $struct $parentStructName .Name }}
+		{{- end }}
+
+		{{- if .EnvVar }}
+			{{- $fallback := $default }}
+			{{- if .EnvVarFallback }}
+				{{- if eq .Type "string" }}{{ $fallback = printf "%q" .EnvVarFallback }}
+				{{- else }}{{ $fallback = .EnvVarFallback }}{{ end }}
+			{{- end }}
+	var default{{.Name}} {{.Type}} = {{$fallback}}
+	if v := os.Getenv("{{.EnvVar}}"); v != "" {
+		{{- if eq .Type "string" }}
+		default{{.Name}} = v
+		{{- else if eq .Type "bool" }}
+		if b, err := strconv.ParseBool(v); err == nil {
+			default{{.Name}} = b
+		}
+		{{- else if eq .Type "int" }}
+		if i, err := strconv.Atoi(v); err == nil {
+			default{{.Name}} = i
+		}
+		{{- else if eq .Type "time.Duration" }}
+		if d, err := time.ParseDuration(v); err == nil {
+			default{{.Name}} = d
+		}
+		{{- end }}
+	}
+			{{- $default = printf "default%s" .Name }}
+		{{- end }}
 
 		{{- $typeTitle := $param.Type | title -}}
 		{{- if eq $param.Type "time.Duration" -}}

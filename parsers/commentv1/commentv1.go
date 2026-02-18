@@ -394,6 +394,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
 							}
+							if c.FromParent {
+								fp.FromParent = true
+							}
+							if c.EnvVar != "" {
+								fp.EnvVar = c.EnvVar
+								fp.EnvVarFallback = c.EnvVarFallback
+							}
 						}
 
 						// Merge Inline (2nd)
@@ -417,6 +424,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
 							}
+							if c.FromParent {
+								fp.FromParent = true
+							}
+							if c.EnvVar != "" {
+								fp.EnvVar = c.EnvVar
+								fp.EnvVarFallback = c.EnvVarFallback
+							}
 						}
 
 						// Merge Flags Block (Top)
@@ -439,6 +453,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.IsVarArg = true
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
+							}
+							if c.FromParent {
+								fp.FromParent = true
+							}
+							if c.EnvVar != "" {
+								fp.EnvVar = c.EnvVar
+								fp.EnvVarFallback = c.EnvVarFallback
 							}
 						}
 
@@ -546,6 +567,9 @@ type ParsedParam struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
+	FromParent         bool
+	EnvVar             string
+	EnvVarFallback     string
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -682,6 +706,24 @@ func parseParamDetails(text string) ParsedParam {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 	}
 
+	fromParentRegex := regexp.MustCompile(`\(from:\s*parent\)`)
+	if fromParentRegex.MatchString(text) {
+		p.FromParent = true
+	}
+
+	envVarRegex := regexp.MustCompile(`\(default from environment\s+(\w+)(?:\s+fallback:\s*((?:"[^"]*"|[^),]+)))?\)`)
+	envMatch := envVarRegex.FindStringSubmatch(text)
+	if envMatch != nil {
+		p.EnvVar = envMatch[1]
+		if len(envMatch) > 2 {
+			fallback := strings.TrimSpace(envMatch[2])
+			if strings.HasPrefix(fallback, "\"") && strings.HasSuffix(fallback, "\"") {
+				fallback = strings.Trim(fallback, "\"")
+			}
+			p.EnvVarFallback = fallback
+		}
+	}
+
 	// Positional arguments: @1, @2, etc.
 	posArgRegex := regexp.MustCompile(`@(\d+)`)
 	posArgMatches := posArgRegex.FindStringSubmatch(text)
@@ -731,6 +773,8 @@ func parseParamDetails(text string) ParsedParam {
 
 	clean := flagRegex.ReplaceAllString(text, "")
 	clean = defaultRegex.ReplaceAllString(clean, "")
+	clean = fromParentRegex.ReplaceAllString(clean, "")
+	clean = envVarRegex.ReplaceAllString(clean, "")
 	clean = posArgRegex.ReplaceAllString(clean, "")
 	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 

@@ -41,6 +41,9 @@ type FunctionParameter struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
+	FromParent         bool
+	EnvVar             string
+	EnvVarFallback     string
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -70,6 +73,16 @@ func (p *FunctionParameter) FlagString() string {
 }
 
 func (p *FunctionParameter) DefaultString() string {
+	if p.FromParent {
+		return "(from: parent)"
+	}
+	if p.EnvVar != "" {
+		fallback := p.EnvVarFallback
+		if p.Type == "string" && !strings.HasPrefix(fallback, "\"") {
+			fallback = fmt.Sprintf("%q", fallback)
+		}
+		return fmt.Sprintf("(default from environment %s fallback: %s)", p.EnvVar, fallback)
+	}
 	if p.Default == "" {
 		return ""
 	}

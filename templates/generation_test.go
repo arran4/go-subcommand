@@ -171,7 +171,9 @@ func TestGoTemplates(t *testing.T) {
 }
 
 func populateParents(sc *model.SubCommand, parent *model.SubCommand) {
-	sc.Parent = parent
+	if parent != nil {
+		sc.Parent = parent
+	}
 	for _, child := range sc.SubCommands {
 		populateParents(child, sc)
 	}

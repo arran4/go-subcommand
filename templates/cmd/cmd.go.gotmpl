@@ -55,6 +55,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
+	{{- range .Parameters }}
+	{{- if .FromParent }}
+	c.{{.Name}} = c.{{if $.Parent}}{{$.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}.{{.Name}}
+	{{- end }}
+	{{- end }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
@@ -193,7 +198,13 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 		Flags:   set,
 		SubCommands: make(map[string]Cmd),
 	}
-{{- template "flag_definitions" (slice "set" "v" .Parameters) }}
+	{{- $parentName := "RootCmd" -}}
+	{{- $parentObj := .Command -}}
+	{{- if .Parent }}
+		{{- $parentName = .Parent.SubCommandStructName }}
+		{{- $parentObj = .Parent }}
+	{{- end -}}
+{{- template "flag_definitions" (slice "set" "v" .Parameters $parentName $parentObj) }}
 	set.Usage = v.Usage
 	{{if .SubCommandFunctionName}}
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
