@@ -39,7 +39,6 @@ import (
 	"strings"
 
 	"example.com/mypkg"
-	"example.com/mypkg/cmd"
 )
 
 var _ Cmd = (*MySliceCmd)(nil)
@@ -137,9 +136,9 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.Var((*cmd.StringSlice)(&v.files), "f", "Files list")
+	set.Var((*StringSlice)(&v.files), "f", "Files list")
 
-	set.Var((*cmd.IntSlice)(&v.counts), "counts", "Counts list")
+	set.Var((*IntSlice)(&v.counts), "counts", "Counts list")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *MySliceCmd) error {

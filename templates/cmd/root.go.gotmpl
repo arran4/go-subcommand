@@ -10,23 +10,15 @@ import (
 {{- template "common_imports" (slice .Parameters false) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
-	{{- $hasSlice := false }}
-	{{- range .Parameters }}
-	{{- if or (eq .Type "[]string") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]time.Duration") }}
-	{{- $hasSlice = true }}
-	{{- end }}
-	{{- end }}
 	{{- if .FunctionName}}
 	{{- if .ImportPath}}
 	"{{.ImportPath}}"
 	{{- end}}
 	{{- if .ReturnsError}}
 	"errors"
-	{{- end }}
-	{{- end }}
-	{{- if or (and .FunctionName .ReturnsError) $hasSlice}}
 	"{{.PackagePath}}/cmd"
-	{{- end}}
+	{{- end }}
+	{{- end }}
 )
 
 type Cmd interface {
