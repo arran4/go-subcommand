@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -21,6 +22,8 @@ type Generate struct {
 	dir           string
 	manDir        string
 	parserName    string
+	paths         []string
+	recursive     bool
 	SubCommands   map[string]Cmd
 	CommandAction func(c *Generate) error
 }
@@ -100,6 +103,28 @@ func (c *Generate) Execute(args []string) error {
 					}
 				}
 				c.parserName = value
+
+			case "paths", "path":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.paths = append(c.paths, value)
+
+			case "recursive":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.recursive = b
+				} else {
+					c.recursive = true
+				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -133,11 +158,13 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.StringVar(&v.manDir, "man-dir", "", "Directory to generate man pages in optional")
 
 	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
+
+	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

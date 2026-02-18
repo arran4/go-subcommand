@@ -11,3 +11,5 @@ Flags:
     --dir string           Project root directory containing go.mod (default: .)
     --man-dir string       Directory to generate man pages in optional
     --parser-name string   Name of the parser to use (default: commentv1)
+    --path []string        Paths to search for subcommands relative to dir (default: nil)
+    --recursive            Search recursively (default: true)

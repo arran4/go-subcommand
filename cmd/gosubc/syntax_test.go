@@ -30,4 +30,5 @@ func TestSyntax_Execute(t *testing.T) {
 	if !called {
 		t.Error("CommandAction was not called")
 	}
+
 }

@@ -21,6 +21,8 @@ type Format struct {
 	Flags         *flag.FlagSet
 	dir           string
 	inplace       bool
+	paths         []string
+	recursive     bool
 	SubCommands   map[string]Cmd
 	CommandAction func(c *Format) error
 }
@@ -89,6 +91,28 @@ func (c *Format) Execute(args []string) error {
 				} else {
 					c.inplace = true
 				}
+
+			case "paths", "path":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.paths = append(c.paths, value)
+
+			case "recursive":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.recursive = b
+				} else {
+					c.recursive = true
+				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -120,11 +144,13 @@ func (c *RootCmd) NewFormat() *Format {
 	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
 	set.BoolVar(&v.inplace, "inplace", false, "Modify files in place")
+
+	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Format) error {
 
-		err := go_subcommand.Format(c.dir, c.inplace)
+		err := go_subcommand.Format(c.dir, c.inplace, c.paths, c.recursive)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

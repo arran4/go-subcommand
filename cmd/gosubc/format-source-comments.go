@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -19,6 +20,8 @@ type FormatSourceComments struct {
 	*RootCmd
 	Flags         *flag.FlagSet
 	dir           string
+	paths         []string
+	recursive     bool
 	SubCommands   map[string]Cmd
 	CommandAction func(c *FormatSourceComments) error
 }
@@ -76,6 +79,28 @@ func (c *FormatSourceComments) Execute(args []string) error {
 					}
 				}
 				c.dir = value
+
+			case "paths", "path":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.paths = append(c.paths, value)
+
+			case "recursive":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.recursive = b
+				} else {
+					c.recursive = true
+				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -105,11 +130,13 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 	}
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
+
+	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *FormatSourceComments) error {
 
-		err := go_subcommand.FormatSourceComments(c.dir)
+		err := go_subcommand.FormatSourceComments(c.dir, c.paths, c.recursive)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
