@@ -109,7 +109,7 @@ func collectSubCommandEdits(subCmds []*model.SubCommand, editsByFile map[string]
 func generateDocComment(funcName, commandSeq, description, extendedHelp string, params []*model.FunctionParameter) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("// %s is a subcommand `%s` %s\n", funcName, commandSeq, description))
+	fmt.Fprintf(&sb, "// %s is a subcommand `%s` %s\n", funcName, commandSeq, description)
 
 	// Extended Help
 	if extendedHelp != "" {
