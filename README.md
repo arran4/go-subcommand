@@ -93,9 +93,20 @@ The primary directive defines where the command lives in the CLI hierarchy:
 
 ```go
 // MyFunc is a subcommand `app cmd` -- Does something cool
+// Aliases: c, command
 //
 // This is the extended help text. It can span multiple lines
 // and provide detailed usage examples or explanations.
+```
+
+### Aliases
+
+You can define aliases for your subcommand using the `Alias:` or `Aliases:` directive in the comment block. Multiple aliases can be separated by commas.
+
+```go
+// Checkout is a subcommand `git checkout`
+// Aliases: co, check
+func Checkout() { ... }
 ```
 
 ### Parameter Configuration
