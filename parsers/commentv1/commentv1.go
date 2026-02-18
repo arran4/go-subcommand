@@ -44,8 +44,9 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
-	FunctionName   string
-	DefinitionFile string
+	FunctionName       string
+	CommandPackageName string
+	DefinitionFile     string
 	DocStart       token.Pos
 	DocEnd         token.Pos
 	Parameters     []*model.FunctionParameter
@@ -170,19 +171,20 @@ func (p *CommentParser) Parse(fsys fs.FS, root string) (*model.DataModel, error)
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
 		cmd := &model.Command{
-			DataModel:      d,
-			MainCmdName:    cmdName,
-			PackagePath:    rootCommands.PackagePath,
-			ImportPath:     rootCommands.PackagePath, // Root command logic usually in root package
-			FunctionName:   cmdTree.FunctionName,
-			DefinitionFile: cmdTree.DefinitionFile,
-			DocStart:       cmdTree.DocStart,
-			DocEnd:         cmdTree.DocEnd,
-			Parameters:     cmdTree.Parameters,
-			ReturnsError:   cmdTree.ReturnsError,
-			ReturnCount:    cmdTree.ReturnCount,
-			Description:    cmdTree.Description,
-			ExtendedHelp:   cmdTree.ExtendedHelp,
+			DataModel:          d,
+			MainCmdName:        cmdName,
+			PackagePath:        rootCommands.PackagePath,
+			ImportPath:         rootCommands.PackagePath, // Root command logic usually in root package
+			FunctionName:       cmdTree.FunctionName,
+			CommandPackageName: cmdTree.CommandPackageName,
+			DefinitionFile:     cmdTree.DefinitionFile,
+			DocStart:           cmdTree.DocStart,
+			DocEnd:             cmdTree.DocEnd,
+			Parameters:         cmdTree.Parameters,
+			ReturnsError:       cmdTree.ReturnsError,
+			ReturnCount:        cmdTree.ReturnCount,
+			Description:        cmdTree.Description,
+			ExtendedHelp:       cmdTree.ExtendedHelp,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -496,6 +498,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					cmdTree.Commands[cmdName] = ct
 				}
 				ct.FunctionName = s.Name.Name
+				ct.CommandPackageName = f.Name.Name
 				ct.DefinitionFile = filename
 				ct.DocStart = s.Doc.Pos()
 				ct.DocEnd = s.Doc.End()
