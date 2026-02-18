@@ -104,8 +104,14 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.Commands["sub1"] = c.NewSub1()
-	c.Commands["sub2"] = c.NewSub2()
+	{
+		sub := c.NewSub1()
+		c.Commands["sub1"] = sub
+	}
+	{
+		sub := c.NewSub2()
+		c.Commands["sub2"] = sub
+	}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {

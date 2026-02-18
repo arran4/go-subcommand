@@ -109,7 +109,10 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
 
-	c.Commands["sub1"] = c.NewSub1()
+	{
+		sub := c.NewSub1()
+		c.Commands["sub1"] = sub
+	}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {

@@ -254,7 +254,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, aliases, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -520,6 +520,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				Parameters:     params,
 				ReturnsError:   returnsError,
 				ReturnCount:    returnCount,
+				Aliases:        aliases,
 			})
 		}
 	}
@@ -545,7 +546,7 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, aliases []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -592,6 +593,28 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 					description = strings.TrimPrefix(rest, "-- ")
 				} else if rest != "" {
 					description = rest
+				}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(trimmedLine, "Aliases:") {
+			parts := strings.Split(strings.TrimPrefix(trimmedLine, "Aliases:"), ",")
+			for _, part := range parts {
+				alias := strings.TrimSpace(part)
+				if alias != "" {
+					aliases = append(aliases, alias)
+				}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(trimmedLine, "Alias:") {
+			parts := strings.Split(strings.TrimPrefix(trimmedLine, "Alias:"), ",")
+			for _, part := range parts {
+				alias := strings.TrimSpace(part)
+				if alias != "" {
+					aliases = append(aliases, alias)
 				}
 			}
 			continue

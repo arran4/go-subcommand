@@ -75,7 +75,7 @@ func FormatSourceComments(dir string) error {
 
 			// Extract existing parameters info to preserve descriptions/defaults not in signature
 			// ParseSubCommandComments returns map[name]ParsedParam
-			_, _, _, _, parsedParams, _ := commentv1.ParseSubCommandComments(text)
+			_, _, _, _, _, parsedParams, _ := commentv1.ParseSubCommandComments(text)
 
 			var params []*model.FunctionParameter
 			for _, p := range funcDecl.Type.Params.List {

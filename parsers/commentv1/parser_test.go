@@ -11,6 +11,7 @@ func TestParseSubCommandComments(t *testing.T) {
 		text                   string
 		wantCmdName            string
 		wantSubCommandSequence []string
+		wantAliases            []string
 		wantDescription        string
 		wantExtendedHelp       string
 		wantParams             map[string]ParsedParam
@@ -23,6 +24,22 @@ func TestParseSubCommandComments(t *testing.T) {
 			wantSubCommandSequence: []string{"example1"},
 			wantDescription:        "",
 			wantExtendedHelp:       "Does nothing practical",
+			wantOk:                 true,
+		},
+		{
+			name:                   "Aliases",
+			text:                   "Checkout is a subcommand `git checkout`\nAliases: co, check",
+			wantCmdName:            "git",
+			wantSubCommandSequence: []string{"checkout"},
+			wantAliases:            []string{"co", "check"},
+			wantOk:                 true,
+		},
+		{
+			name:                   "Singular Alias",
+			text:                   "Status is a subcommand `git status`\nAlias: st",
+			wantCmdName:            "git",
+			wantSubCommandSequence: []string{"status"},
+			wantAliases:            []string{"st"},
 			wantOk:                 true,
 		},
 		{
@@ -84,12 +101,15 @@ that can handle missing tokens`,
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotParams, gotOk := ParseSubCommandComments(tt.text)
+			gotCmdName, gotSubCommandSequence, gotAliases, gotDescription, gotExtendedHelp, gotParams, gotOk := ParseSubCommandComments(tt.text)
 			if gotCmdName != tt.wantCmdName {
 				t.Errorf("gotCmdName = %v, want %v", gotCmdName, tt.wantCmdName)
 			}
 			if !reflect.DeepEqual(gotSubCommandSequence, tt.wantSubCommandSequence) {
 				t.Errorf("gotSubCommandSequence = %v, want %v", gotSubCommandSequence, tt.wantSubCommandSequence)
+			}
+			if !reflect.DeepEqual(gotAliases, tt.wantAliases) {
+				t.Errorf("gotAliases = %v, want %v", gotAliases, tt.wantAliases)
 			}
 			if gotDescription != tt.wantDescription {
 				t.Errorf("gotDescription = %q, want %q", gotDescription, tt.wantDescription)
