@@ -22,6 +22,12 @@ func TestList_Execute(t *testing.T) {
 	}
 
 	args := []string{}
+	args = append(args, "--dir")
+	args = append(args, "test")
+	args = append(args, "--parserName")
+	args = append(args, "test")
+	args = append(args, "--paths")
+	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -29,5 +35,15 @@ func TestList_Execute(t *testing.T) {
 	}
 	if !called {
 		t.Error("CommandAction was not called")
+	}
+
+	if cmd.dir != "test" {
+		t.Errorf("Expected dir to be 'test', got '%v'", cmd.dir)
+	}
+	if cmd.parserName != "test" {
+		t.Errorf("Expected parserName to be 'test', got '%v'", cmd.parserName)
+	}
+	if cmd.recursive != true {
+		t.Errorf("Expected recursive to be true, got '%v'", cmd.recursive)
 	}
 }
