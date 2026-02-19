@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
+	"os"
 	"strings"
 	"testing"
 
@@ -162,7 +163,27 @@ func TestGoTemplates(t *testing.T) {
 				// 3. Compare `formatted` to `expectedOutput`.
 				// This ensures we test the final result (what users get).
 
-				if !bytes.Equal(formatted, expectedOutput) {
+				if os.Getenv("UPDATE_GOLDEN") == "true" {
+					// Update the archive with the new output
+					updated := false
+					for i := range archive.Files {
+						if archive.Files[i].Name == "output.go" {
+							archive.Files[i].Data = formatted
+							updated = true
+							break
+						}
+					}
+					if !updated {
+						// If output.go didn't exist, we should probably add it, but for now let's assume it exists or fail.
+						// In this case, we just append it if not found?
+						archive.Files = append(archive.Files, txtar.File{Name: "output.go", Data: formatted})
+					}
+
+					// Write back to file system (not embed fs)
+					if err := os.WriteFile("testdata/"+entry.Name(), txtar.Format(archive), 0644); err != nil {
+						t.Fatalf("failed to update golden file %s: %v", entry.Name(), err)
+					}
+				} else if !bytes.Equal(formatted, expectedOutput) {
 					t.Errorf("Output mismatch for %s:\nExpected:\n%s\nGot:\n%s", entry.Name(), string(expectedOutput), string(formatted))
 				}
 			}

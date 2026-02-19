@@ -184,6 +184,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		}
 		if strings.HasPrefix(arg, "-") && arg != "-" {
 			name := arg
+			value := ""
+			hasValue := false
 			{{- $hasFlags := false }}
 			{{- range .Parameters }}
 			{{- if not .IsPositional }}
@@ -191,8 +193,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 			{{- end }}
 			{{- if $hasFlags }}
-			value := ""
-			hasValue := false
 			if strings.Contains(arg, "=") {
 				parts := strings.SplitN(arg, "=", 2)
 				name = parts[0]

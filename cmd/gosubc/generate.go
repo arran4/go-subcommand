@@ -53,6 +53,103 @@ func (c *Generate) Execute(args []string) error {
 			return cmd.Execute(args[1:])
 		}
 	}
+	processFlag := func(i *int, args []string, flagName string, flagValue string, flagHasValue bool, suffix string) (bool, bool, bool, error) {
+		switch flagName {
+
+		case "dir":
+			valStr := ""
+			usedSuffix := false
+			if flagHasValue {
+				valStr = flagValue
+			} else if suffix != "" {
+				valStr = suffix
+				usedSuffix = true
+			} else {
+				if *i+1 < len(args) {
+					valStr = args[*i+1]
+					*i++
+				} else {
+					return false, false, false, fmt.Errorf("flag %s requires a value", flagName)
+				}
+			}
+			c.dir = valStr
+			return true, usedSuffix, false, nil
+
+		case "manDir", "man-dir":
+			valStr := ""
+			usedSuffix := false
+			if flagHasValue {
+				valStr = flagValue
+			} else if suffix != "" {
+				valStr = suffix
+				usedSuffix = true
+			} else {
+				if *i+1 < len(args) {
+					valStr = args[*i+1]
+					*i++
+				} else {
+					return false, false, false, fmt.Errorf("flag %s requires a value", flagName)
+				}
+			}
+			c.manDir = valStr
+			return true, usedSuffix, false, nil
+
+		case "parserName", "parser-name":
+			valStr := ""
+			usedSuffix := false
+			if flagHasValue {
+				valStr = flagValue
+			} else if suffix != "" {
+				valStr = suffix
+				usedSuffix = true
+			} else {
+				if *i+1 < len(args) {
+					valStr = args[*i+1]
+					*i++
+				} else {
+					return false, false, false, fmt.Errorf("flag %s requires a value", flagName)
+				}
+			}
+			c.parserName = valStr
+			return true, usedSuffix, false, nil
+
+		case "paths", "path":
+			valStr := ""
+			usedSuffix := false
+			if flagHasValue {
+				valStr = flagValue
+			} else if suffix != "" {
+				valStr = suffix
+				usedSuffix = true
+			} else {
+				if *i+1 < len(args) {
+					valStr = args[*i+1]
+					*i++
+				} else {
+					return false, false, false, fmt.Errorf("flag %s requires a value", flagName)
+				}
+			}
+			c.paths = append(c.paths, valStr)
+			return true, usedSuffix, false, nil
+
+		case "recursive":
+			if flagHasValue {
+				b, err := strconv.ParseBool(flagValue)
+				if err != nil {
+					return false, false, false, fmt.Errorf("invalid boolean value for flag %s: %s", flagName, flagValue)
+				}
+				c.recursive = b
+			} else {
+				c.recursive = true
+			}
+			return true, false, false, nil
+		case "help", "h":
+			c.Usage()
+			return true, false, true, nil
+		}
+		return false, false, false, nil
+	}
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -69,68 +166,52 @@ func (c *Generate) Execute(args []string) error {
 				hasValue = true
 			}
 			trimmedName := strings.TrimLeft(name, "-")
-			switch trimmedName {
 
-			case "dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.dir = value
-
-			case "manDir", "man-dir":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.manDir = value
-
-			case "parserName", "parser-name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.parserName = value
-
-			case "paths", "path":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.paths = append(c.paths, value)
-
-			case "recursive":
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.recursive = b
-				} else {
-					c.recursive = true
-				}
-			case "help", "h":
-				c.Usage()
+			found, _, stop, err := processFlag(&i, args, trimmedName, value, hasValue, "")
+			if err != nil {
+				return err
+			}
+			if stop {
 				return nil
-			default:
+			}
+			if found {
+				continue
+			}
+
+			if strings.HasPrefix(arg, "--") {
 				return fmt.Errorf("unknown flag: %s", name)
 			}
+
+			remaining := trimmedName
+			for len(remaining) > 0 {
+				shortName := remaining[0:1]
+				loopSuffix := remaining[1:]
+
+				var flagValue string
+				var flagHasValue bool
+
+				if len(loopSuffix) == 0 && hasValue {
+					flagValue = value
+					flagHasValue = true
+				}
+
+				found, usedSuffix, stop, err := processFlag(&i, args, shortName, flagValue, flagHasValue, loopSuffix)
+				if err != nil {
+					return err
+				}
+				if stop {
+					return nil
+				}
+				if !found {
+					return fmt.Errorf("unknown flag: %s", shortName)
+				}
+
+				if usedSuffix {
+					break
+				}
+				remaining = loopSuffix
+			}
+
 		}
 	}
 

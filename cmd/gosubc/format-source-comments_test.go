@@ -24,6 +24,8 @@ func TestFormatSourceComments_Execute(t *testing.T) {
 	args := []string{}
 	args = append(args, "--dir")
 	args = append(args, "test")
+	args = append(args, "--paths")
+	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -35,5 +37,8 @@ func TestFormatSourceComments_Execute(t *testing.T) {
 
 	if cmd.dir != "test" {
 		t.Errorf("Expected dir to be 'test', got '%v'", cmd.dir)
+	}
+	if cmd.recursive != true {
+		t.Errorf("Expected recursive to be true, got '%v'", cmd.recursive)
 	}
 }

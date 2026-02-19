@@ -71,6 +71,8 @@ func (c *TestCmd) Execute(args []string) error {
 		}
 		if strings.HasPrefix(arg, "-") && arg != "-" {
 			name := arg
+			value := ""
+			hasValue := false
 			trimmedName := strings.TrimLeft(name, "-")
 
 			found, _, stop, err := processFlag(&i, args, trimmedName, value, hasValue, "")
