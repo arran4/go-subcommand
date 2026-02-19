@@ -56,17 +56,17 @@ func CoreCmd() error { return nil }
 			expectedImportPath:  "example.com/test/cmd/internal/core",
 		},
 		{
-			name: "Mismatched Package Name (e.g. main in subdir)",
+			name: "Mismatched Package Name (e.g. tool in subdir)",
 			files: fstest.MapFS{
 				"go.mod": {Data: []byte("module example.com/test\n\ngo 1.21\n")},
-				"cmd/tool/main.go": {Data: []byte(`package main
+				"cmd/tool/main.go": {Data: []byte(`package tool
 
 // ToolCmd is a subcommand ` + "`tool-app`" + `
 func ToolCmd() error { return nil }
 `)},
 			},
 			expectedCmdName:     "tool-app",
-			expectedPackageName: "main",
+			expectedPackageName: "tool",
 			expectedImportPath:  "example.com/test/cmd/tool",
 		},
 		{
