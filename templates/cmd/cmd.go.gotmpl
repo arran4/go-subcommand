@@ -6,9 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
+	{{- end }}
+	"strings"
+	{{- if .SubCommands }}
+	"sync"
 	{{- end }}
 {{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
@@ -392,8 +395,13 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	{{range .SubCommands}}
 	{
+		var once sync.Once
+		var cmd Cmd
 		subCmd := func() Cmd {
-			return v.New{{.SubCommandStructName}}()
+			once.Do(func() {
+				cmd = v.New{{.SubCommandStructName}}()
+			})
+			return cmd
 		}
 		v.SubCommands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}

@@ -11,6 +11,9 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
+	{{- if .SubCommands }}
+	"sync"
+	{{- end }}
 {{- template "common_imports" (slice .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -139,8 +142,13 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{end}}
 	{{range .SubCommands}}
 	{
+		var once sync.Once
+		var cmd Cmd
 		subCmd := func() Cmd {
-			return c.New{{.SubCommandStructName}}()
+			once.Do(func() {
+				cmd = c.New{{.SubCommandStructName}}()
+			})
+			return cmd
 		}
 		c.Commands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}

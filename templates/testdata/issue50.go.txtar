@@ -31,6 +31,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"/cmd/mycmd/templates"
 )
@@ -112,8 +113,13 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
 
 	{
+		var once sync.Once
+		var cmd Cmd
 		subCmd := func() Cmd {
-			return c.NewSub1()
+			once.Do(func() {
+				cmd = c.NewSub1()
+			})
+			return cmd
 		}
 		c.Commands["sub1"] = subCmd
 
