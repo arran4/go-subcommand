@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	{{- if minGoVersion "1.21" .GoVersion }}
+	"slices"
+	{{- end }}
 {{- template "common_imports" (slice .Parameters false) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -55,7 +58,7 @@ func NewUserError(err error, msg string) *UserError {
 	return &UserError{Err: err, Msg: msg}
 }
 
-func executeUsage(out io.Writer, templateName string, data interface{}) error {
+func executeUsage(out io.Writer, templateName string, data {{if minGoVersion "1.18" .GoVersion}}any{{else}}interface{}{{end}}) error {
 	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
 }
 
@@ -137,12 +140,19 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			{{- if minGoVersion "1.21" .GoVersion }}
+			if slices.Contains(args, "-deep") {
+				c.UsageRecursive()
+				return nil
+			}
+			{{- else }}
 			for _, arg := range args {
 				if arg == "-deep" {
 					c.UsageRecursive()
 					return nil
 				}
 			}
+			{{- end }}
 			c.Usage()
 			return nil
 		},
@@ -150,12 +160,19 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.Commands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			{{- if minGoVersion "1.21" .GoVersion }}
+			if slices.Contains(args, "-deep") {
+				c.UsageRecursive()
+				return nil
+			}
+			{{- else }}
 			for _, arg := range args {
 				if arg == "-deep" {
 					c.UsageRecursive()
 					return nil
 				}
 			}
+			{{- end }}
 			c.Usage()
 			return nil
 		},

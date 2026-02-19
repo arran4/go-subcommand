@@ -31,21 +31,6 @@ func (m *MockWriter) MkdirAll(path string, perm os.FileMode) error {
 	return nil // No-op for map
 }
 
-type mockDirEntry struct {
-	name  string
-	isDir bool
-}
-
-func (d *mockDirEntry) Name() string { return d.name }
-func (d *mockDirEntry) IsDir() bool  { return d.isDir }
-func (d *mockDirEntry) Type() fs.FileMode {
-	if d.isDir {
-		return fs.ModeDir
-	}
-	return 0
-}
-func (d *mockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
-
 func (m *MockWriter) ReadFile(path string) ([]byte, error) {
 	if content, ok := m.Files[path]; ok {
 		return content, nil

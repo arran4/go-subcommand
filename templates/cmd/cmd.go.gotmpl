@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	{{- if minGoVersion "1.21" .GoVersion }}
+	"slices"
+	{{- end }}
 {{- template "common_imports" (slice .Parameters true) }}
 {{- if .ImportPath}}
 
@@ -266,12 +269,19 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
+			{{- if minGoVersion "1.21" .GoVersion }}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
+			}
+			{{- else }}
 			for _, arg := range args {
 				if arg == "-deep" {
 					v.UsageRecursive()
 					return nil
 				}
 			}
+			{{- end }}
 			v.Usage()
 			return nil
 		},
@@ -279,12 +289,19 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
+			{{- if minGoVersion "1.21" .GoVersion }}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
+			}
+			{{- else }}
 			for _, arg := range args {
 				if arg == "-deep" {
 					v.UsageRecursive()
 					return nil
 				}
 			}
+			{{- end }}
 			v.Usage()
 			return nil
 		},
