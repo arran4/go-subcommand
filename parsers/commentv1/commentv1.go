@@ -281,7 +281,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -526,6 +526,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
+				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection
 				DefinitionFile: filename,
 				DocStart:       s.Doc.Pos(),
@@ -558,7 +559,7 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -605,6 +606,20 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 					description = strings.TrimPrefix(rest, "-- ")
 				} else if rest != "" {
 					description = rest
+				}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(trimmedLine, "Aliases:") || strings.HasPrefix(trimmedLine, "Alias:") {
+			lineParts := strings.SplitN(trimmedLine, ":", 2)
+			if len(lineParts) > 1 {
+				parts := strings.Split(lineParts[1], ",")
+				for _, p := range parts {
+					a := strings.TrimSpace(p)
+					if a != "" {
+						aliases = append(aliases, a)
+					}
 				}
 			}
 			continue

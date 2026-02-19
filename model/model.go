@@ -86,6 +86,7 @@ type SubCommand struct {
 	Parent                 *SubCommand
 	SubCommands            []*SubCommand
 	SubCommandName         string
+	Aliases                []string
 	SubCommandStructName   string
 	SubCommandFunctionName string
 	SubCommandDescription  string

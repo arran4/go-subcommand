@@ -8,6 +8,9 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
@@ -92,14 +95,55 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.Commands["format"] = c.NewFormat()
-	c.Commands["format-source-comments"] = c.NewFormatSourceComments()
-	c.Commands["generate"] = c.NewGenerate()
-	c.Commands["goreleaser"] = c.NewGoreleaser()
-	c.Commands["list"] = c.NewList()
-	c.Commands["scan"] = c.NewScan()
-	c.Commands["syntax"] = c.NewSyntax()
-	c.Commands["validate"] = c.NewValidate()
+	{
+		subCmd := c.NewFormat()
+		c.Commands["format"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewFormatSourceComments()
+		c.Commands["format-source-comments"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewGenerate()
+		c.Commands["generate"] = subCmd
+
+		c.Commands["gen"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewGoreleaser()
+		c.Commands["goreleaser"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewList()
+		c.Commands["list"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewScan()
+		c.Commands["scan"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewSyntax()
+		c.Commands["syntax"] = subCmd
+
+	}
+
+	{
+		subCmd := c.NewValidate()
+		c.Commands["validate"] = subCmd
+
+	}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			if slices.Contains(args, "-deep") {
@@ -135,18 +179,61 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) error {
-	if err := c.Parse(args); err != nil {
-		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
+	var remainingArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return fmt.Errorf("unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return fmt.Errorf("unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
 	}
-	remainingArgs := c.Args()
-	if len(remainingArgs) < 1 {
-		c.Usage()
-		return nil
+
+	if len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd.Execute(remainingArgs[1:])
+		}
 	}
-	cmd, ok := c.Commands[remainingArgs[0]]
-	if !ok {
-		c.Usage()
+	c.Usage()
+	if len(remainingArgs) > 0 {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])
 	}
-	return cmd.Execute(remainingArgs[1:])
+	return nil
 }
