@@ -4,10 +4,10 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if eq .Type "time.Duration" }}
+	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "[]int") (eq .Type "[]bool") }}
 		{{- if or .IsPositional $needStrconvForFlags .EnvVar }}
 		{{- $hasStrconv = true }}
 		{{- end }}
