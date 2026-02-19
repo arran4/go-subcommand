@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"errors"
@@ -14,39 +13,36 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
-var _ Cmd = (*List)(nil)
+var _ Cmd = (*GenerateGithubWorkflow)(nil)
 
-type List struct {
+type GenerateGithubWorkflow struct {
 	*RootCmd
 	Flags         *flag.FlagSet
 	dir           string
-	parserName    string
-	paths         []string
-	recursive     bool
 	SubCommands   map[string]Cmd
-	CommandAction func(c *List) error
+	CommandAction func(c *GenerateGithubWorkflow) error
 }
 
-type UsageDataList struct {
-	*List
+type UsageDataGenerateGithubWorkflow struct {
+	*GenerateGithubWorkflow
 	Recursive bool
 }
 
-func (c *List) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, false})
+func (c *GenerateGithubWorkflow) Usage() {
+	err := executeUsage(os.Stderr, "generate-github-workflow_usage.txt", UsageDataGenerateGithubWorkflow{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *List) UsageRecursive() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, true})
+func (c *GenerateGithubWorkflow) UsageRecursive() {
+	err := executeUsage(os.Stderr, "generate-github-workflow_usage.txt", UsageDataGenerateGithubWorkflow{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *List) Execute(args []string) error {
+func (c *GenerateGithubWorkflow) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -80,39 +76,6 @@ func (c *List) Execute(args []string) error {
 					}
 				}
 				c.dir = value
-
-			case "parserName", "parser-name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.parserName = value
-
-			case "paths", "path":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.paths = append(c.paths, value)
-
-			case "recursive":
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.recursive = b
-				} else {
-					c.recursive = true
-				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -124,7 +87,7 @@ func (c *List) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("list failed: %w", err)
+			return fmt.Errorf("generate-github-workflow failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -133,26 +96,20 @@ func (c *List) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewList() *List {
-	set := flag.NewFlagSet("list", flag.ContinueOnError)
-	v := &List{
+func (c *RootCmd) NewGenerateGithubWorkflow() *GenerateGithubWorkflow {
+	set := flag.NewFlagSet("generate-github-workflow", flag.ContinueOnError)
+	v := &GenerateGithubWorkflow{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
-
-	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
-
-	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
-
-	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
+	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *List) error {
+	v.CommandAction = func(c *GenerateGithubWorkflow) error {
 
-		err := go_subcommand.List(c.dir, c.parserName, c.paths, c.recursive)
+		err := go_subcommand.GenerateGithubWorkflow(c.dir)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -165,7 +122,7 @@ func (c *RootCmd) NewList() *List {
 			if e, ok := err.(*cmd.ErrExitCode); ok {
 				return e
 			}
-			return fmt.Errorf("list failed: %w", err)
+			return fmt.Errorf("generate-github-workflow failed: %w", err)
 		}
 		return nil
 	}
