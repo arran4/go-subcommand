@@ -2,7 +2,9 @@
 name: Generate PR
 
 on:
-  push
+  push:
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: write
@@ -11,6 +13,7 @@ permissions:
 jobs:
   generate-pr:
     name: Generate PR
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -47,3 +50,17 @@ jobs:
           body: "This PR updates the generated code to match the current generator logic."
           branch: update-generated-code-${{ "{{" }} github.ref_name {{ "}}" }}
           delete-branch: true
+
+  close-generated-pr:
+    name: Close Generated PR
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close Generated PR
+        env:
+          GH_TOKEN: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
+        run: |
+          BRANCH_NAME="${{ "{{" }} github.event.pull_request.head.ref {{ "}}" }}"
+          GENERATED_BRANCH="update-generated-code-${BRANCH_NAME}"
+          echo "Closing PR for branch $GENERATED_BRANCH"
+          gh pr close "$GENERATED_BRANCH" --comment "Parent PR closed." --delete-branch || true
