@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
@@ -154,4 +157,76 @@ func (c *RootCmd) Execute(args []string) error {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])
 	}
 	return cmd.Execute(remainingArgs[1:])
+}
+
+type StringSlice []string
+
+func (s *StringSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("[%s]", strings.Join(*s, ", "))
+}
+
+func (s *StringSlice) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+type IntSlice []int
+
+func (s *IntSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *IntSlice) Set(value string) error {
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, i)
+	return nil
+}
+
+type BoolSlice []bool
+
+func (s *BoolSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *BoolSlice) Set(value string) error {
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, b)
+	return nil
+}
+
+func (s *BoolSlice) IsBoolFlag() bool {
+	return true
+}
+
+type DurationSlice []time.Duration
+
+func (s *DurationSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *DurationSlice) Set(value string) error {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, d)
+	return nil
 }

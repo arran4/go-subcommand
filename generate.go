@@ -282,9 +282,6 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(collector, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
-			return err
-		}
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
