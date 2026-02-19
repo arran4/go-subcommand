@@ -7,7 +7,12 @@
 	{{- if eq .Type "time.Duration" }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") }}
+	{{- if eq .Type "[]time.Duration" }}
+		{{- if $needStrconvForFlags }}
+		{{- $hasDuration = true }}
+		{{- end }}
+	{{- end }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "[]int") (eq .Type "[]bool") }}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
