@@ -4,15 +4,15 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") }}
+	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") (eq .Type "*time.Duration") (eq .Type "[]*time.Duration") }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if eq .Type "[]time.Duration" }}
+	{{- if or (eq .Type "[]time.Duration") (eq .Type "[]*time.Duration") }}
 		{{- if $needStrconvForFlags }}
 		{{- $hasDuration = true }}
 		{{- end }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "[]int") (eq .Type "[]bool") }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "*int") (eq .Type "*bool") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]*int") (eq .Type "[]*bool") }}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
@@ -52,8 +52,11 @@
 		{{- if eq $param.Type "time.Duration" -}}
 			{{- $typeTitle = "Duration" -}}
 		{{- end -}}
-		{{- if .FlagAliases -}}
-			{{- range .FlagAliases }}
+
+		{{- $aliases := .FlagAliases }}
+		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
+
+		{{- range $aliases }}
 			{{- if eq $param.Type "time.Duration" }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
@@ -68,29 +71,52 @@
 	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else if eq $param.Type "[]time.Duration" }}
 	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else }}
+			{{- else if eq $param.Type "*string" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		{{$struct}}.{{$param.Name}} = &s
+		return nil
+	})
+			{{- else if eq $param.Type "*int" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &i
+		return nil
+	})
+			{{- else if eq $param.Type "*bool" }}
+	{{$set}}.BoolFunc("{{.}}", "{{$desc}}", func(s string) error {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &b
+		return nil
+	})
+			{{- else if eq $param.Type "*time.Duration" }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = &d
+		return nil
+	})
+			{{- else if eq $param.Type "[]*string" }}
+	{{$set}}.Var((*StringPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else if eq $param.Type "[]*int" }}
+	{{$set}}.Var((*IntPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else if eq $param.Type "[]*bool" }}
+	{{$set}}.Var((*BoolPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else if eq $param.Type "[]*time.Duration" }}
+	{{$set}}.Var((*DurationPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else if or (eq $param.Type "string") (eq $param.Type "int") (eq $param.Type "bool") }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+			{{- else }}
+	// TODO: Implement flag definition for type {{$param.Type}}
 			{{- end }}
-			{{- end -}}
-		{{- else -}}
-		{{- if eq $param.Type "time.Duration" }}
-	if d, err := time.ParseDuration("{{$default}}"); err == nil {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
-	} else {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
-	}
-		{{- else if eq $param.Type "[]string" }}
-	{{$set}}.Var((*StringSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
-		{{- else if eq $param.Type "[]int" }}
-	{{$set}}.Var((*IntSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
-		{{- else if eq $param.Type "[]bool" }}
-	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
-		{{- else if eq $param.Type "[]time.Duration" }}
-	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
-		{{- else }}
-	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
-		{{- end }}
-		{{- end }}
+		{{- end -}}
 		{{- end }}
 	{{- end}}
 {{- end -}}
@@ -180,4 +206,183 @@
 			{{- end }}
 		{{- end }}
 	{{- end }}
+{{- end -}}
+
+{{- define "flag_helper_types" -}}
+type StringSlice []string
+
+func (s *StringSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("[%s]", strings.Join(*s, ", "))
+}
+
+func (s *StringSlice) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+type IntSlice []int
+
+func (s *IntSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *IntSlice) Set(value string) error {
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, i)
+	return nil
+}
+
+type BoolSlice []bool
+
+func (s *BoolSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *BoolSlice) Set(value string) error {
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, b)
+	return nil
+}
+
+func (s *BoolSlice) IsBoolFlag() bool {
+	return true
+}
+
+type DurationSlice []time.Duration
+
+func (s *DurationSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *DurationSlice) Set(value string) error {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, d)
+	return nil
+}
+
+type StringPointerSlice []*string
+
+func (s *StringPointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, *p)
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *StringPointerSlice) Set(value string) error {
+	val := value
+	*s = append(*s, &val)
+	return nil
+}
+
+type IntPointerSlice []*int
+
+func (s *IntPointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *IntPointerSlice) Set(value string) error {
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &i)
+	return nil
+}
+
+type BoolPointerSlice []*bool
+
+func (s *BoolPointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%v", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *BoolPointerSlice) Set(value string) error {
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &b)
+	return nil
+}
+
+func (s *BoolPointerSlice) IsBoolFlag() bool {
+	return true
+}
+
+type DurationPointerSlice []*time.Duration
+
+func (s *DurationPointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%v", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *DurationPointerSlice) Set(value string) error {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &d)
+	return nil
+}
 {{- end -}}

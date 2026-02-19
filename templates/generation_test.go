@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
+	"os"
 	"strings"
 	"testing"
 
@@ -63,16 +64,6 @@ func TestGoTemplates(t *testing.T) {
 				t.Fatalf("template_name not found in %s", entry.Name())
 			}
 
-			// We need to support unmarshalling into either Command (for root, main) or SubCommand (for cmd)
-			// depending on the template. But SubCommand embeds Command (ptr), so we can perhaps try SubCommand?
-			// The JSON structure for Command and SubCommand differs (SubCommand has parent link etc, but in JSON it might be flat or nested).
-			// `cmd.gotmpl` expects `*SubCommand`.
-			// `root.go.gotmpl` expects `*Command`.
-			// `main.go.gotmpl` expects `*Command`.
-
-			// Let's decode into SubCommand for all, as it contains *Command fields.
-			// Ideally we should decode into the type expected by the template.
-
 			var data interface{}
 
 			if templateName == "cmd.go.gotmpl" || templateName == "cmd_test.go.gotmpl" {
@@ -80,12 +71,6 @@ func TestGoTemplates(t *testing.T) {
 				if err := json.Unmarshal(inputData, &sc); err != nil {
 					t.Fatalf("failed to unmarshal input.json into SubCommand: %v", err)
 				}
-				// Fix circular parent references if necessary or just use as is (JSON won't have circular refs)
-				// The templates might rely on Parent pointer. JSON unmarshalling won't set Parent pointer unless we do it manually.
-				// However, if the test input is simple, maybe we don't need Parent.
-				// But `SubCommandSequence` uses `Parent`.
-				// If JSON structure is nested, `SubCommands` slice is populated, but `Parent` fields in children are NOT automatically set by json.Unmarshal.
-				// We might need to walk and set parents.
 				populateParents(&sc, nil)
 				data = &sc
 			} else {
@@ -94,13 +79,8 @@ func TestGoTemplates(t *testing.T) {
 				if err := json.Unmarshal(inputData, &cmd); err != nil {
 					t.Fatalf("failed to unmarshal input.json into Command: %v", err)
 				}
-				// Also need to set parents for subcommands if template uses them (root template iterates subcommands)
 				for _, sc := range cmd.SubCommands {
-					populateParents(sc, nil) // Command doesn't have Parent, but its subcommands might need it?
-					// Actually Command is root, so its subcommands have Parent = nil (or implicit root?).
-					// In `ParseGoFiles`, root command is returned. Subcommands are in `SubCommands`.
-					// Wait, `Command` struct in model.go doesn't seem to be a SubCommand.
-					// `SubCommand` embeds `*Command`.
+					populateParents(sc, nil)
 				}
 				data = &cmd
 			}

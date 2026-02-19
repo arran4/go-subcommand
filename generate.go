@@ -404,6 +404,9 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"slice": func(args ...interface{}) []interface{} {
 			return args
 		},
+		"append": func(list []interface{}, args ...interface{}) []interface{} {
+			return append(list, args...)
+		},
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
