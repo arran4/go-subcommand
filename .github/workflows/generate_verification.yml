@@ -100,9 +100,11 @@ jobs:
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             echo "base=$HEAD_REF" >> $GITHUB_OUTPUT
             echo "branch=update-generated-code-$HEAD_REF" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $HEAD_REF" >> $GITHUB_OUTPUT
           else
             echo "base=$REF_NAME" >> $GITHUB_OUTPUT
             echo "branch=update-generated-code-$REF_NAME" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $REF_NAME" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Pull Request
@@ -110,7 +112,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: update generated code"
-          title: "chore: update generated code"
+          title: ${{ steps.pr_attributes.outputs.title }}
           body: "This PR updates the generated code to match the current generator logic."
           branch: ${{ steps.pr_attributes.outputs.branch }}
           delete-branch: true

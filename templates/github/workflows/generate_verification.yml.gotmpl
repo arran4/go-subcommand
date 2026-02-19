@@ -43,7 +43,7 @@ jobs:
         with:
           token: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
           commit-message: "chore: update generated code"
-          title: "chore: update generated code"
+          title: "chore: update generated code for ${{ "{{" }} github.ref_name {{ "}}" }}"
           body: "This PR updates the generated code to match the current generator logic."
           branch: update-generated-code-${{ "{{" }} github.ref_name {{ "}}" }}
           delete-branch: true
