@@ -135,6 +135,31 @@ func (sc *SubCommand) MaxFlagLength() int {
 	return max
 }
 
+func (sc *SubCommand) AllParameters() []*FunctionParameter {
+	var params []*FunctionParameter
+	seen := make(map[string]bool)
+
+	addParams := func(ps []*FunctionParameter) {
+		for _, p := range ps {
+			if !seen[p.Name] {
+				seen[p.Name] = true
+				params = append(params, p)
+			}
+		}
+	}
+
+	current := sc
+	for current != nil {
+		addParams(current.Parameters)
+		current = current.Parent
+	}
+
+	if sc.Command != nil {
+		addParams(sc.Command.Parameters)
+	}
+	return params
+}
+
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.Parameters {

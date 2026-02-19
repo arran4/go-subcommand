@@ -10,7 +10,7 @@ import (
 	{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
 	{{- end }}
-{{- template "common_imports" (slice .Parameters true) }}
+{{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
 
 	"{{.ImportPath}}"
@@ -54,7 +54,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- $needsRemainingArgs := false }}
-	{{- range .Parameters }}
+	{{- range .AllParameters }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
@@ -83,7 +83,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			_ = value
 			_ = hasValue
 			switch name {
-			{{- range .Parameters }}
+			{{- range .AllParameters }}
 			{{- if not .IsPositional }}
 			{{$param := .}}
 			{{- $longs := slice }}
@@ -189,7 +189,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- else if eq $param.Type "[]*time.Duration" }}
 				d, err := time.ParseDuration(value)
 				if err != nil {
-					return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
 				{{- else }}
@@ -212,7 +212,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					return nil
 				}
 				found := false
-				{{- range .Parameters }}
+				{{- range .AllParameters }}
 				{{- if not .IsPositional }}
 				{{$param := .}}
 				{{- $shorts := slice }}
