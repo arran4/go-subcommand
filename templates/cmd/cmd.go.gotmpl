@@ -395,14 +395,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	{{range .SubCommands}}
 	{
-		var once sync.Once
-		var cmd Cmd
-		subCmd := func() Cmd {
-			once.Do(func() {
-				cmd = v.New{{.SubCommandStructName}}()
-			})
-			return cmd
-		}
+		subCmd := NewLazyCommand(func() Cmd { return v.New{{.SubCommandStructName}}() })
 		v.SubCommands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		v.SubCommands["{{. | lower}}"] = subCmd

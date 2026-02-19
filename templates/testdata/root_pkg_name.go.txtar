@@ -46,6 +46,17 @@ func (c *InternalCommand) Usage() {
 	c.UsageFunc()
 }
 
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
 type UserError struct {
 	Err error
 	Msg string

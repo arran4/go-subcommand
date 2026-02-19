@@ -46,6 +46,17 @@ func (c *InternalCommand) Usage() {
 	c.UsageFunc()
 }
 
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
 type UserError struct {
 	Err error
 	Msg string
@@ -142,14 +153,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{end}}
 	{{range .SubCommands}}
 	{
-		var once sync.Once
-		var cmd Cmd
-		subCmd := func() Cmd {
-			once.Do(func() {
-				cmd = c.New{{.SubCommandStructName}}()
-			})
-			return cmd
-		}
+		subCmd := NewLazyCommand(func() Cmd { return c.New{{.SubCommandStructName}}() })
 		c.Commands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		c.Commands["{{. | lower}}"] = subCmd

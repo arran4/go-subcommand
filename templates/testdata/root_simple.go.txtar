@@ -50,6 +50,17 @@ func (c *InternalCommand) Usage() {
 	c.UsageFunc()
 }
 
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
 type UserError struct {
 	Err error
 	Msg string
@@ -107,27 +118,13 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.FlagSet.Usage = c.Usage
 
 	{
-		var once sync.Once
-		var cmd Cmd
-		subCmd := func() Cmd {
-			once.Do(func() {
-				cmd = c.NewSub1()
-			})
-			return cmd
-		}
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSub1() })
 		c.Commands["sub1"] = subCmd
 
 	}
 
 	{
-		var once sync.Once
-		var cmd Cmd
-		subCmd := func() Cmd {
-			once.Do(func() {
-				cmd = c.NewSub2()
-			})
-			return cmd
-		}
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSub2() })
 		c.Commands["sub2"] = subCmd
 
 	}
