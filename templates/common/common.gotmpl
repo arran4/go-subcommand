@@ -58,26 +58,18 @@
 			{{- $typeTitle = "Duration" -}}
 		{{- end -}}
 
-		{{- if $isPtr }}
-			{{- if eq $type "time.Duration" }}
-	var _{{$param.Name}} time.Duration
-			{{- else}}
-	var _{{$param.Name}} {{$type}}
-			{{- end}}
-		{{- end }}
-
 		{{- if .FlagAliases -}}
 			{{- range .FlagAliases }}
 			{{- if eq $type "time.Duration" }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{- if $isPtr }}
-		{{$set}}.DurationVar(&_{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+		{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error { return nil })
 		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
 		{{- end }}
 	} else {
 		{{- if $isPtr }}
-		{{$set}}.DurationVar(&_{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+		{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error { return nil })
 		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 		{{- end }}
@@ -85,7 +77,11 @@
 			{{- else if eq $type "[]string" }}
 			{{- else }}
 	{{- if $isPtr }}
-	{{$set}}.{{$typeTitle}}Var(&_{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{- if eq $type "bool" }}
+	{{$set}}.BoolFunc("{{.}}", "{{$desc}}", func(s string) error { return nil })
+	{{- else }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error { return nil })
+	{{- end }}
 	{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 	{{- end }}
@@ -95,13 +91,13 @@
 		{{- if eq $type "time.Duration" }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{- if $isPtr }}
-		{{$set}}.DurationVar(&_{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
+		{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error { return nil })
 		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", d, "{{$desc}}")
 		{{- end }}
 	} else {
 		{{- if $isPtr }}
-		{{$set}}.DurationVar(&_{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
+		{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error { return nil })
 		{{- else }}
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
 		{{- end }}
@@ -109,7 +105,11 @@
 		{{- else if eq $type "[]string" }}
 		{{- else }}
 	{{- if $isPtr }}
-	{{$set}}.{{$typeTitle}}Var(&_{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
+	{{- if eq $type "bool" }}
+	{{$set}}.BoolFunc("{{$param.Name}}", "{{$desc}}", func(s string) error { return nil })
+	{{- else }}
+	{{$set}}.Func("{{$param.Name}}", "{{$desc}}", func(s string) error { return nil })
+	{{- end }}
 	{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 	{{- end }}

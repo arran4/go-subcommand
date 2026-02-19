@@ -185,20 +185,16 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	var _ptrString string
-	set.StringVar(&_ptrString, "ptrString", "", "Pointer string")
+	set.Func("ptrString", "Pointer string", func(s string) error { return nil })
 
-	var _ptrInt int
-	set.IntVar(&_ptrInt, "ptrInt", 0, "Pointer int")
+	set.Func("ptrInt", "Pointer int", func(s string) error { return nil })
 
-	var _ptrBool bool
-	set.BoolVar(&_ptrBool, "ptrBool", false, "Pointer bool")
+	set.BoolFunc("ptrBool", "Pointer bool", func(s string) error { return nil })
 
-	var _ptrDuration time.Duration
 	if d, err := time.ParseDuration("0"); err == nil {
-		set.DurationVar(&_ptrDuration, "ptrDuration", d, "Pointer duration")
+		set.Func("ptrDuration", "Pointer duration", func(s string) error { return nil })
 	} else {
-		set.DurationVar(&_ptrDuration, "ptrDuration", 0, "Pointer duration")
+		set.Func("ptrDuration", "Pointer duration", func(s string) error { return nil })
 	}
 	set.Usage = v.Usage
 
