@@ -14,6 +14,14 @@ import (
 {{- end}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
+	{{- end}}
+	{{- $hasSlice := false }}
+	{{- range .Parameters }}
+	{{- if or (eq .Type "[]string") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]time.Duration") }}
+	{{- $hasSlice = true }}
+	{{- end }}
+	{{- end }}
+	{{- if or (and .SubCommandFunctionName .ReturnsError) $hasSlice }}
 	"{{.PackagePath}}/cmd"
 	{{- end}}
 )

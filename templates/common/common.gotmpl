@@ -56,13 +56,13 @@
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
 			{{- else if eq $param.Type "[]string" }}
-	{{$set}}.Var((*StringSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.StringSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else if eq $param.Type "[]int" }}
-	{{$set}}.Var((*IntSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.IntSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else if eq $param.Type "[]bool" }}
-	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else if eq $param.Type "[]time.Duration" }}
-	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 			{{- end }}
@@ -75,13 +75,13 @@
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
 	}
 		{{- else if eq $param.Type "[]string" }}
-	{{$set}}.Var((*StringSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.StringSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
 		{{- else if eq $param.Type "[]int" }}
-	{{$set}}.Var((*IntSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.IntSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
 		{{- else if eq $param.Type "[]bool" }}
-	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
 		{{- else if eq $param.Type "[]time.Duration" }}
-	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
+	{{$set}}.Var((*cmd.DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{$param.Name}}", "{{$desc}}")
 		{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}
