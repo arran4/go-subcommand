@@ -171,7 +171,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
 
-	set.Var((*cmd.StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
+	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
 
 	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 

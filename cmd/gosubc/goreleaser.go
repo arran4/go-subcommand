@@ -129,7 +129,7 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 		SubCommands: make(map[string]Cmd),
 	}
 
-	set.StringVar(&v.dir, "dir", ".", "TODO: Add usage text")
+	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
 	set.BoolVar(&v.githubWorkflow, "go-releaser-github-workflow", false, "Generate GitHub Actions release workflow")
 
