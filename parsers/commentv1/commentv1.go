@@ -54,6 +54,7 @@ type CommandTree struct {
 	ReturnCount    int
 	Description    string
 	ExtendedHelp   string
+	ImportPath     string
 }
 
 type CommandsTree struct {
@@ -191,7 +192,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			DataModel:          d,
 			MainCmdName:        cmdName,
 			PackagePath:        rootCommands.PackagePath,
-			ImportPath:         rootCommands.PackagePath, // Root command logic usually in root package
+			ImportPath:         cmdTree.ImportPath,
 			FunctionName:       cmdTree.FunctionName,
 			CommandPackageName: cmdTree.CommandPackageName,
 			DefinitionFile:     cmdTree.DefinitionFile,
@@ -507,6 +508,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					}
 					cmdTree.Commands[cmdName] = ct
 				}
+				ct.ImportPath = importPath
 				ct.FunctionName = s.Name.Name
 				ct.CommandPackageName = f.Name.Name
 				ct.DefinitionFile = filename
@@ -688,6 +690,7 @@ func parseParamDetails(text string) ParsedParam {
 	loc := defaultRegex.FindStringSubmatchIndex(text)
 	if loc != nil {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
+		text = text[:loc[0]] + text[loc[1]:]
 	}
 
 	// Positional arguments: @1, @2, etc.
@@ -699,6 +702,7 @@ func parseParamDetails(text string) ParsedParam {
 			// fallback/ignore, though usually this regex implies digits
 			p.PositionalArgIndex = 0
 		}
+		text = posArgRegex.ReplaceAllString(text, "")
 	}
 
 	// Varargs constraints: 1...3 or ...
@@ -716,6 +720,7 @@ func parseParamDetails(text string) ParsedParam {
 				p.VarArgMax = 0
 			}
 		}
+		text = varArgRangeRegex.ReplaceAllString(text, "")
 	}
 
 	flagRegex := regexp.MustCompile(`-[\w-]+`)
@@ -738,9 +743,6 @@ func parseParamDetails(text string) ParsedParam {
 	})
 
 	clean := flagRegex.ReplaceAllString(text, "")
-	clean = defaultRegex.ReplaceAllString(clean, "")
-	clean = posArgRegex.ReplaceAllString(clean, "")
-	clean = varArgRangeRegex.ReplaceAllString(clean, "")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)

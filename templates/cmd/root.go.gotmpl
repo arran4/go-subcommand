@@ -11,8 +11,6 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
-	"time"
-	"strconv"
 {{- template "common_imports" (slice .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -491,5 +489,3 @@ func (c *RootCmd) Execute(args []string) error {
 	return nil
 	{{- end}}
 }
-
-{{ template "flag_helper_types" }}
