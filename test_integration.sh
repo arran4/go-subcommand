@@ -47,23 +47,26 @@ func Hello(name string) {
 }
 EOF
 
+# Switch to temp dir to avoid path issues with go build
+cd "$TEMP_DIR"
+
 # Run gosubc generate
 echo "Running gosubc generate..."
-gosubc generate --dir "$TEMP_DIR"
+gosubc generate
 
 # Verify generated code
-if [ ! -d "$TEMP_DIR/cmd/testapp" ]; then
+if [ ! -d "cmd/testapp" ]; then
     echo "Error: Generated cmd directory not found!"
     exit 1
 fi
 
 # Build the generated app
 echo "Building generated app..."
-go build -o "$TEMP_DIR/testapp" "$TEMP_DIR/cmd/testapp"
+go build -o testapp ./cmd/testapp
 
 # Run the generated app
 echo "Running generated app..."
-OUTPUT=$("$TEMP_DIR/testapp" hello --name "Integration")
+OUTPUT=$(./testapp hello --name "Integration")
 EXPECTED="Hello, Integration!"
 
 if [ "$OUTPUT" != "$EXPECTED" ]; then
