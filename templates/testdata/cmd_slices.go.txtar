@@ -64,7 +64,7 @@ type MySliceCmd struct {
 	counts        []int
 	debugs        []bool
 	timeouts      []time.Duration
-	SubCommands   map[string]Cmd
+	SubCommands   map[string]func() Cmd
 	CommandAction func(c *MySliceCmd) error
 }
 
@@ -210,7 +210,7 @@ func (c *MySliceCmd) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 
@@ -230,7 +230,7 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 	v := &MySliceCmd{
 		RootCmd:     c,
 		Flags:       set,
-		SubCommands: make(map[string]Cmd),
+		SubCommands: make(map[string]func() Cmd),
 	}
 
 	set.Var((*StringSlice)(&v.files), "f", "Files list")
@@ -248,31 +248,35 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 		return nil
 	}
 
-	v.SubCommands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				for _, arg := range args {
+					if arg == "-deep" {
+						v.UsageRecursive()
+						return nil
+					}
 				}
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
 	}
-	v.SubCommands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				for _, arg := range args {
+					if arg == "-deep" {
+						v.UsageRecursive()
+						return nil
+					}
 				}
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
 	}
 	return v
 }

@@ -71,7 +71,7 @@ func executeUsage(out io.Writer, templateName string, data interface{}) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands      map[string]Cmd
+	Commands      map[string]func() Cmd
 	Version       string
 	Commit        string
 	Date          string
@@ -98,7 +98,7 @@ func (c *RootCmd) UsageRecursive() {
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
-		Commands: make(map[string]Cmd),
+		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
@@ -106,50 +106,60 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.FlagSet.Usage = c.Usage
 
 	{
-		subCmd := c.NewSub1()
+		subCmd := func() Cmd {
+			return c.NewSub1()
+		}
 		c.Commands["sub1"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewSub2()
+		subCmd := func() Cmd {
+			return c.NewSub2()
+		}
 		c.Commands["sub2"] = subCmd
 
 	}
-	c.Commands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
-			}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
 	}
-	c.Commands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
-			}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
 	}
-	c.Commands["version"] = &InternalCommand{
-		Exec: func(args []string) error {
-			fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
-			return nil
-		},
-		UsageFunc: func() {
-			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
-		},
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
 	}
 	return c, nil
 }
@@ -204,7 +214,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 	c.Usage()
