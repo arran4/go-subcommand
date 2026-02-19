@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+	"strconv"
 {{- template "common_imports" (slice .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -305,7 +307,7 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- else if eq $param.Type "[]*time.Duration" }}
 				d, err := time.ParseDuration(value)
 				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+					return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
 				}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
 				{{- else }}
@@ -472,3 +474,5 @@ func (c *RootCmd) Execute(args []string) error {
 	return nil
 	{{- end}}
 }
+
+{{ template "flag_helper_types" }}

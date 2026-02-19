@@ -186,7 +186,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- else if eq $param.Type "[]*time.Duration" }}
 				d, err := time.ParseDuration(value)
 				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+					return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
 				}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
 				{{- else }}
