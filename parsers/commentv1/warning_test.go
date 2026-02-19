@@ -14,7 +14,7 @@ func TestWarnings(t *testing.T) {
 			Data: []byte("module example.com/test"),
 		},
 		"main.go": &fstest.MapFile{
-			Data: []byte(`package main
+			Data: []byte(`package mypkg
 
 // Root is a subcommand ` + "`root`" + `
 // Flags:

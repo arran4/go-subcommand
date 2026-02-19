@@ -514,6 +514,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 
+			if f.Name.Name == "main" {
+				return fmt.Errorf("command %s (function %s) cannot be imported from package main", cmdName, s.Name.Name)
+			}
+
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
 			cmdTree.Insert(importPath, f.Name.Name, cmdName, subCommandSequence, &model.SubCommand{
 				SubCommandFunctionName: s.Name.Name,

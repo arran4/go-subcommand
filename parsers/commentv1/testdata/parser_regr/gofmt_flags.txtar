@@ -1,5 +1,5 @@
 -- input.go --
-package main
+package mypkg
 
 // MyFunc is a subcommand `app cmd`
 // Flags:

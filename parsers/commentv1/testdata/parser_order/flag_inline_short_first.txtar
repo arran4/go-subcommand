@@ -3,7 +3,7 @@ module example.com/test
 
 go 1.22
 -- main.go --
-package main
+package mypkg
 
 // MyCmd is a subcommand `app cmd`
 // param Name: -n -name Your name

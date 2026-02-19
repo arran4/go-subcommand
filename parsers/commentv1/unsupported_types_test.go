@@ -9,7 +9,7 @@ import (
 func TestParseGoFile_UnsupportedTypes(t *testing.T) {
 	// Case 1: Map (Should return error, not panic)
 	t.Run("MapType", func(t *testing.T) {
-		src := `package main
+		src := `package mypkg
 
 // MyCmd is a subcommand ` + "`app cmd`" + `
 func MyCmd(m map[string]int) {}
@@ -28,7 +28,7 @@ func MyCmd(m map[string]int) {}
 
 	// Case 2: Pointer (Should be supported)
 	t.Run("PointerType", func(t *testing.T) {
-		src := `package main
+		src := `package mypkg
 
 // MyCmd is a subcommand ` + "`app cmd`" + `
 func MyCmd(p *int) {}

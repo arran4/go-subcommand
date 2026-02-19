@@ -111,3 +111,19 @@ func LibCmd() error { return nil }
 		})
 	}
 }
+
+func TestMainPackageInSubdirShouldFail(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/test\n\ngo 1.21\n")},
+		"cmd/tool/main.go": {Data: []byte(`package main
+
+// ToolCmd is a subcommand ` + "`tool-app`" + `
+func ToolCmd() error { return nil }
+`)},
+	}
+
+	_, err := ParseGoFiles(fsys, ".")
+	if err == nil {
+		t.Fatal("Expected error when importing 'package main' from a subdirectory, got nil")
+	}
+}
