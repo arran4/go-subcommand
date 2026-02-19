@@ -99,7 +99,7 @@ func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
 			seen[name] = true
 			isDir := len(parts) > 1
 			// We only have minimal info for the mock DirEntry
-			entries = append(entries, &mockDirEntry{name: name, isDir: isDir})
+			entries = append(entries, &collectingDirEntry{name: name, isDir: isDir})
 		}
 	}
 	// Also check known directories
@@ -112,7 +112,7 @@ func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
 				continue
 			}
 			seen[name] = true
-			entries = append(entries, &mockDirEntry{name: name, isDir: true})
+			entries = append(entries, &collectingDirEntry{name: name, isDir: true})
 		}
 	}
 
@@ -142,20 +142,20 @@ func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
 	return entries, nil
 }
 
-type mockDirEntry struct {
+type collectingDirEntry struct {
 	name  string
 	isDir bool
 }
 
-func (d *mockDirEntry) Name() string { return d.name }
-func (d *mockDirEntry) IsDir() bool  { return d.isDir }
-func (d *mockDirEntry) Type() fs.FileMode {
+func (d *collectingDirEntry) Name() string { return d.name }
+func (d *collectingDirEntry) IsDir() bool  { return d.isDir }
+func (d *collectingDirEntry) Type() fs.FileMode {
 	if d.isDir {
 		return fs.ModeDir
 	}
 	return 0
 }
-func (d *mockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
+func (d *collectingDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 	for path, content := range w.Files {
