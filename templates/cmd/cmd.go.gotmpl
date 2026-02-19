@@ -6,9 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
+	{{- end }}
+	"strings"
+	{{- if .SubCommands }}
+	"sync"
 	{{- end }}
 {{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
@@ -29,7 +32,7 @@ type {{.SubCommandStructName}} struct {
 	{{- range .Parameters}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
 	{{- end}}
-	SubCommands map[string]Cmd
+	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error
 }
 
@@ -333,7 +336,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 
@@ -358,7 +361,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	v := &{{.SubCommandStructName}}{
 		{{if .Parent}}{{.Parent.SubCommandStructName}}: c,{{else}}RootCmd: c,{{end}}
 		Flags:   set,
-		SubCommands: make(map[string]Cmd),
+		SubCommands: make(map[string]func() Cmd),
 	}
 {{- template "flag_definitions" (slice "set" "v" .Parameters) }}
 	set.Usage = v.Usage
@@ -392,52 +395,56 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	{{range .SubCommands}}
 	{
-		subCmd := v.New{{.SubCommandStructName}}()
+		subCmd := NewLazyCommand(func() Cmd { return v.New{{.SubCommandStructName}}() })
 		v.SubCommands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		v.SubCommands["{{. | lower}}"] = subCmd
 		{{end}}
 	}
 	{{end}}
-	v.SubCommands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			{{- if minGoVersion "1.21" .GoVersion }}
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
-				return nil
-			}
-			{{- else }}
-			for _, arg := range args {
-				if arg == "-deep" {
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				{{- if minGoVersion "1.21" .GoVersion }}
+				if slices.Contains(args, "-deep") {
 					v.UsageRecursive()
 					return nil
 				}
-			}
-			{{- end }}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+				{{- else }}
+				for _, arg := range args {
+					if arg == "-deep" {
+						v.UsageRecursive()
+						return nil
+					}
+				}
+				{{- end }}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
 	}
-	v.SubCommands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			{{- if minGoVersion "1.21" .GoVersion }}
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
-				return nil
-			}
-			{{- else }}
-			for _, arg := range args {
-				if arg == "-deep" {
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				{{- if minGoVersion "1.21" .GoVersion }}
+				if slices.Contains(args, "-deep") {
 					v.UsageRecursive()
 					return nil
 				}
-			}
-			{{- end }}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+				{{- else }}
+				for _, arg := range args {
+					if arg == "-deep" {
+						v.UsageRecursive()
+						return nil
+					}
+				}
+				{{- end }}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
 	}
 	return v
 }

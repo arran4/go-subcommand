@@ -23,7 +23,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	{{else}}
 	parent := &RootCmd{
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
-		Commands: make(map[string]Cmd),
+		Commands: make(map[string]func() Cmd),
 	}
 	cmd := parent.New{{.SubCommandStructName}}()
 	{{end}}
