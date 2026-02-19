@@ -25,6 +25,8 @@ func TestFormat_Execute(t *testing.T) {
 	args = append(args, "--dir")
 	args = append(args, "test")
 	args = append(args, "--inplace")
+	args = append(args, "--paths")
+	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -39,5 +41,8 @@ func TestFormat_Execute(t *testing.T) {
 	}
 	if cmd.inplace != true {
 		t.Errorf("Expected inplace to be true, got '%v'", cmd.inplace)
+	}
+	if cmd.recursive != true {
+		t.Errorf("Expected recursive to be true, got '%v'", cmd.recursive)
 	}
 }
