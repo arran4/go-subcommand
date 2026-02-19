@@ -224,7 +224,11 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 		sct.Command = cmd
 		sct.Parent = parent
 		// Allocate unique struct name
-		sct.SubCommandStructName = allocator.Allocate(sct.SubCommandName)
+		allocateName := sct.SubCommandName
+		if parent != nil {
+			allocateName = parent.SubCommandStructName + " " + allocateName
+		}
+		sct.SubCommandStructName = allocator.Allocate(allocateName)
 
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {
@@ -239,11 +243,15 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 			}
 		} else {
 			// Missing intermediate node -> Synthetic command
+			allocateName := name
+			if parent != nil {
+				allocateName = parent.SubCommandStructName + " " + allocateName
+			}
 			syntheticCmd := &model.SubCommand{
 				Command:                cmd,
 				Parent:                 parent,
 				SubCommandName:         name,
-				SubCommandStructName:   allocator.Allocate(name),
+				SubCommandStructName:   allocator.Allocate(allocateName),
 				SubCommandFunctionName: "", // Empty to indicate synthetic
 			}
 			subCommands = append(subCommands, syntheticCmd)

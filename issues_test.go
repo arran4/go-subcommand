@@ -897,3 +897,44 @@ func Child() {}
 		t.Errorf("Issue 221: Found empty line before closing parenthesis in import block")
 	}
 }
+
+func TestIssue251_SubcommandNameConflict(t *testing.T) {
+	src := `package main
+
+// Parent1 is a subcommand ` + "`app parent1`" + `
+func Parent1() {}
+
+// Parent1Child is a subcommand ` + "`app parent1 child`" + `
+func Parent1Child() {}
+
+// Parent2 is a subcommand ` + "`app parent2`" + `
+func Parent2() {}
+
+// Parent2Child is a subcommand ` + "`app parent2 child`" + `
+func Parent2Child() {}
+`
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	// Verify unique files are created
+	p1cPath := "cmd/app/parent1_child.go"
+	p2cPath := "cmd/app/parent2_child.go"
+
+	if _, ok := writer.Files[p1cPath]; !ok {
+		t.Errorf("Expected %s to exist", p1cPath)
+	} else {
+		content := string(writer.Files[p1cPath])
+		if !strings.Contains(content, "type Parent1Child struct") {
+			t.Errorf("%s should contain Parent1Child struct", p1cPath)
+		}
+	}
+
+	if _, ok := writer.Files[p2cPath]; !ok {
+		t.Errorf("Expected %s to exist", p2cPath)
+	} else {
+		content := string(writer.Files[p2cPath])
+		if !strings.Contains(content, "type Parent2Child struct") {
+			t.Errorf("%s should contain Parent2Child struct", p2cPath)
+		}
+	}
+}
