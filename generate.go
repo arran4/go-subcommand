@@ -7,7 +7,6 @@ import (
 	"go/format"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -49,10 +48,34 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 //   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
 //   recursive:  --recursive   (default: true)        Search recursively
 func Generate(dir string, manDir string, parserName string, paths []string, recursive bool) error {
+	if dir == "." {
+		if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+			if root, err := findModuleRoot("."); err == nil {
+				dir = root
+			}
+		}
+	}
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
 	})
+}
+
+func findModuleRoot(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(abs, "go.mod")); err == nil {
+			return abs, nil
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return "", fmt.Errorf("go.mod not found")
+		}
+		abs = parent
+	}
 }
 
 // GenerateWithFS generates code using provided FS and Writer
@@ -75,26 +98,26 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 	for _, cmd := range dataModel.Commands {
-		cmdOutDir := path.Join(dir, "cmd", cmd.MainCmdName)
+		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
 		if err := generateFile(writer, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
 		if err := generateFile(writer, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(writer, path.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
+		if err := generateFile(writer, filepath.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
 		if err := generateFile(writer, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(writer, path.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
+		if err := generateFile(writer, filepath.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
 		if err := generateFile(writer, cmdOutDir, "root_test.go", "root_test.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		cmdTemplatesDir := path.Join(cmdOutDir, "templates")
+		cmdTemplatesDir := filepath.Join(cmdOutDir, "templates")
 		if err := generateFile(writer, cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
 			return err
 		}

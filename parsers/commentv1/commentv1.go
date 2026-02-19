@@ -289,43 +289,16 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 					for _, name := range p.Names {
 						typeName := ""
 						isVarArg := false
-						switch t := p.Type.(type) {
-						case *ast.Ident:
-							typeName = t.Name
-						case *ast.SelectorExpr:
-							if ident, ok := t.X.(*ast.Ident); ok {
-								typeName = fmt.Sprintf("%s.%s", ident.Name, t.Sel.Name)
-							} else {
-								// Fallback or panic, for now panic to discover what's wrong
-								panic(fmt.Sprintf("Unsupported selector type: %T", t.X))
-							}
-						case *ast.Ellipsis:
+						expr := p.Type
+						if ellipsis, ok := expr.(*ast.Ellipsis); ok {
 							isVarArg = true
-							if ident, ok := t.Elt.(*ast.Ident); ok {
-								typeName = ident.Name
-							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-								if ident, ok := sel.X.(*ast.Ident); ok {
-									typeName = fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
-								} else {
-									panic(fmt.Sprintf("Unsupported selector type in ellipsis: %T", sel.X))
-								}
-							} else {
-								panic(fmt.Sprintf("Unsupported type in ellipsis: %T", t.Elt))
-							}
-						case *ast.ArrayType:
-							if ident, ok := t.Elt.(*ast.Ident); ok {
-								typeName = "[]" + ident.Name
-							} else if sel, ok := t.Elt.(*ast.SelectorExpr); ok {
-								if ident, ok := sel.X.(*ast.Ident); ok {
-									typeName = fmt.Sprintf("[]%s.%s", ident.Name, sel.Sel.Name)
-								} else {
-									panic(fmt.Sprintf("Unsupported selector type in array: %T", sel.X))
-								}
-							} else {
-								panic(fmt.Sprintf("Unsupported type in array: %T", t.Elt))
-							}
-						default:
-							panic(fmt.Sprintf("Unsupported type: %T", t))
+							expr = ellipsis.Elt
+						}
+
+						var err error
+						typeName, err = formatType(expr)
+						if err != nil {
+							return fmt.Errorf("error processing parameter %s in function %s: %w", name.Name, s.Name.Name, err)
 						}
 						fp := &model.FunctionParameter{
 							Name:     name.Name,
@@ -781,4 +754,37 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	return p
+}
+
+func formatType(expr ast.Expr) (string, error) {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name, nil
+	case *ast.StarExpr:
+		s, err := formatType(t.X)
+		if err != nil {
+			return "", err
+		}
+		return "*" + s, nil
+	case *ast.SelectorExpr:
+		x, err := formatType(t.X)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s.%s", x, t.Sel.Name), nil
+	case *ast.ArrayType:
+		s, err := formatType(t.Elt)
+		if err != nil {
+			return "", err
+		}
+		return "[]" + s, nil
+	case *ast.Ellipsis:
+		s, err := formatType(t.Elt)
+		if err != nil {
+			return "", err
+		}
+		return "..." + s, nil
+	default:
+		return "", fmt.Errorf("unsupported type: %T", t)
+	}
 }
