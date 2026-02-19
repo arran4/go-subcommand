@@ -935,8 +935,8 @@ func Child() {}
 
 func TestGenerate_OverwriteProtection(t *testing.T) {
 	src := `package main
-// Cmd is a subcommand ` + "`app cmd`" + `
-func Cmd() {}
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
 `
 	fs := setupProject(t, src)
 
@@ -947,13 +947,17 @@ func Cmd() {}
 		t.Fatalf("Initial generation failed: %v", err)
 	}
 
-	cmdFile := "cmd/app/cmd.go"
+	cmdFile := "cmd/app/mycmd.go"
 	if _, ok := writer.Files[cmdFile]; !ok {
-		t.Fatalf("File %s not generated", cmdFile)
+		keys := []string{}
+		for k := range writer.Files {
+			keys = append(keys, k)
+		}
+		t.Fatalf("File %s not generated. Generated files: %v", cmdFile, keys)
 	}
 
 	// 2. Modify file (simulating manual edit removing header)
-	writer.Files[cmdFile] = []byte("package main\n// Manual edit\nfunc Cmd() {}")
+	writer.Files[cmdFile] = []byte("package main\n// Manual edit\nfunc MyCmd() {}")
 
 	// 3. Generate without force -> Should fail
 	err = GenerateWithFS(fs, writer, ".", "", "commentv1", nil, false)

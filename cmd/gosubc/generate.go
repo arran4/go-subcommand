@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -171,7 +172,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
 
-	set.Var((*cmd.StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
+	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
 
 	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 
@@ -200,11 +201,9 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil
@@ -213,11 +212,9 @@ func (c *RootCmd) NewGenerate() *Generate {
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil
