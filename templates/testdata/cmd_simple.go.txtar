@@ -31,7 +31,7 @@ import (
 	"strconv"
 	"strings"
 
-	"example.com/mypkg"
+	mypkg "example.com/mypkg"
 )
 
 var _ Cmd = (*MyCmd)(nil)
