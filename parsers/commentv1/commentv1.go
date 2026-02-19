@@ -282,7 +282,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -528,6 +528,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
+				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection
 				DefinitionFile: filename,
 				DocStart:       s.Doc.Pos(),
@@ -560,7 +561,7 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -601,12 +602,44 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				}
 
 				rest := strings.TrimSpace(line[end+1:])
+
+				// Check for inline aliases
+				// Format: (aliases: a, b) or (aka: a, b)
+				// Regex to capture content inside parens
+				reAlias := regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
+				if matches := reAlias.FindStringSubmatch(rest); matches != nil {
+					aliasStr := matches[1]
+					parts := strings.Split(aliasStr, ",")
+					for _, p := range parts {
+						a := strings.TrimSpace(p)
+						if a != "" {
+							aliases = append(aliases, a)
+						}
+					}
+					// Remove the alias part from rest to keep description clean
+					rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
+				}
+
 				if strings.HasPrefix(rest, "that ") {
 					description = strings.TrimPrefix(rest, "that ")
 				} else if strings.HasPrefix(rest, "-- ") {
 					description = strings.TrimPrefix(rest, "-- ")
 				} else if rest != "" {
 					description = rest
+				}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(trimmedLine, "Aliases:") || strings.HasPrefix(trimmedLine, "Alias:") {
+			lineParts := strings.SplitN(trimmedLine, ":", 2)
+			if len(lineParts) > 1 {
+				parts := strings.Split(lineParts[1], ",")
+				for _, p := range parts {
+					a := strings.TrimSpace(p)
+					if a != "" {
+						aliases = append(aliases, a)
+					}
 				}
 			}
 			continue

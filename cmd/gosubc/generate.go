@@ -50,28 +50,30 @@ func (c *Generate) UsageRecursive() {
 }
 
 func (c *Generate) Execute(args []string) error {
-	if len(args) > 0 {
-		if cmd, ok := c.SubCommands[args[0]]; ok {
-			return cmd.Execute(args[1:])
-		}
-	}
+	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
+			remainingArgs = append(remainingArgs, args[i+1:]...)
 			break
 		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			name := arg
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
 			value := ""
 			hasValue := false
-			if strings.Contains(arg, "=") {
-				parts := strings.SplitN(arg, "=", 2)
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
 				name = parts[0]
 				value = parts[1]
 				hasValue = true
 			}
-			trimmedName := strings.TrimLeft(name, "-")
-			switch trimmedName {
+			_ = value
+			_ = hasValue
+			switch name {
 
 			case "dir":
 				if !hasValue {
@@ -138,12 +140,33 @@ func (c *Generate) Execute(args []string) error {
 				} else {
 					c.force = true
 				}
-			case "help", "h":
-				c.Usage()
-				return nil
 			default:
-				return fmt.Errorf("unknown flag: %s", name)
+				return fmt.Errorf("unknown flag: --%s", name)
 			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if !found {
+					return fmt.Errorf("unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd.Execute(remainingArgs[1:])
 		}
 	}
 

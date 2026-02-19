@@ -86,6 +86,23 @@ The primary directive defines where the command lives in the CLI hierarchy:
 // FuncName is a subcommand `root-cmd parent child`
 ```
 
+### Subcommand Aliases
+
+You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive.
+
+```go
+// MyFunc is a subcommand `app cmd`
+// Aliases: c, command
+func MyFunc() { ... }
+```
+
+You can also use an inline syntax:
+
+```go
+// MyFunc is a subcommand `app cmd` (aka: c)
+func MyFunc() { ... }
+```
+
 ### Description & Extended Help
 
 *   **Short Description:** The text immediately following the subcommand definition (or prefixed with `that ` or `-- `) becomes the short description used in usage lists.

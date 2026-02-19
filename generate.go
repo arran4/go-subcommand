@@ -212,6 +212,7 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 }
 
 // Generate is a subcommand `gosubc generate` generates the subcommand code
+// Aliases: gen
 //
 // Flags:
 //

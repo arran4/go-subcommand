@@ -13,6 +13,7 @@ func TestParseSubCommandComments(t *testing.T) {
 		wantSubCommandSequence []string
 		wantDescription        string
 		wantExtendedHelp       string
+		wantAliases            []string
 		wantParams             map[string]ParsedParam
 		wantOk                 bool
 	}{
@@ -23,6 +24,24 @@ func TestParseSubCommandComments(t *testing.T) {
 			wantSubCommandSequence: []string{"example1"},
 			wantDescription:        "",
 			wantExtendedHelp:       "Does nothing practical",
+			wantOk:                 true,
+		},
+		{
+			name:                   "With Aliases",
+			text:                   "Cmd is a subcommand `app cmd` -- Description\nAliases: c, command",
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "Description",
+			wantAliases:            []string{"c", "command"},
+			wantOk:                 true,
+		},
+		{
+			name:                   "With Inline Aliases",
+			text:                   "Cmd is a subcommand `app cmd` -- Description (aka: c, command)",
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "Description",
+			wantAliases:            []string{"c", "command"},
 			wantOk:                 true,
 		},
 		{
@@ -84,7 +103,7 @@ that can handle missing tokens`,
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotParams, gotOk := ParseSubCommandComments(tt.text)
+			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotAliases, gotParams, gotOk := ParseSubCommandComments(tt.text)
 			if gotCmdName != tt.wantCmdName {
 				t.Errorf("gotCmdName = %v, want %v", gotCmdName, tt.wantCmdName)
 			}
@@ -96,6 +115,11 @@ that can handle missing tokens`,
 			}
 			if gotExtendedHelp != tt.wantExtendedHelp {
 				t.Errorf("gotExtendedHelp = %q, want %q", gotExtendedHelp, tt.wantExtendedHelp)
+			}
+			if !reflect.DeepEqual(gotAliases, tt.wantAliases) {
+				if len(gotAliases) != 0 || len(tt.wantAliases) != 0 {
+					t.Errorf("gotAliases = %v, want %v", gotAliases, tt.wantAliases)
+				}
 			}
 			// Check params map
 			if len(gotParams) != len(tt.wantParams) {
