@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -172,11 +173,9 @@ func (c *RootCmd) NewScan() *Scan {
 
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil
@@ -185,11 +184,9 @@ func (c *RootCmd) NewScan() *Scan {
 	}
 	v.SubCommands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					v.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				v.UsageRecursive()
+				return nil
 			}
 			v.Usage()
 			return nil

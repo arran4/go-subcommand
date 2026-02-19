@@ -14,6 +14,8 @@ import (
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
 	_ "github.com/arran4/go-subcommand/parsers/commentv1"
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/semver"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -270,6 +272,8 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 
+	dataModel.GoVersion = getGoVersion(inputFS)
+
 	collector := NewCollectingFileWriter()
 
 	for _, cmd := range dataModel.Commands {
@@ -400,6 +404,9 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"slice": func(args ...interface{}) []interface{} {
 			return args
 		},
+		"minGoVersion": func(min, current string) bool {
+			return semver.Compare("v"+current, "v"+min) >= 0
+		},
 	})
 
 	var patterns []string
@@ -426,6 +433,21 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	}
 	return tmpl, nil
 }
+func getGoVersion(fsys fs.FS) string {
+	b, err := fs.ReadFile(fsys, "go.mod")
+	if err != nil {
+		return "1.16"
+	}
+	f, err := modfile.Parse("go.mod", b, nil)
+	if err != nil {
+		return "1.16"
+	}
+	if f.Go == nil {
+		return "1.16"
+	}
+	return f.Go.Version
+}
+
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {

@@ -897,7 +897,7 @@ func MyCmd() {}
 		for k := range writer.Files {
 			keys = append(keys, k)
 		}
-		t.Fatalf("File %s not generated. Available: %v", cmdFile, keys)
+		t.Fatalf("File %s not generated. Generated files: %v", cmdFile, keys)
 	}
 
 	// 2. Modify file (simulating manual edit removing header)
