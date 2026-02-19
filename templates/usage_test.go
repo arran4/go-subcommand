@@ -94,6 +94,11 @@ func TestUsageTemplate(t *testing.T) {
 				t.Fatalf("failed to execute template: %v", err)
 			}
 
+			// Verify the generated content is a valid template
+			if _, err := template.New("generated").Parse(buf.String()); err != nil {
+				t.Errorf("Generated content is not a valid template: %v\nContent:\n%s", err, buf.String())
+			}
+
 			if !bytes.Equal(buf.Bytes(), expectedOutput) {
 				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
 			}
