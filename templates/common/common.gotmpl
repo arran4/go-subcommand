@@ -4,10 +4,10 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if eq .Type "time.Duration" }}
+	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") }}
 	{{- $hasDuration = true }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "[]int") (eq .Type "[]bool") }}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
@@ -55,7 +55,7 @@
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
-			{{- else if eq $param.Type "[]string" }}
+			{{- else if or (eq $param.Type "[]string") (eq $param.Type "[]int") (eq $param.Type "[]bool") (eq $param.Type "[]time.Duration") }}
 			{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 			{{- end }}
@@ -67,7 +67,7 @@
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", 0, "{{$desc}}")
 	}
-		{{- else if eq $param.Type "[]string" }}
+		{{- else if or (eq $param.Type "[]string") (eq $param.Type "[]int") (eq $param.Type "[]bool") (eq $param.Type "[]time.Duration") }}
 		{{- else }}
 	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{$param.Name}}", {{$default}}, "{{$desc}}")
 		{{- end }}
