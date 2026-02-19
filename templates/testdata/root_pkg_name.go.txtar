@@ -22,9 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"example.com/myproject/cmd/mycmd/templates"
 	"example.com/myproject/rootpkg"

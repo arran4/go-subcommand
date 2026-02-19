@@ -8,9 +8,7 @@ import (
 	"io"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )

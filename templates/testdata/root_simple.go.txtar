@@ -26,9 +26,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"/cmd/mycmd/templates"
 )

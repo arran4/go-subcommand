@@ -21,9 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"/cmd/myroot/templates"
 )
