@@ -205,6 +205,9 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"slice": func(args ...interface{}) []interface{} {
 			return args
 		},
+		"append": func(list []interface{}, args ...interface{}) []interface{} {
+			return append(list, args...)
+		},
 	})
 
 	var patterns []string

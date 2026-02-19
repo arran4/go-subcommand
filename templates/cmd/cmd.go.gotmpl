@@ -50,162 +50,288 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 }
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
-	if len(args) > 0 {
-		if cmd, ok := c.SubCommands[args[0]]; ok {
-			return cmd.Execute(args[1:])
-		}
-	}
 	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
 	{{- end }}
-	{{- if $needsRemainingArgs }}
 	var remainingArgs []string
-	{{- end }}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			{{- if $needsRemainingArgs }}
 			remainingArgs = append(remainingArgs, args[i+1:]...)
-			{{- end }}
 			break
 		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			name := arg
-			{{- $hasFlags := false }}
-			{{- range .Parameters }}
-			{{- if not .IsPositional }}
-			{{- $hasFlags = true }}
-			{{- end }}
-			{{- end }}
-			{{- if $hasFlags }}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
 			value := ""
 			hasValue := false
-			if strings.Contains(arg, "=") {
-				parts := strings.SplitN(arg, "=", 2)
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
 				name = parts[0]
 				value = parts[1]
 				hasValue = true
 			}
-			{{- end }}
-			trimmedName := strings.TrimLeft(name, "-")
-			switch trimmedName {
+			_ = value
+			_ = hasValue
+			switch name {
 			{{- range .Parameters }}
 			{{- if not .IsPositional }}
 			{{$param := .}}
-			case "{{.Name}}"{{ range $i, $a := .FlagAliases }}{{if ne $a $param.Name}}, "{{$a}}"{{end}}{{ end }}:
-				{{- if eq .Type "bool" }}
+			{{- $longs := slice }}
+			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
+			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
+			{{- $uniqueLongs := slice }}
+			{{- range $l := $longs }}
+				{{- $exists := false }}
+				{{- range $u := $uniqueLongs }}{{ if eq $u $l }}{{ $exists = true }}{{ end }}{{ end }}
+				{{- if not $exists }}{{ $uniqueLongs = append $uniqueLongs $l }}{{ end }}
+			{{- end }}
+			{{- if gt (len $uniqueLongs) 0 }}
+			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
 						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
-					c.{{.Name}} = b
+					{{- if eq $param.Type "bool" }}
+					c.{{$param.Name}} = b
+					{{- else if eq $param.Type "*bool" }}
+					c.{{$param.Name}} = &b
+					{{- else if eq $param.Type "[]bool" }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, b)
+					{{- else if eq $param.Type "[]*bool" }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
+					{{- end }}
 				} else {
-					c.{{.Name}} = true
+					{{- if eq $param.Type "bool" }}
+					c.{{$param.Name}} = true
+					{{- else if eq $param.Type "*bool" }}
+					b := true
+					c.{{$param.Name}} = &b
+					{{- else if eq $param.Type "[]bool" }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, true)
+					{{- else if eq $param.Type "[]*bool" }}
+					b := true
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
+					{{- end }}
 				}
-				{{- else if eq .Type "string" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.{{.Name}} = value
-				{{- else if eq .Type "int" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				iv, err := strconv.Atoi(value)
-				if err != nil {
-					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
-				}
-				c.{{.Name}} = iv
-				{{- else if eq .Type "time.Duration" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				d, err := time.ParseDuration(value)
-				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
-				}
-				c.{{.Name}} = d
-				{{- else if eq .Type "[]string" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.{{.Name}} = append(c.{{.Name}}, value)
-				{{- else if eq .Type "[]int" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				iv, err := strconv.Atoi(value)
-				if err != nil {
-					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
-				}
-				c.{{.Name}} = append(c.{{.Name}}, iv)
-				{{- else if eq .Type "[]bool" }}
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.{{.Name}} = append(c.{{.Name}}, b)
-				} else {
-					c.{{.Name}} = append(c.{{.Name}}, true)
-				}
-				{{- else if eq .Type "[]time.Duration" }}
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				d, err := time.ParseDuration(value)
-				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
-				}
-				c.{{.Name}} = append(c.{{.Name}}, d)
 				{{- else }}
-				// TODO: Implement parsing for flag type {{.Type}}
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				{{- if eq $param.Type "string" }}
+				c.{{$param.Name}} = value
+				{{- else if eq $param.Type "*string" }}
+				s := value
+				c.{{$param.Name}} = &s
+				{{- else if eq $param.Type "int" }}
+				iv, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = iv
+				{{- else if eq $param.Type "*int" }}
+				iv, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = &iv
+				{{- else if eq $param.Type "time.Duration" }}
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = d
+				{{- else if eq $param.Type "*time.Duration" }}
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = &d
+				{{- else if eq $param.Type "[]string" }}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, value)
+				{{- else if eq $param.Type "[]*string" }}
+				s := value
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
+				{{- else if eq $param.Type "[]int" }}
+				iv, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+				{{- else if eq $param.Type "[]*int" }}
+				iv, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+				{{- else if eq $param.Type "[]time.Duration" }}
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, d)
+				{{- else if eq $param.Type "[]*time.Duration" }}
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
+				{{- else }}
+				// TODO: Implement parsing for flag type {{$param.Type}}
+				{{- end }}
 				{{- end }}
 			{{- end }}
 			{{- end }}
-			case "help", "h":
-				c.Usage()
-				return nil
+			{{- end }}
 			default:
-				return fmt.Errorf("unknown flag: %s", name)
+				return fmt.Errorf("unknown flag: --%s", name)
 			}
-		}{{ if $needsRemainingArgs }} else {
-			remainingArgs = append(remainingArgs, arg)
-		}{{ end }}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				{{- range .Parameters }}
+				{{- if not .IsPositional }}
+				{{$param := .}}
+				{{- $shorts := slice }}
+				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
+				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
+				{{- $uniqueShorts := slice }}
+				{{- range $s := $shorts }}
+					{{- $exists := false }}
+					{{- range $u := $uniqueShorts }}{{ if eq $u $s }}{{ $exists = true }}{{ end }}{{ end }}
+					{{- if not $exists }}{{ $uniqueShorts = append $uniqueShorts $s }}{{ end }}
+				{{- end }}
+				{{- if gt (len $uniqueShorts) 0 }}
+				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
+					found = true
+					{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
+					{{- if eq $param.Type "bool" }}
+					c.{{$param.Name}} = true
+					{{- else if eq $param.Type "*bool" }}
+					b := true
+					c.{{$param.Name}} = &b
+					{{- else if eq $param.Type "[]bool" }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, true)
+					{{- else if eq $param.Type "[]*bool" }}
+					b := true
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
+					{{- end }}
+					{{- else }}
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return fmt.Errorf("flag -%s requires a value", char)
+						}
+					}
+					{{- if eq $param.Type "string" }}
+					c.{{$param.Name}} = value
+					{{- else if eq $param.Type "*string" }}
+					s := value
+					c.{{$param.Name}} = &s
+					{{- else if eq $param.Type "int" }}
+					iv, err := strconv.Atoi(value)
+					if err != nil {
+						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = iv
+					{{- else if eq $param.Type "*int" }}
+					iv, err := strconv.Atoi(value)
+					if err != nil {
+						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = &iv
+					{{- else if eq $param.Type "time.Duration" }}
+					d, err := time.ParseDuration(value)
+					if err != nil {
+						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = d
+					{{- else if eq $param.Type "*time.Duration" }}
+					d, err := time.ParseDuration(value)
+					if err != nil {
+						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = &d
+					{{- else if eq $param.Type "[]string" }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, value)
+					{{- else if eq $param.Type "[]*string" }}
+					s := value
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
+					{{- else if eq $param.Type "[]int" }}
+					iv, err := strconv.Atoi(value)
+					if err != nil {
+						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+					{{- else if eq $param.Type "[]*int" }}
+					iv, err := strconv.Atoi(value)
+					if err != nil {
+						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+					{{- else if eq $param.Type "[]time.Duration" }}
+					d, err := time.ParseDuration(value)
+					if err != nil {
+						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, d)
+					{{- else if eq $param.Type "[]*time.Duration" }}
+					d, err := time.ParseDuration(value)
+					if err != nil {
+						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
+					{{- else }}
+					// TODO: Implement parsing for flag type {{$param.Type}}
+					{{- end }}
+					{{- end }}
+				}
+				{{- end }}
+				{{- end }}
+				{{- end }}
+				if !found {
+					return fmt.Errorf("unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd.Execute(remainingArgs[1:])
+		}
 	}
 
 {{- template "positional_args_parsing" .Parameters }}
