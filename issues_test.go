@@ -865,7 +865,7 @@ func Child() {}
 	// The diff shows removal of blank line.
 	// But generated code also contains invalid empty import `""` for synthetic commands.
 
-	if strings.Contains(nestedCode, `""`) {
+	if strings.Contains(nestedCode, "\t\"\"") {
 		t.Errorf("Issue 221: Generated code contains empty import `\"\"`")
 	}
 

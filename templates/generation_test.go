@@ -5,7 +5,6 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
-	"os"
 	"strings"
 	"testing"
 

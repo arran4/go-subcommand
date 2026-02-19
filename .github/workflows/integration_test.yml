@@ -24,8 +24,53 @@ jobs:
       - name: Build and Install gosubc
         run: go install ./cmd/gosubc
 
-      - name: Make script executable
-        run: chmod +x test_integration.sh
-
       - name: Run Integration Script
-        run: ./test_integration.sh
+        shell: bash
+        run: |
+          set -e
+
+          # Create temporary directory for the integration test
+          TEST_DIR=$(mktemp -d)
+          echo "Running integration test in $TEST_DIR"
+
+          # Setup a new Go module
+          cd "$TEST_DIR"
+          go mod init example.com/integration
+
+          # Create a dummy package with a subcommand
+          mkdir -p pkg
+          cat <<EOF > pkg/lib.go
+          package pkg
+
+          import "fmt"
+
+          // Hello is a subcommand integration hello
+          func Hello() {
+            fmt.Println("Hello from integration test")
+          }
+          EOF
+
+          # Run gosubc generate
+          gosubc generate --dir .
+
+          # Verify generated files exist
+          if [ ! -f "cmd/integration/main.go" ]; then
+            echo "Error: cmd/integration/main.go not generated"
+            exit 1
+          fi
+
+          # Build the generated CLI
+          cd cmd/integration
+          go mod tidy
+          go build -o integration-cli .
+
+          # Run the CLI and verify output
+          OUTPUT=$(./integration-cli hello)
+          echo "Output: $OUTPUT"
+
+          if [[ "$OUTPUT" != *"Hello from integration test"* ]]; then
+            echo "Error: Expected output not found"
+            exit 1
+          fi
+
+          echo "Integration test passed!"
