@@ -71,12 +71,91 @@ func (w *CollectingFileWriter) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (w *CollectingFileWriter) ReadFile(path string) ([]byte, error) {
+	if content, ok := w.Files[path]; ok {
+		return content, nil
+	}
 	return nil, os.ErrNotExist
 }
 
 func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
-	return nil, os.ErrNotExist
+	// Simple implementation: scan Files for entries with the given prefix
+	var entries []fs.DirEntry
+	// Ensure path has a trailing slash for prefix matching, unless it's just "."
+	prefix := path
+	if prefix != "." && !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+
+	seen := make(map[string]bool)
+
+	for p := range w.Files {
+		if strings.HasPrefix(p, prefix) {
+			rel := strings.TrimPrefix(p, prefix)
+			parts := strings.SplitN(rel, string(filepath.Separator), 2)
+			name := parts[0]
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			isDir := len(parts) > 1
+			// We only have minimal info for the mock DirEntry
+			entries = append(entries, &mockDirEntry{name: name, isDir: isDir})
+		}
+	}
+	// Also check known directories
+	for d := range w.Dirs {
+		if strings.HasPrefix(d, prefix) {
+			rel := strings.TrimPrefix(d, prefix)
+			parts := strings.SplitN(rel, string(filepath.Separator), 2)
+			name := parts[0]
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			entries = append(entries, &mockDirEntry{name: name, isDir: true})
+		}
+	}
+
+	if len(entries) == 0 {
+		// If we found nothing, maybe the directory doesn't exist in our map
+		// But since we are only collecting, returning empty is fine if it wasn't explicitly created.
+		// However, returning ErrNotExist might be more accurate if we strictly track Dirs.
+		// For now, let's assume if it's not in w.Dirs or has no files, it doesn't exist?
+		// But w.Dirs is only populated on MkdirAll.
+		// Let's check w.Dirs for exact match
+		_, isDir := w.Dirs[path]
+		if !isDir && path != "." {
+			// Check if any file starts with this path
+			found := false
+			for p := range w.Files {
+				if strings.HasPrefix(p, prefix) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, os.ErrNotExist
+			}
+		}
+	}
+
+	return entries, nil
 }
+
+type mockDirEntry struct {
+	name  string
+	isDir bool
+}
+
+func (d *mockDirEntry) Name() string { return d.name }
+func (d *mockDirEntry) IsDir() bool  { return d.isDir }
+func (d *mockDirEntry) Type() fs.FileMode {
+	if d.isDir {
+		return fs.ModeDir
+	}
+	return 0
+}
+func (d *mockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 	for path, content := range w.Files {
