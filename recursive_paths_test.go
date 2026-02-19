@@ -21,7 +21,7 @@ func Sub() {}
 	}
 
 	// Test recursive=true (default)
-	writer := NewMockWriter()
+	writer := NewCollectingFileWriter()
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -31,7 +31,7 @@ func Sub() {}
 	}
 
 	// Test recursive=false
-	writer = NewMockWriter()
+	writer = NewCollectingFileWriter()
 	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -59,7 +59,7 @@ func Cmd2() {}
 	}
 
 	// Test with specific path
-	writer := NewMockWriter()
+	writer := NewCollectingFileWriter()
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,

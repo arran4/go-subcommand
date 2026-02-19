@@ -1,8 +1,6 @@
 package go_subcommand
 
 import (
-	"io/fs"
-	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -10,75 +8,6 @@ import (
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
-
-// MockWriter implements FileWriter for in-memory testing
-type MockWriter struct {
-	Files map[string][]byte
-}
-
-func NewMockWriter() *MockWriter {
-	return &MockWriter{
-		Files: make(map[string][]byte),
-	}
-}
-
-func (m *MockWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
-	m.Files[path] = content
-	return nil
-}
-
-func (m *MockWriter) MkdirAll(path string, perm os.FileMode) error {
-	return nil // No-op for map
-}
-
-type mockDirEntry struct {
-	name  string
-	isDir bool
-}
-
-func (d *mockDirEntry) Name() string { return d.name }
-func (d *mockDirEntry) IsDir() bool  { return d.isDir }
-func (d *mockDirEntry) Type() fs.FileMode {
-	if d.isDir {
-		return fs.ModeDir
-	}
-	return 0
-}
-func (d *mockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
-
-func (m *MockWriter) ReadFile(path string) ([]byte, error) {
-	if content, ok := m.Files[path]; ok {
-		return content, nil
-	}
-	return nil, os.ErrNotExist
-}
-
-func (m *MockWriter) ReadDir(path string) ([]fs.DirEntry, error) {
-	var entries []fs.DirEntry
-	seen := make(map[string]bool)
-	// Normalize path to have trailing slash if not empty
-	prefix := path
-	if prefix != "" && !strings.HasSuffix(prefix, "/") {
-		prefix += "/"
-	}
-
-	for k := range m.Files {
-		if strings.HasPrefix(k, prefix) {
-			rel := strings.TrimPrefix(k, prefix)
-			parts := strings.Split(rel, "/")
-			if len(parts) > 0 && parts[0] != "" {
-				name := parts[0]
-				if seen[name] {
-					continue
-				}
-				seen[name] = true
-				isDir := len(parts) > 1
-				entries = append(entries, &mockDirEntry{name: name, isDir: isDir})
-			}
-		}
-	}
-	return entries, nil
-}
 
 // setupProject returns an in-memory FS
 func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
@@ -89,8 +18,8 @@ func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 }
 
 // runGenerateInMemory runs the generator using in-memory FS and Writer
-func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *MockWriter {
-	writer := NewMockWriter()
+func runGenerateInMemory(t *testing.T, inputFS fstest.MapFS) *CollectingFileWriter {
+	writer := NewCollectingFileWriter()
 	// We use a dummy dir name like "." or "/app"
 	if err := GenerateWithFS(inputFS, writer, ".", "", "commentv1", nil, false); err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -105,7 +34,7 @@ func TestIssue33_HyphenatedCommands_Content(t *testing.T) {
 func ListHeads() {}
 `
 	fs := setupProject(t, src)
-	writer := NewMockWriter()
+	writer := NewCollectingFileWriter()
 
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil, false)
 
@@ -916,7 +845,7 @@ func Child() {}
 		"main.go": &fstest.MapFile{Data: []byte(src)},
 	}
 
-	writer := NewMockWriter()
+	writer := NewCollectingFileWriter()
 	// Generate code
 	if err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil, false); err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -950,25 +879,25 @@ func Child() {}
 
 func TestGenerate_OverwriteProtection(t *testing.T) {
 	src := `package main
-// Cmd is a subcommand ` + "`app cmd`" + `
-func Cmd() {}
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
 `
 	fs := setupProject(t, src)
 
 	// 1. Initial generation
-	writer := NewMockWriter()
+	writer := NewCollectingFileWriter()
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", nil, false)
 	if err != nil {
 		t.Fatalf("Initial generation failed: %v", err)
 	}
 
-	cmdFile := "cmd/app/cmd.go"
+	cmdFile := "cmd/app/mycmd.go"
 	if _, ok := writer.Files[cmdFile]; !ok {
 		t.Fatalf("File %s not generated", cmdFile)
 	}
 
 	// 2. Modify file (simulating manual edit removing header)
-	writer.Files[cmdFile] = []byte("package main\n// Manual edit\nfunc Cmd() {}")
+	writer.Files[cmdFile] = []byte("package main\n// Manual edit\nfunc MyCmd() {}")
 
 	// 3. Generate without force -> Should fail
 	err = GenerateWithFS(fs, writer, ".", "", "commentv1", nil, false)
