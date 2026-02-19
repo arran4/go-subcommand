@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,6 +18,8 @@ import (
 var goTemplatesFS embed.FS
 
 func TestGoTemplates(t *testing.T) {
+	updateGolden := os.Getenv("UPDATE_GOLDEN") == "true"
+
 	// Parse all templates
 	tmpl, err := go_subcommand.ParseTemplates(go_subcommand.TemplatesFS)
 	if err != nil {
@@ -163,7 +166,30 @@ func TestGoTemplates(t *testing.T) {
 				// This ensures we test the final result (what users get).
 
 				if !bytes.Equal(formatted, expectedOutput) {
-					t.Errorf("Output mismatch for %s:\nExpected:\n%s\nGot:\n%s", entry.Name(), string(expectedOutput), string(formatted))
+					if updateGolden {
+						// Update output.go in archive
+						found := false
+						for i, f := range archive.Files {
+							if f.Name == "output.go" {
+								archive.Files[i].Data = formatted
+								found = true
+								break
+							}
+						}
+						if !found {
+							archive.Files = append(archive.Files, txtar.File{
+								Name: "output.go",
+								Data: formatted,
+							})
+						}
+						// Write back to file
+						if err := os.WriteFile("testdata/"+entry.Name(), txtar.Format(archive), 0644); err != nil {
+							t.Fatalf("failed to update golden file %s: %v", entry.Name(), err)
+						}
+						t.Logf("Updated golden file %s", entry.Name())
+					} else {
+						t.Errorf("Output mismatch for %s:\nExpected:\n%s\nGot:\n%s", entry.Name(), string(expectedOutput), string(formatted))
+					}
 				}
 			}
 		})

@@ -31,20 +31,20 @@ func (m *MockWriter) MkdirAll(path string, perm os.FileMode) error {
 	return nil // No-op for map
 }
 
-type mockDirEntry struct {
+type testMockDirEntry struct {
 	name  string
 	isDir bool
 }
 
-func (d *mockDirEntry) Name() string { return d.name }
-func (d *mockDirEntry) IsDir() bool  { return d.isDir }
-func (d *mockDirEntry) Type() fs.FileMode {
+func (d *testMockDirEntry) Name() string { return d.name }
+func (d *testMockDirEntry) IsDir() bool  { return d.isDir }
+func (d *testMockDirEntry) Type() fs.FileMode {
 	if d.isDir {
 		return fs.ModeDir
 	}
 	return 0
 }
-func (d *mockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
+func (d *testMockDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 func (m *MockWriter) ReadFile(path string) ([]byte, error) {
 	if content, ok := m.Files[path]; ok {
@@ -73,7 +73,7 @@ func (m *MockWriter) ReadDir(path string) ([]fs.DirEntry, error) {
 				}
 				seen[name] = true
 				isDir := len(parts) > 1
-				entries = append(entries, &mockDirEntry{name: name, isDir: isDir})
+				entries = append(entries, &testMockDirEntry{name: name, isDir: isDir})
 			}
 		}
 	}
@@ -950,8 +950,8 @@ func Child() {}
 
 func TestGenerate_OverwriteProtection(t *testing.T) {
 	src := `package main
-// Cmd is a subcommand ` + "`app cmd`" + `
-func Cmd() {}
+// MyCmd is a subcommand ` + "`app mycmd`" + `
+func MyCmd() {}
 `
 	fs := setupProject(t, src)
 
@@ -962,9 +962,13 @@ func Cmd() {}
 		t.Fatalf("Initial generation failed: %v", err)
 	}
 
-	cmdFile := "cmd/app/cmd.go"
+	cmdFile := "cmd/app/mycmd.go"
 	if _, ok := writer.Files[cmdFile]; !ok {
-		t.Fatalf("File %s not generated", cmdFile)
+		keys := []string{}
+		for k := range writer.Files {
+			keys = append(keys, k)
+		}
+		t.Fatalf("File %s not generated. Found: %v", cmdFile, keys)
 	}
 
 	// 2. Modify file (simulating manual edit removing header)

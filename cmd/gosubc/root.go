@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
@@ -14,6 +15,30 @@ import (
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
+}
+
+type LazyCommand struct {
+	Init func() Cmd
+	cmd  Cmd
+	once sync.Once
+}
+
+func (c *LazyCommand) Execute(args []string) error {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	return c.cmd.Execute(args)
+}
+
+func (c *LazyCommand) Usage() {
+	c.once.Do(func() {
+		c.cmd = c.Init()
+	})
+	c.cmd.Usage()
+}
+
+func NewLazyCommand(init func() Cmd) *LazyCommand {
+	return &LazyCommand{Init: init}
 }
 
 type InternalCommand struct {
@@ -91,14 +116,14 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.Commands["format"] = c.NewFormat()
-	c.Commands["format-source-comments"] = c.NewFormatSourceComments()
-	c.Commands["generate"] = c.NewGenerate()
-	c.Commands["goreleaser"] = c.NewGoreleaser()
-	c.Commands["list"] = c.NewList()
-	c.Commands["scan"] = c.NewScan()
-	c.Commands["syntax"] = c.NewSyntax()
-	c.Commands["validate"] = c.NewValidate()
+	c.Commands["format"] = NewLazyCommand(func() Cmd { return c.NewFormat() })
+	c.Commands["format-source-comments"] = NewLazyCommand(func() Cmd { return c.NewFormatSourceComments() })
+	c.Commands["generate"] = NewLazyCommand(func() Cmd { return c.NewGenerate() })
+	c.Commands["goreleaser"] = NewLazyCommand(func() Cmd { return c.NewGoreleaser() })
+	c.Commands["list"] = NewLazyCommand(func() Cmd { return c.NewList() })
+	c.Commands["scan"] = NewLazyCommand(func() Cmd { return c.NewScan() })
+	c.Commands["syntax"] = NewLazyCommand(func() Cmd { return c.NewSyntax() })
+	c.Commands["validate"] = NewLazyCommand(func() Cmd { return c.NewValidate() })
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {

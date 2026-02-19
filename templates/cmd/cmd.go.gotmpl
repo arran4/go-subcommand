@@ -262,7 +262,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	}
 	{{end}}
 	{{range .SubCommands}}
-	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
+	v.SubCommands["{{.SubCommandName | lower}}"] = NewLazyCommand(func() Cmd { return v.New{{.SubCommandStructName}}() })
 	{{end}}
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
