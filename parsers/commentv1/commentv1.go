@@ -791,6 +791,9 @@ func parseParamDetails(text string) ParsedParam {
 	clean = strings.ReplaceAll(clean, ")", " ")
 	clean = strings.Join(strings.Fields(clean), " ")
 
+	if strings.HasPrefix(clean, "\"") && strings.HasSuffix(clean, "\"") {
+		clean = strings.Trim(clean, "\"")
+	}
 	p.Description = clean
 
 	if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {

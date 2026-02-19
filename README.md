@@ -207,9 +207,9 @@ func ListUsers(...) { ... }
 
 ### Parent Flags (Inheritance)
 
-Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to update the parent's state (like global verbosity or configuration).
+Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to use the parent's flag value as its default.
 
-Use the `parent-flag: <param_name>` directive.
+Use the `(from: parent)` directive in the parameter description or flags block.
 
 ```go
 // Parent is a subcommand `app parent`
@@ -219,10 +219,24 @@ Use the `parent-flag: <param_name>` directive.
 func Parent(verbose bool) { ... }
 
 // Child is a subcommand `app parent child`
-// parent-flag: verbose
+//
+// Flags:
+//   verbose: (from: parent)
 func Child(verbose bool) {
-    // verbose parameter here maps to Parent's verbose variable
+    // verbose parameter here initialized with Parent's verbose variable value
 }
+```
+
+### Environment Variable Defaults
+
+You can specify that a flag's default value should come from an environment variable.
+
+Use the `(default from environment <VAR_NAME> fallback: <value>)` directive.
+
+```go
+// Flags:
+//   token: --token (default from environment API_TOKEN fallback: "") API Token
+func MyCommand(token string) { ... }
 ```
 
 ### Man Page Generation
