@@ -22,6 +22,18 @@
       "Type": "[]int",
       "Description": "Counts list",
       "Default": "nil"
+    },
+    {
+      "Name": "debugs",
+      "Type": "[]bool",
+      "Description": "Debug list",
+      "Default": "nil"
+    },
+    {
+      "Name": "timeouts",
+      "Type": "[]time.Duration",
+      "Description": "Timeouts list",
+      "Default": "nil"
     }
   ]
 }
@@ -36,7 +48,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"example.com/mypkg"
 )
@@ -48,6 +62,8 @@ type MySliceCmd struct {
 	Flags         *flag.FlagSet
 	files         []string
 	counts        []int
+	debugs        []bool
+	timeouts      []time.Duration
 	SubCommands   map[string]Cmd
 	CommandAction func(c *MySliceCmd) error
 }
@@ -107,7 +123,45 @@ func (c *MySliceCmd) Execute(args []string) error {
 				c.files = append(c.files, value)
 
 			case "counts":
-				// TODO: Implement parsing for flag type []int
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				iv, err := strconv.Atoi(value)
+				if err != nil {
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+				}
+				c.counts = append(c.counts, iv)
+
+			case "debugs":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.debugs = append(c.debugs, b)
+				} else {
+					c.debugs = append(c.debugs, true)
+				}
+
+			case "timeouts":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				d, err := time.ParseDuration(value)
+				if err != nil {
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+				}
+				c.timeouts = append(c.timeouts, d)
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -139,11 +193,15 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 	set.Var((*StringSlice)(&v.files), "f", "Files list")
 
 	set.Var((*IntSlice)(&v.counts), "counts", "Counts list")
+
+	set.Var((*BoolSlice)(&v.debugs), "debugs", "Debug list")
+
+	set.Var((*DurationSlice)(&v.timeouts), "timeouts", "Timeouts list")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *MySliceCmd) error {
 
-		mypkg.MySliceFunc(c.files, c.counts)
+		mypkg.MySliceFunc(c.files, c.counts, c.debugs, c.timeouts)
 		return nil
 	}
 
