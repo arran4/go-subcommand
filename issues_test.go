@@ -893,7 +893,11 @@ func MyCmd() {}
 
 	cmdFile := "cmd/app/mycmd.go"
 	if _, ok := writer.Files[cmdFile]; !ok {
-		t.Fatalf("File %s not generated", cmdFile)
+		keys := make([]string, 0, len(writer.Files))
+		for k := range writer.Files {
+			keys = append(keys, k)
+		}
+		t.Fatalf("File %s not generated. Available: %v", cmdFile, keys)
 	}
 
 	// 2. Modify file (simulating manual edit removing header)

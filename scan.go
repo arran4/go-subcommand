@@ -13,10 +13,11 @@ import (
 // It is useful for verifying the command structure and configuration.
 //
 // Flags:
-//   dir:        --dir         (default: ".")         The project root directory
-//   parserName: --parser-name (default: "commentv1") Name of the parser to use
-//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
-//   recursive:  --recursive   (default: true)        Search recursively
+//
+//	dir:		--dir		(default: ".")		The project root directory
+//	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
+//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	recursive:	--recursive	(default: true)		Search recursively
 func Scan(dir string, parserName string, paths []string, recursive bool) error {
 	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,

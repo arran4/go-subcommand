@@ -4,7 +4,7 @@
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
 	{{- range $params }}
-	{{- if eq .Type "time.Duration" }}
+	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") }}
 	{{- $hasDuration = true }}
 	{{- end }}
 	{{- if eq .Type "[]time.Duration" }}
