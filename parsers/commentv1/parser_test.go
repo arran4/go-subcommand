@@ -36,6 +36,15 @@ func TestParseSubCommandComments(t *testing.T) {
 			wantOk:                 true,
 		},
 		{
+			name:                   "With Inline Aliases",
+			text:                   "Cmd is a subcommand `app cmd` -- Description (aka: c, command)",
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "Description",
+			wantAliases:            []string{"c", "command"},
+			wantOk:                 true,
+		},
+		{
 			name:                   "Example 1.1",
 			text:                   "ExampleCmd1 is a subcommand `basic1 example1`",
 			wantCmdName:            "basic1",

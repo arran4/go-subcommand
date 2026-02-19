@@ -600,6 +600,24 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				}
 
 				rest := strings.TrimSpace(line[end+1:])
+
+				// Check for inline aliases
+				// Format: (aliases: a, b) or (aka: a, b)
+				// Regex to capture content inside parens
+				reAlias := regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
+				if matches := reAlias.FindStringSubmatch(rest); matches != nil {
+					aliasStr := matches[1]
+					parts := strings.Split(aliasStr, ",")
+					for _, p := range parts {
+						a := strings.TrimSpace(p)
+						if a != "" {
+							aliases = append(aliases, a)
+						}
+					}
+					// Remove the alias part from rest to keep description clean
+					rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
+				}
+
 				if strings.HasPrefix(rest, "that ") {
 					description = strings.TrimPrefix(rest, "that ")
 				} else if strings.HasPrefix(rest, "-- ") {
