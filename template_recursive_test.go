@@ -11,6 +11,7 @@ func TestRecursiveTemplateParsing(t *testing.T) {
 		"templates/root.gotmpl":          {Data: []byte("root template")},
 		"templates/subdir/nested.gotmpl": {Data: []byte("nested template")},
 		"templates/subdir/ignore.txt":    {Data: []byte("should be ignored")},
+		"templates/common/common.gotmpl": {Data: []byte(`{{- define "flag_helper_types" -}}{{end}}`)},
 	}
 
 	tmpl, err := ParseTemplates(mockFS)

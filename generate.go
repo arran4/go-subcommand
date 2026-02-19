@@ -431,6 +431,9 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing templates: %w", err)
 	}
+	if tmpl.Lookup("flag_helper_types") == nil {
+		return nil, fmt.Errorf("template 'flag_helper_types' not found in %v", patterns)
+	}
 	return tmpl, nil
 }
 func getGoVersion(fsys fs.FS) string {

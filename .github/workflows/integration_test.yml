@@ -44,7 +44,7 @@ jobs:
 
           import "fmt"
 
-          // Hello is a subcommand integration hello
+          // Hello is a subcommand \`integration hello\`
           func Hello() {
             fmt.Println("Hello from integration test")
           }

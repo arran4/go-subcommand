@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
+	"os"
 	"strings"
 	"testing"
 
@@ -15,6 +16,8 @@ import (
 
 //go:embed testdata/*.go.txtar
 var goTemplatesFS embed.FS
+
+var _ = os.DevNull
 
 func TestGoTemplates(t *testing.T) {
 	// Parse all templates
