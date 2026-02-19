@@ -198,6 +198,12 @@ func (c *RootCmd) NewGenerate() *Generate {
 		return nil
 	}
 
+	v.SubCommands["gh-release"] = v.NewGenerateGhRelease()
+
+	v.SubCommands["gh-verification"] = v.NewGenerateGhVerification()
+
+	v.SubCommands["goreleaser"] = v.NewGenerateGoreleaser()
+
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
 			for _, arg := range args {
