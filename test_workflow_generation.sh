@@ -13,9 +13,9 @@ module example.com/test
 go 1.25
 EOF
 
-# Run gosubc generate-github-workflow
-echo "Running gosubc generate-github-workflow..."
-go run ./cmd/gosubc generate-github-workflow --dir "$TEMP_DIR"
+# Run gosubc init --gh-verification
+echo "Running gosubc init --gh-verification..."
+go run ./cmd/gosubc init --dir "$TEMP_DIR" --gh-verification
 
 # Check if file exists
 WORKFLOW_FILE="$TEMP_DIR/.github/workflows/generate_verification.yml"

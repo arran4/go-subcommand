@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"errors"
@@ -13,36 +14,39 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
-var _ Cmd = (*GenerateGithubWorkflow)(nil)
+var _ Cmd = (*Init)(nil)
 
-type GenerateGithubWorkflow struct {
+type Init struct {
 	*RootCmd
-	Flags         *flag.FlagSet
-	dir           string
-	SubCommands   map[string]Cmd
-	CommandAction func(c *GenerateGithubWorkflow) error
+	Flags          *flag.FlagSet
+	dir            string
+	goreleaser     bool
+	ghRelease      bool
+	ghVerification bool
+	SubCommands    map[string]Cmd
+	CommandAction  func(c *Init) error
 }
 
-type UsageDataGenerateGithubWorkflow struct {
-	*GenerateGithubWorkflow
+type UsageDataInit struct {
+	*Init
 	Recursive bool
 }
 
-func (c *GenerateGithubWorkflow) Usage() {
-	err := executeUsage(os.Stderr, "generate-github-workflow_usage.txt", UsageDataGenerateGithubWorkflow{c, false})
+func (c *Init) Usage() {
+	err := executeUsage(os.Stderr, "init_usage.txt", UsageDataInit{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *GenerateGithubWorkflow) UsageRecursive() {
-	err := executeUsage(os.Stderr, "generate-github-workflow_usage.txt", UsageDataGenerateGithubWorkflow{c, true})
+func (c *Init) UsageRecursive() {
+	err := executeUsage(os.Stderr, "init_usage.txt", UsageDataInit{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *GenerateGithubWorkflow) Execute(args []string) error {
+func (c *Init) Execute(args []string) error {
 	if len(args) > 0 {
 		if cmd, ok := c.SubCommands[args[0]]; ok {
 			return cmd.Execute(args[1:])
@@ -76,6 +80,39 @@ func (c *GenerateGithubWorkflow) Execute(args []string) error {
 					}
 				}
 				c.dir = value
+
+			case "goreleaser":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.goreleaser = b
+				} else {
+					c.goreleaser = true
+				}
+
+			case "ghRelease", "gh-release":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.ghRelease = b
+				} else {
+					c.ghRelease = true
+				}
+
+			case "ghVerification", "gh-verification":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.ghVerification = b
+				} else {
+					c.ghVerification = true
+				}
 			case "help", "h":
 				c.Usage()
 				return nil
@@ -87,7 +124,7 @@ func (c *GenerateGithubWorkflow) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("generate-github-workflow failed: %w", err)
+			return fmt.Errorf("init failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -96,20 +133,26 @@ func (c *GenerateGithubWorkflow) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewGenerateGithubWorkflow() *GenerateGithubWorkflow {
-	set := flag.NewFlagSet("generate-github-workflow", flag.ContinueOnError)
-	v := &GenerateGithubWorkflow{
+func (c *RootCmd) NewInit() *Init {
+	set := flag.NewFlagSet("init", flag.ContinueOnError)
+	v := &Init{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]Cmd),
 	}
 
 	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
+
+	set.BoolVar(&v.goreleaser, "goreleaser", false, "Generate .goreleaser.yml configuration file")
+
+	set.BoolVar(&v.ghRelease, "gh-release", false, "Generate GitHub Action workflow for GoReleaser release.yml")
+
+	set.BoolVar(&v.ghVerification, "gh-verification", false, "Generate GitHub Action workflow for verification generate_verification.yml")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *GenerateGithubWorkflow) error {
+	v.CommandAction = func(c *Init) error {
 
-		err := go_subcommand.GenerateGithubWorkflow(c.dir)
+		err := go_subcommand.Init(c.dir, c.goreleaser, c.ghRelease, c.ghVerification)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -122,7 +165,7 @@ func (c *RootCmd) NewGenerateGithubWorkflow() *GenerateGithubWorkflow {
 			if e, ok := err.(*cmd.ErrExitCode); ok {
 				return e
 			}
-			return fmt.Errorf("generate-github-workflow failed: %w", err)
+			return fmt.Errorf("init failed: %w", err)
 		}
 		return nil
 	}

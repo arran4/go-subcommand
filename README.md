@@ -256,12 +256,14 @@ Validates subcommand definitions for errors or conflicts.
 
 *   `--dir <path>`: Root directory.
 
-### `gosubc goreleaser`
+### `gosubc init`
 
-Generates release configuration.
+Initializes configuration files and workflows.
 
-*   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
-*   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
+*   `--dir <path>`: Root directory.
+*   `--goreleaser`: Generate `.goreleaser.yml` configuration file.
+*   `--gh-release`: Generate GitHub Action workflow for GoReleaser (`release.yml`).
+*   `--gh-verification`: Generate GitHub Action workflow for verification (`generate_verification.yml`).
 
 ## Contributing
 

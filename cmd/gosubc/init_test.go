@@ -7,16 +7,16 @@ import (
 	"testing"
 )
 
-func TestGenerateGithubWorkflow_Execute(t *testing.T) {
+func TestInit_Execute(t *testing.T) {
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]Cmd),
 	}
-	cmd := parent.NewGenerateGithubWorkflow()
+	cmd := parent.NewInit()
 
 	called := false
-	cmd.CommandAction = func(c *GenerateGithubWorkflow) error {
+	cmd.CommandAction = func(c *Init) error {
 		called = true
 		return nil
 	}
@@ -24,6 +24,9 @@ func TestGenerateGithubWorkflow_Execute(t *testing.T) {
 	args := []string{}
 	args = append(args, "--dir")
 	args = append(args, "test")
+	args = append(args, "--goreleaser")
+	args = append(args, "--ghRelease")
+	args = append(args, "--ghVerification")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -35,5 +38,14 @@ func TestGenerateGithubWorkflow_Execute(t *testing.T) {
 
 	if cmd.dir != "test" {
 		t.Errorf("Expected dir to be 'test', got '%v'", cmd.dir)
+	}
+	if cmd.goreleaser != true {
+		t.Errorf("Expected goreleaser to be true, got '%v'", cmd.goreleaser)
+	}
+	if cmd.ghRelease != true {
+		t.Errorf("Expected ghRelease to be true, got '%v'", cmd.ghRelease)
+	}
+	if cmd.ghVerification != true {
+		t.Errorf("Expected ghVerification to be true, got '%v'", cmd.ghVerification)
 	}
 }
