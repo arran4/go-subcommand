@@ -282,6 +282,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "errors.go", "errors.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		if err := generateFile(collector, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
+			return err
+		}
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
@@ -338,10 +341,11 @@ func assignUsageFileNames(subCommands []*model.SubCommand) {
 	}
 }
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
-	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
+	fileName := strings.ReplaceAll(parsers.ToKebabCase(subCmd.SubCommandStructName), "-", "_")
+	if err := generateFile(writer, cmdOutDir, fileName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
 		return err
 	}
-	if err := generateFile(writer, cmdOutDir, subCmd.SubCommandName+"_test.go", "cmd_test.go.gotmpl", subCmd, true); err != nil {
+	if err := generateFile(writer, cmdOutDir, fileName+"_test.go", "cmd_test.go.gotmpl", subCmd, true); err != nil {
 		return err
 	}
 	if err := generateFile(writer, cmdTemplatesDir, subCmd.UsageFileName, "usage.txt.gotmpl", subCmd, false); err != nil {
