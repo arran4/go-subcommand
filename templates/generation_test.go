@@ -95,25 +95,6 @@ func TestGoTemplates(t *testing.T) {
 			if err != nil {
 				t.Errorf("Generated code is not valid Go: %v\nCode:\n%s", err, buf.String())
 			} else {
-				if os.Getenv("UPDATE_GOLDEN") == "true" {
-					found := false
-					for i, f := range archive.Files {
-						if f.Name == "output.go" {
-							archive.Files[i].Data = formatted
-							found = true
-							break
-						}
-					}
-					if !found {
-						archive.Files = append(archive.Files, txtar.File{Name: "output.go", Data: formatted})
-					}
-					newContent := txtar.Format(archive)
-					if err := os.WriteFile("testdata/"+entry.Name(), newContent, 0644); err != nil {
-						t.Fatalf("failed to update golden file: %v", err)
-					}
-					return
-				}
-
 				if !bytes.Equal(formatted, expectedOutput) {
 					t.Errorf("Output mismatch for %s:\nExpected:\n%s\nGot:\n%s", entry.Name(), string(expectedOutput), string(formatted))
 				}

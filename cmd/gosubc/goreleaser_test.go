@@ -26,6 +26,7 @@ func TestGoreleaser_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--githubWorkflow")
 	args = append(args, "--verificationWorkflow")
+	args = append(args, "--prCreationWorkflow")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -43,5 +44,8 @@ func TestGoreleaser_Execute(t *testing.T) {
 	}
 	if cmd.verificationWorkflow != true {
 		t.Errorf("Expected verificationWorkflow to be true, got '%v'", cmd.verificationWorkflow)
+	}
+	if cmd.prCreationWorkflow != true {
+		t.Errorf("Expected prCreationWorkflow to be true, got '%v'", cmd.prCreationWorkflow)
 	}
 }

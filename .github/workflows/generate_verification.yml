@@ -92,7 +92,6 @@ jobs:
 
       - name: Determine PR attributes
         id: pr_attributes
-        if: steps.check_changes.outputs.changes_detected == 'true'
         env:
           HEAD_REF: ${{ github.head_ref }}
           REF_NAME: ${{ github.ref_name }}
@@ -101,18 +100,19 @@ jobs:
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             echo "base=$HEAD_REF" >> $GITHUB_OUTPUT
             echo "branch=update-generated-code-$HEAD_REF" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $HEAD_REF" >> $GITHUB_OUTPUT
           else
             echo "base=$REF_NAME" >> $GITHUB_OUTPUT
             echo "branch=update-generated-code-$REF_NAME" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $REF_NAME" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Pull Request
-        if: steps.check_changes.outputs.changes_detected == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: update generated code"
-          title: "chore: update generated code"
+          title: ${{ steps.pr_attributes.outputs.title }}
           body: "This PR updates the generated code to match the current generator logic."
           branch: ${{ steps.pr_attributes.outputs.branch }}
           delete-branch: true

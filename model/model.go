@@ -10,6 +10,7 @@ type DataModel struct {
 	FileSet     *token.FileSet
 	PackageName string
 	Commands    []*Command
+	GoVersion   string
 }
 
 type Command struct {

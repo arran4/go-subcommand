@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
@@ -45,7 +46,7 @@ func NewUserError(err error, msg string) *UserError {
 	return &UserError{Err: err, Msg: msg}
 }
 
-func executeUsage(out io.Writer, templateName string, data interface{}) error {
+func executeUsage(out io.Writer, templateName string, data any) error {
 	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
 }
 
@@ -101,11 +102,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["validate"] = c.NewValidate()
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				c.UsageRecursive()
+				return nil
 			}
 			c.Usage()
 			return nil
@@ -114,11 +113,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.Commands["usage"] = &InternalCommand{
 		Exec: func(args []string) error {
-			for _, arg := range args {
-				if arg == "-deep" {
-					c.UsageRecursive()
-					return nil
-				}
+			if slices.Contains(args, "-deep") {
+				c.UsageRecursive()
+				return nil
 			}
 			c.Usage()
 			return nil

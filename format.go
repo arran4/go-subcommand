@@ -16,10 +16,11 @@ import (
 // to match the defined parameters and standard formatting.
 //
 // Flags:
-//   dir:        --dir         (default: ".")         The project root directory
-//   inplace:    --inplace                            Modify files in place
-//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
-//   recursive:  --recursive   (default: true)        Search recursively
+//
+//	dir:		--dir		(default: ".")		The project root directory
+//	inplace:	--inplace				Modify files in place
+//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	recursive:	--recursive	(default: true)		Search recursively
 func Format(dir string, inplace bool, paths []string, recursive bool) error {
 	dataModel, err := parse(dir, "commentv1", &parsers.ParseOptions{
 		SearchPaths: paths,

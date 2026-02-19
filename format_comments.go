@@ -22,9 +22,10 @@ import (
 // FormatSourceComments is a subcommand `gosubc format-source-comments` formats source comments to match gofmt style
 //
 // Flags:
-//   dir:        --dir         (default: ".")         The project root directory containing go.mod
-//   paths:      --path        (default: nil)         Paths to search for subcommands (relative to dir)
-//   recursive:  --recursive   (default: true)        Search recursively
+//
+//	dir:		--dir		(default: ".")		The project root directory containing go.mod
+//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	recursive:	--recursive	(default: true)		Search recursively
 func FormatSourceComments(dir string, paths []string, recursive bool) error {
 	fset := token.NewFileSet()
 
