@@ -36,3 +36,4 @@ go.work.sum
 /cmd/basic1/
 /cmd/complex/
 /gosubc
+/*.txt
