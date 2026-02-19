@@ -263,6 +263,10 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	{{range .SubCommands}}
 	v.SubCommands["{{.SubCommandName | lower}}"] = v.New{{.SubCommandStructName}}()
+	{{- $cmd := . }}
+	{{- range .Aliases}}
+	v.SubCommands["{{. | lower}}"] = v.SubCommands["{{$cmd.SubCommandName | lower}}"]
+	{{- end}}
 	{{end}}
 	v.SubCommands["help"] = &InternalCommand{
 		Exec: func(args []string) error {

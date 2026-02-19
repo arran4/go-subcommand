@@ -48,9 +48,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"example.com/mypkg"
 )

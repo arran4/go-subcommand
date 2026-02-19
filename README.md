@@ -225,6 +225,21 @@ func Child(verbose bool) {
 }
 ```
 
+### Subcommand Aliases
+
+You can define aliases for your subcommands using the `(aliases: ...)` directive inline or `Aliases:` block.
+
+**Inline:**
+```go
+// MyFunc is a subcommand `app cmd` (aliases: c, command)
+```
+
+**Block:**
+```go
+// MyFunc is a subcommand `app cmd`
+// Aliases: c, command
+```
+
 ### Man Page Generation
 
 To generate man pages, pass the `--man-dir` flag to `gosubc`.

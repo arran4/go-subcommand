@@ -19,7 +19,7 @@ import (
 	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
 
-// FormatSourceComments is a subcommand `gosubc format-source-comments` formats source comments to match gofmt style
+// FormatSourceComments is a subcommand `gosubc format-source-comments` (aliases: fmt) formats source comments to match gofmt style
 //
 // Flags:
 //   dir:        --dir         (default: ".")         The project root directory containing go.mod
@@ -90,7 +90,7 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 
 			// Extract existing parameters info to preserve descriptions/defaults not in signature
 			// ParseSubCommandComments returns map[name]ParsedParam
-			_, _, _, _, parsedParams, _ := commentv1.ParseSubCommandComments(text)
+			_, _, _, _, parsedParams, _, _ := commentv1.ParseSubCommandComments(text)
 
 			var params []*model.FunctionParameter
 			for _, p := range funcDecl.Type.Params.List {

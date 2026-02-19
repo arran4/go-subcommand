@@ -89,6 +89,7 @@ type SubCommand struct {
 	SubCommandFunctionName string
 	SubCommandDescription  string
 	SubCommandExtendedHelp string
+	Aliases                []string
 	ImportPath             string
 	SubCommandPackageName  string
 	UsageFileName          string

@@ -281,7 +281,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, parsedParams, aliases, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -526,6 +526,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
+				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection
 				DefinitionFile: filename,
 				DocStart:       s.Doc.Pos(),
@@ -543,6 +544,8 @@ var (
 	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	reLineAlias       = regexp.MustCompile(`(?i)\((?:aliases|alias|aka):\s*(.*?)\)`)
+	reBlockAlias      = regexp.MustCompile(`(?i)^(?:aliases|alias|aka):\s*(.*)$`)
 )
 
 type ParsedParam struct {
@@ -558,7 +561,7 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, params map[string]ParsedParam, aliases []string, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -599,6 +602,16 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				}
 
 				rest := strings.TrimSpace(line[end+1:])
+
+				if matches := reLineAlias.FindStringSubmatch(rest); matches != nil {
+					parts := strings.Split(matches[1], ",")
+					for _, part := range parts {
+						aliases = append(aliases, strings.TrimSpace(part))
+					}
+					rest = strings.Replace(rest, matches[0], "", 1)
+					rest = strings.TrimSpace(rest)
+				}
+
 				if strings.HasPrefix(rest, "that ") {
 					description = strings.TrimPrefix(rest, "that ")
 				} else if strings.HasPrefix(rest, "-- ") {
@@ -606,6 +619,14 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				} else if rest != "" {
 					description = rest
 				}
+			}
+			continue
+		}
+
+		if matches := reBlockAlias.FindStringSubmatch(trimmedLine); matches != nil {
+			parts := strings.Split(matches[1], ",")
+			for _, part := range parts {
+				aliases = append(aliases, strings.TrimSpace(part))
 			}
 			continue
 		}

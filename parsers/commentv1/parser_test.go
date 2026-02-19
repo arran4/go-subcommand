@@ -14,6 +14,7 @@ func TestParseSubCommandComments(t *testing.T) {
 		wantDescription        string
 		wantExtendedHelp       string
 		wantParams             map[string]ParsedParam
+		wantAliases            []string
 		wantOk                 bool
 	}{
 		{
@@ -81,10 +82,48 @@ that can handle missing tokens`,
 			wantDescription:        "description",
 			wantOk:                 true,
 		},
+		{
+			name: "Inline Aliases",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` (aliases: a, b) description`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantAliases:            []string{"a", "b"},
+			wantOk:                 true,
+		},
+		{
+			name: "Inline Alias Single",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` (alias: c) description`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantAliases:            []string{"c"},
+			wantOk:                 true,
+		},
+		{
+			name: "Block Aliases",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` description
+Aliases: d, e`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantAliases:            []string{"d", "e"},
+			wantOk:                 true,
+		},
+		{
+			name: "Block AKA",
+			text: `Cmd is a subcommand ` + "`app cmd`" + ` description
+AKA: f`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"cmd"},
+			wantDescription:        "description",
+			wantAliases:            []string{"f"},
+			wantOk:                 true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotParams, gotOk := ParseSubCommandComments(tt.text)
+			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotParams, gotAliases, gotOk := ParseSubCommandComments(tt.text)
 			if gotCmdName != tt.wantCmdName {
 				t.Errorf("gotCmdName = %v, want %v", gotCmdName, tt.wantCmdName)
 			}
@@ -118,6 +157,13 @@ that can handle missing tokens`,
 				}
 				if gotV.Description != v.Description {
 					t.Errorf("param %s description = %q, want %q", k, gotV.Description, v.Description)
+				}
+			}
+
+			if !reflect.DeepEqual(gotAliases, tt.wantAliases) {
+				// Handle nil vs empty slice
+				if len(gotAliases) != 0 || len(tt.wantAliases) != 0 {
+					t.Errorf("gotAliases = %v, want %v", gotAliases, tt.wantAliases)
 				}
 			}
 

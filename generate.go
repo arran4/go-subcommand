@@ -209,7 +209,7 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 	return nil
 }
 
-// Generate is a subcommand `gosubc generate` generates the subcommand code
+// Generate is a subcommand `gosubc generate` (aliases: gen) generates the subcommand code
 //
 // Flags:
 //   dir:        --dir         (default: ".")         Project root directory containing go.mod

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"go/format"
+	"os"
 	"strings"
 	"testing"
 
@@ -115,52 +116,29 @@ func TestGoTemplates(t *testing.T) {
 			if err != nil {
 				t.Errorf("Generated code is not valid Go: %v\nCode:\n%s", err, buf.String())
 			} else {
-				// We want to ensure the generated output IS formatted.
-				// So we compare buf.Bytes() (generated) with formatted.
-				// However, templates are hard to get perfectly formatted (indentation etc).
-				// The `generate.go` file does `format.Source` on the output.
-				// The user said: "use the ast to automatically run the source formatter against the output and compare it to itself as part of these tests to ensure that the output is complaint to go formatting requirements."
-
-				// "compare it to itself" is vague.
-				// "Compare (formatted output) to (itself)"? No.
-				// "Compare (output) to (formatted output)"? This means output must be already formatted.
-				// BUT `generate.go` runs `format.Source`.
-				// If this test is testing the *templates*, the templates might produce unformatted code that `generate.go` fixes.
-				// If the user wants to test the templates *output* compliance, maybe they want to ensure templates produce close-to-formatted code?
-				// OR, they want to ensure the *expected output in txtar* is formatted.
-
-				// Re-reading: "use the ast to automatically run the source formatter against the output and compare it to itself ... to ensure that the output is complaint"
-				// Maybe they mean: "Ensure that `format.Source(output)` succeeds (is compliant)".
-				// AND "compare it to itself" -> maybe compare the `txtar` expected output to the formatted result?
-
-				// Let's assume the test should:
-				// 1. Generate code from template.
-				// 2. Format it using `format.Source`.
-				// 3. Compare the *formatted* code against the `output.go` in txtar.
-				// This matches how `generate.go` works (it formats before writing).
-				// So `output.go` in txtar should be the formatted code.
-
-				// But wait, "compare it to itself" might mean:
-				// `formatted := format(generated)`
-				// `if generated != formatted { fail }`
-				// This would enforce that the template ITSELF produces formatted code without needing `format.Source`.
-				// This is a much stricter requirement.
-				// Given "Without solving any tests...", if I add this check and templates are messy, tests will fail.
-				// But `generate.go` explicitly uses `format.Source`.
-				// So typically templates produce rough code and we format it.
-				// Checking if `generated == formatted` would fail if templates rely on `format.Source`.
-
-				// Let's look at the existing `usage_test.go`. It compares generated output to txtar output.
-				// Usage text is not Go code, so no formatting.
-
-				// User said: "ensure that the output is complaint to go formatting requirements".
-				// This usually means "it is valid go code that can be formatted".
-
-				// I will do this:
-				// 1. Generate `raw`.
-				// 2. Format `raw` -> `formatted`. If error, fail (invalid go).
-				// 3. Compare `formatted` to `expectedOutput`.
-				// This ensures we test the final result (what users get).
+				if os.Getenv("UPDATE_GOLDEN") == "true" {
+					// Update the file in archive
+					updatedArchive := archive
+					found := false
+					for i, f := range updatedArchive.Files {
+						if f.Name == "output.go" {
+							updatedArchive.Files[i].Data = formatted
+							found = true
+							break
+						}
+					}
+					if !found {
+						updatedArchive.Files = append(updatedArchive.Files, txtar.File{
+							Name: "output.go",
+							Data: formatted,
+						})
+					}
+					// Write back to disk
+					if err := os.WriteFile("testdata/"+entry.Name(), txtar.Format(updatedArchive), 0644); err != nil {
+						t.Fatalf("failed to update golden file: %v", err)
+					}
+					expectedOutput = formatted // Update expectation so test passes
+				}
 
 				if !bytes.Equal(formatted, expectedOutput) {
 					t.Errorf("Output mismatch for %s:\nExpected:\n%s\nGot:\n%s", entry.Name(), string(expectedOutput), string(formatted))

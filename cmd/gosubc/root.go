@@ -93,7 +93,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.Commands["format"] = c.NewFormat()
 	c.Commands["format-source-comments"] = c.NewFormatSourceComments()
+	c.Commands["fmt"] = c.Commands["format-source-comments"]
 	c.Commands["generate"] = c.NewGenerate()
+	c.Commands["gen"] = c.Commands["generate"]
 	c.Commands["goreleaser"] = c.NewGoreleaser()
 	c.Commands["list"] = c.NewList()
 	c.Commands["scan"] = c.NewScan()

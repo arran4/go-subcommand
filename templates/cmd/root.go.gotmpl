@@ -134,6 +134,10 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	{{end}}
 	{{range .SubCommands}}c.Commands["{{.SubCommandName | lower}}"] = c.New{{.SubCommandStructName}}()
+	{{- $cmd := . }}
+	{{- range .Aliases}}
+	c.Commands["{{. | lower}}"] = c.Commands["{{$cmd.SubCommandName | lower}}"]
+	{{- end}}
 	{{end -}}
 	c.Commands["help"] = &InternalCommand{
 		Exec: func(args []string) error {
