@@ -32,7 +32,7 @@ Subcommands:
 
 
 
-`leaf` Flags:
+Flags:
 
     -f              (default: false)   Force action
 

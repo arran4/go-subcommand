@@ -137,6 +137,72 @@ func (sc *SubCommand) MaxFlagLength() int {
 	return max
 }
 
+func (sc *SubCommand) ResolveInheritance() {
+	for _, p := range sc.Parameters {
+		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
+			ancestor := sc.FindAncestor(p.DeclaredIn)
+			if ancestor != nil {
+				// Find matching parameter in ancestor
+				var parentParam *FunctionParameter
+				for _, pp := range ancestor.Parameters {
+					if pp.Name == p.Name {
+						parentParam = pp
+						break
+					}
+				}
+
+				if parentParam != nil {
+					if p.Description == "" {
+						p.Description = parentParam.Description
+					}
+					if p.Default == "" {
+						p.Default = parentParam.Default
+					}
+					if len(p.FlagAliases) == 0 {
+						p.FlagAliases = parentParam.FlagAliases
+					}
+				}
+			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
+				// Declared in Root Command
+				for _, pp := range sc.Command.Parameters {
+					if pp.Name == p.Name {
+						if p.Description == "" {
+							p.Description = pp.Description
+						}
+						if p.Default == "" {
+							p.Default = pp.Default
+						}
+						if len(p.FlagAliases) == 0 {
+							p.FlagAliases = pp.FlagAliases
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+	for _, child := range sc.SubCommands {
+		child.ResolveInheritance()
+	}
+}
+
+func (sc *SubCommand) FindAncestor(name string) *SubCommand {
+	curr := sc.Parent
+	for curr != nil {
+		if curr.SubCommandName == name {
+			return curr
+		}
+		curr = curr.Parent
+	}
+	return nil
+}
+
+func (cmd *Command) ResolveInheritance() {
+	for _, sc := range cmd.SubCommands {
+		sc.ResolveInheritance()
+	}
+}
+
 func (sc *SubCommand) AllParameters() []*FunctionParameter {
 	var params []*FunctionParameter
 	seen := make(map[string]bool)

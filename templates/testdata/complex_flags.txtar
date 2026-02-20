@@ -39,7 +39,7 @@ Usage: flagsapp test [flags...]
 
 
 
-`test` Flags:
+Flags:
 
     --simple string                         Simple string flag
 

@@ -29,10 +29,19 @@ Subcommands:
 {{- end}}
 {{end}}{{/* End Subcommands block */}}{{if .ParameterGroups}}
 {{$maxFlag := add .MaxFlagLength 2}}{{$maxDef := .MaxDefaultLength}}{{if gt $maxDef 0}}{{$maxDef = add $maxDef 2}}{{end}}
+{{- if eq (len .ParameterGroups) 1 -}}
+{{- range .ParameterGroups}}
+
+Flags:{{- range .Parameters}}
+{{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
+{{- end}}
+{{- end}}
+{{- else -}}
 {{- range .ParameterGroups}}
 
 `{{.CommandName}}` Flags:{{- range .Parameters}}
 {{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
+{{- end}}
 {{- end}}
 {{- end}}
 {{end}}{{$hasPositional := false}}{{range .Parameters}}{{if .IsPositional}}{{$hasPositional = true}}{{end}}{{end}}{{if $hasPositional}}

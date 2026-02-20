@@ -210,76 +210,10 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
 
-		resolveInheritance(cmd)
+		cmd.ResolveInheritance()
 	}
 	d.Commands = commands
 	return d, nil
-}
-
-func resolveInheritance(cmd *model.Command) {
-	for _, sc := range cmd.SubCommands {
-		resolveSubCommandInheritance(sc)
-	}
-}
-
-func resolveSubCommandInheritance(sc *model.SubCommand) {
-	for _, p := range sc.Parameters {
-		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
-			ancestor := findAncestor(sc, p.DeclaredIn)
-			if ancestor != nil {
-				// Find matching parameter in ancestor
-				var parentParam *model.FunctionParameter
-				for _, pp := range ancestor.Parameters {
-					if pp.Name == p.Name {
-						parentParam = pp
-						break
-					}
-				}
-
-				if parentParam != nil {
-					if p.Description == "" {
-						p.Description = parentParam.Description
-					}
-					if p.Default == "" {
-						p.Default = parentParam.Default
-					}
-					if len(p.FlagAliases) == 0 {
-						p.FlagAliases = parentParam.FlagAliases
-					}
-				}
-			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
-				// Declared in Root Command
-				for _, pp := range sc.Command.Parameters {
-					if pp.Name == p.Name {
-						if p.Description == "" {
-							p.Description = pp.Description
-						}
-						if p.Default == "" {
-							p.Default = pp.Default
-						}
-						if len(p.FlagAliases) == 0 {
-							p.FlagAliases = pp.FlagAliases
-						}
-						break
-					}
-				}
-			}
-		}
-	}
-	for _, child := range sc.SubCommands {
-		resolveSubCommandInheritance(child)
-	}
-}
-
-func findAncestor(sc *model.SubCommand, name string) *model.SubCommand {
-	curr := sc.Parent
-	for curr != nil {
-		if curr.SubCommandName == name {
-			return curr
-		}
-		curr = curr.Parent
-	}
-	return nil
 }
 
 func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *parsers.NameAllocator) []*model.SubCommand {
@@ -451,11 +385,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							candidates = append(candidates, ParsedParam{})
 						}
 
-						// Merge Logic based on Priority
-						// We fill the 'fp' fields starting from the lowest priority (Preceding)
-						// and overwrite with higher priority if the field is present/non-empty in the higher one.
-						// EXCEPT for Description: if higher priority has description, it overwrites.
-						// But what if higher priority has NO description? Then we keep the lower one.
+						// Merge Logic Priority:
+						// 1. Flags: block (Top)
+						// 2. Inline comment (2nd)
+						// 3. Preceding comment (3rd)
+						// Fields are filled from lowest priority up, overwriting if present.
 
 						inherited := false
 

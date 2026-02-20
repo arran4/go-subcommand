@@ -27,6 +27,6 @@ Subcommands:
 
 
 
-`sub1` Flags:
+Flags:
 
     -f    Force execution

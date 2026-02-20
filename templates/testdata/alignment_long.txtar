@@ -57,7 +57,7 @@ Subcommands:
 
 
 
-`align` Flags:
+Flags:
 
     -s              (default: false)   Short flag
 

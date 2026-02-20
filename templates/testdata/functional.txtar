@@ -79,7 +79,7 @@ Subcommands:
 
 
 
-`foo` Flags:
+Flags:
 
     -v       (default: false)   Enable verbose
 
