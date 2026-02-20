@@ -7,8 +7,7 @@
 {{- end}}
 {{- end}}
 {{- end -}}
-{{- $hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end -}}
-Usage: {{.ProgName}}{{if $hasFlags}} [flags...]{{end}}{{if .Parameters}}{{range .Parameters}}{{if .IsPositional}} {{if .IsVarArg}}[{{.Name}}...]{{else}}<{{.Name}}>{{end}}{{end}}{{end}}{{end}}{{if .SubCommands}} <subcommand>{{end}}
+Usage: {{.FullUsageString}}
 {{if .SubCommandDescription}}
 {{.SubCommandDescription}}
 {{end}}{{if .SubCommandExtendedHelp}}
@@ -28,10 +27,12 @@ Subcommands:
     help         Print this help message
     usage        Print this usage message
 {{- end}}
-{{end}}{{/* End Subcommands block */}}{{$hasFlags := false}}{{range .Parameters}}{{if not .IsPositional}}{{$hasFlags = true}}{{end}}{{end}}{{if $hasFlags}}
-Flags:{{$maxFlag := add .MaxFlagLength 2}}{{$maxDef := .MaxDefaultLength}}{{if gt $maxDef 0}}{{$maxDef = add $maxDef 2}}{{end}}
+{{end}}{{/* End Subcommands block */}}{{if .ParameterGroups}}
+{{$maxFlag := add .MaxFlagLength 2}}{{$maxDef := .MaxDefaultLength}}{{if gt $maxDef 0}}{{$maxDef = add $maxDef 2}}{{end}}
+{{- range .ParameterGroups}}
+
+`{{.CommandName}}` Flags:
 {{- range .Parameters}}
-{{- if not .IsPositional -}}
 {{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
 {{- end}}
 {{- end}}

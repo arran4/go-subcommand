@@ -209,9 +209,77 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
+
+		resolveInheritance(cmd)
 	}
 	d.Commands = commands
 	return d, nil
+}
+
+func resolveInheritance(cmd *model.Command) {
+	for _, sc := range cmd.SubCommands {
+		resolveSubCommandInheritance(sc)
+	}
+}
+
+func resolveSubCommandInheritance(sc *model.SubCommand) {
+	for _, p := range sc.Parameters {
+		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
+			ancestor := findAncestor(sc, p.DeclaredIn)
+			if ancestor != nil {
+				// Find matching parameter in ancestor
+				var parentParam *model.FunctionParameter
+				for _, pp := range ancestor.Parameters {
+					if pp.Name == p.Name {
+						parentParam = pp
+						break
+					}
+				}
+
+				if parentParam != nil {
+					if p.Description == "" {
+						p.Description = parentParam.Description
+					}
+					if p.Default == "" {
+						p.Default = parentParam.Default
+					}
+					if len(p.FlagAliases) == 0 {
+						p.FlagAliases = parentParam.FlagAliases
+					}
+				}
+			} else if sc.Command != nil && sc.Command.MainCmdName == p.DeclaredIn {
+				// Declared in Root Command
+				for _, pp := range sc.Command.Parameters {
+					if pp.Name == p.Name {
+						if p.Description == "" {
+							p.Description = pp.Description
+						}
+						if p.Default == "" {
+							p.Default = pp.Default
+						}
+						if len(p.FlagAliases) == 0 {
+							p.FlagAliases = pp.FlagAliases
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+	for _, child := range sc.SubCommands {
+		resolveSubCommandInheritance(child)
+	}
+}
+
+func findAncestor(sc *model.SubCommand, name string) *model.SubCommand {
+	curr := sc.Parent
+	for curr != nil {
+		if curr.SubCommandName == name {
+			return curr
+		}
+		curr = curr.Parent
+	}
+	return nil
 }
 
 func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *parsers.NameAllocator) []*model.SubCommand {
@@ -292,6 +360,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				log.Printf("Warning: Subcommand '%s' (function %s) is missing a short description.", fullCmdName, s.Name.Name)
 			}
 
+			currentCmdName := cmdName
+			if len(subCommandSequence) > 0 {
+				currentCmdName = subCommandSequence[len(subCommandSequence)-1]
+			}
+
 			var params []*model.FunctionParameter
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
@@ -309,10 +382,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						if err != nil {
 							return fmt.Errorf("error processing parameter %s in function %s: %w", name.Name, s.Name.Name, err)
 						}
+
 						fp := &model.FunctionParameter{
-							Name:     name.Name,
-							Type:     typeName,
-							IsVarArg: isVarArg,
+							Name:       name.Name,
+							Type:       typeName,
+							IsVarArg:   isVarArg,
+							DeclaredIn: currentCmdName,
 						}
 						// Extract details from different sources with priority
 						// Priority:
@@ -382,6 +457,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						// EXCEPT for Description: if higher priority has description, it overwrites.
 						// But what if higher priority has NO description? Then we keep the lower one.
 
+						inherited := false
+
 						// Start with Preceding (3rd)
 						if len(candidates) > 2 {
 							c := candidates[2]
@@ -402,6 +479,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.IsVarArg = true
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
 							}
 						}
 
@@ -426,6 +506,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
 							}
+							if c.Inherited {
+								inherited = true
+							}
 						}
 
 						// Merge Flags Block (Top)
@@ -448,6 +531,22 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.IsVarArg = true
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
+							}
+						}
+
+						if inherited {
+							parentCmdName := cmdName
+							if len(subCommandSequence) > 1 {
+								parentCmdName = subCommandSequence[len(subCommandSequence)-2]
+							} else if len(subCommandSequence) == 0 {
+								// No parent
+								parentCmdName = ""
+							}
+							if parentCmdName != "" {
+								fp.DeclaredIn = parentCmdName
 							}
 						}
 
@@ -474,7 +573,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				if p.Description != "" {
 					hasDescription = true
 				} else {
-					missingDescription = append(missingDescription, p.Name)
+					// If declared in parent, we expect description to be inherited later
+					if p.DeclaredIn == currentCmdName {
+						missingDescription = append(missingDescription, p.Name)
+					}
 				}
 			}
 			if hasDescription && len(missingDescription) > 0 {
@@ -557,6 +659,7 @@ type ParsedParam struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
+	Inherited          bool
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -719,6 +822,11 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
+
+	if strings.Contains(text, "(from parent)") {
+		p.Inherited = true
+		text = strings.ReplaceAll(text, "(from parent)", "")
+	}
 
 	defaultRegex := regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
 	loc := defaultRegex.FindStringSubmatchIndex(text)
