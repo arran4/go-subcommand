@@ -4,8 +4,21 @@ import (
 	"fmt"
 	"go/token"
 	"path"
+	"slices"
 	"strings"
 )
+
+var ReservedKeywords = []string{
+	"error", "string", "int", "bool", "byte", "rune", "float32", "float64",
+	"complex64", "complex128", "uint", "uint8", "uint16", "uint32", "uint64",
+	"uintptr", "true", "false", "iota", "nil",
+	"break", "default", "func", "interface", "select",
+	"case", "defer", "go", "map", "struct",
+	"chan", "else", "goto", "package", "switch",
+	"const", "fallthrough", "if", "range", "type",
+	"continue", "for", "import", "return", "var",
+	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
+}
 
 type DataModel struct {
 	FileSet     *token.FileSet
@@ -40,7 +53,7 @@ func (c *Command) ImportAlias() string {
 		return ""
 	}
 	base := path.Base(c.ImportPath)
-	if c.CommandPackageName != base {
+	if c.CommandPackageName != base || slices.Contains(ReservedKeywords, c.CommandPackageName) {
 		return c.CommandPackageName
 	}
 	return ""
@@ -125,7 +138,7 @@ func (sc *SubCommand) ImportAlias() string {
 		return ""
 	}
 	base := path.Base(sc.ImportPath)
-	if sc.SubCommandPackageName != base {
+	if sc.SubCommandPackageName != base || slices.Contains(ReservedKeywords, sc.SubCommandPackageName) {
 		return sc.SubCommandPackageName
 	}
 	return ""
