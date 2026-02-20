@@ -3,9 +3,23 @@ package model
 import (
 	"fmt"
 	"go/token"
+	"path"
+	"slices"
 	"sort"
 	"strings"
 )
+
+var ReservedKeywords = []string{
+	"error", "string", "int", "bool", "byte", "rune", "float32", "float64",
+	"complex64", "complex128", "uint", "uint8", "uint16", "uint32", "uint64",
+	"uintptr", "true", "false", "iota", "nil",
+	"break", "default", "func", "interface", "select",
+	"case", "defer", "go", "map", "struct",
+	"chan", "else", "goto", "package", "switch",
+	"const", "fallthrough", "if", "range", "type",
+	"continue", "for", "import", "return", "var",
+	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
+}
 
 type DataModel struct {
 	FileSet     *token.FileSet
@@ -30,6 +44,20 @@ type Command struct {
 	Parameters     []*FunctionParameter
 	ReturnsError   bool
 	ReturnCount    int
+}
+
+func (c *Command) ImportAlias() string {
+	if c.CommandPackageName == "" || c.CommandPackageName == "main" {
+		return ""
+	}
+	if c.ImportPath == "" {
+		return ""
+	}
+	base := path.Base(c.ImportPath)
+	if c.CommandPackageName != base || slices.Contains(ReservedKeywords, c.CommandPackageName) {
+		return c.CommandPackageName
+	}
+	return ""
 }
 
 type FunctionParameter struct {
@@ -192,6 +220,20 @@ type SubCommand struct {
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int
+}
+
+func (sc *SubCommand) ImportAlias() string {
+	if sc.SubCommandPackageName == "" || sc.SubCommandPackageName == "main" {
+		return ""
+	}
+	if sc.ImportPath == "" {
+		return ""
+	}
+	base := path.Base(sc.ImportPath)
+	if sc.SubCommandPackageName != base || slices.Contains(ReservedKeywords, sc.SubCommandPackageName) {
+		return sc.SubCommandPackageName
+	}
+	return ""
 }
 
 func (sc *SubCommand) SubCommandSequence() string {

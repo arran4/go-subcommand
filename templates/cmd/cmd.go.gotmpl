@@ -16,7 +16,7 @@ import (
 {{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
 
-	"{{.ImportPath}}"
+	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
 {{- end}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
