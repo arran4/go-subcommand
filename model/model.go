@@ -89,21 +89,15 @@ func (p *FunctionParameter) IsSlice() bool {
 // IsPointer returns true if the type is a pointer (or slice of pointers).
 func (p *FunctionParameter) IsPointer() bool {
 	t := p.Type
-	if strings.HasPrefix(t, "[]") {
-		t = t[2:]
-	}
+	t = strings.TrimPrefix(t, "[]")
 	return strings.HasPrefix(t, "*")
 }
 
 // BaseType returns the underlying type (stripping * and []).
 func (p *FunctionParameter) BaseType() string {
 	t := p.Type
-	if strings.HasPrefix(t, "[]") {
-		t = t[2:]
-	}
-	if strings.HasPrefix(t, "*") {
-		t = t[1:]
-	}
+	t = strings.TrimPrefix(t, "[]")
+	t = strings.TrimPrefix(t, "*")
 	return t
 }
 
