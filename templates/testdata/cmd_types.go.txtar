@@ -81,8 +81,6 @@ func (c *MyCmd) UsageRecursive() {
 
 func (c *MyCmd) Execute(args []string) error {
 	var remainingArgs []string
-	seenFlags := make(map[string]bool)
-	_ = seenFlags
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -108,7 +106,6 @@ func (c *MyCmd) Execute(args []string) error {
 			switch name {
 
 			case "timeout":
-				seenFlags["timeout"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -124,7 +121,6 @@ func (c *MyCmd) Execute(args []string) error {
 				c.timeout = v
 
 			case "count":
-				seenFlags["count"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -140,7 +136,6 @@ func (c *MyCmd) Execute(args []string) error {
 				c.count = v
 
 			case "config":
-				seenFlags["config"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -164,9 +159,8 @@ func (c *MyCmd) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "t" || char == "[t]" || char == "1" {
+				if char == "t" {
 					found = true
-					seenFlags["timeout"] = true
 					// Value flag
 					value := ""
 					if j+1 < len(shorts) {

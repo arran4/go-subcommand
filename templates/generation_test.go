@@ -85,6 +85,9 @@ func TestGoTemplates(t *testing.T) {
 				for _, sc := range cmd.SubCommands {
 					populateParents(sc, nil)
 				}
+				if cmd.UsageFileName == "" && cmd.MainCmdName != "" {
+					cmd.UsageFileName = strings.ToLower(cmd.MainCmdName) + "_usage.txt"
+				}
 				data = &cmd
 			}
 

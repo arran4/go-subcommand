@@ -101,14 +101,14 @@ type UsageDataRootCmd struct {
 }
 
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "", UsageDataRootCmd{c, false})
+	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "", UsageDataRootCmd{c, true})
+	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -177,8 +177,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
-	seenFlags := make(map[string]bool)
-	_ = seenFlags
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -204,7 +202,6 @@ func (c *RootCmd) Execute(args []string) error {
 			switch name {
 
 			case "verbose":
-				seenFlags["verbose"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {

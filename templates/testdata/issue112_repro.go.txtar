@@ -51,8 +51,6 @@ func (c *TestCmd) UsageRecursive() {
 
 func (c *TestCmd) Execute(args []string) error {
 	var remainingArgs []string
-	seenFlags := make(map[string]bool)
-	_ = seenFlags
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {

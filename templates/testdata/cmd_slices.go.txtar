@@ -89,8 +89,6 @@ func (c *MySliceCmd) UsageRecursive() {
 
 func (c *MySliceCmd) Execute(args []string) error {
 	var remainingArgs []string
-	seenFlags := make(map[string]bool)
-	_ = seenFlags
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -116,7 +114,6 @@ func (c *MySliceCmd) Execute(args []string) error {
 			switch name {
 
 			case "files":
-				seenFlags["files"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -128,7 +125,6 @@ func (c *MySliceCmd) Execute(args []string) error {
 				c.files = append(c.files, value)
 
 			case "counts":
-				seenFlags["counts"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -144,7 +140,6 @@ func (c *MySliceCmd) Execute(args []string) error {
 				c.counts = append(c.counts, v)
 
 			case "debugs":
-				seenFlags["debugs"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -156,7 +151,6 @@ func (c *MySliceCmd) Execute(args []string) error {
 				}
 
 			case "timeouts":
-				seenFlags["timeouts"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -184,9 +178,8 @@ func (c *MySliceCmd) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "f" || char == "[f]" || char == "1" {
+				if char == "f" {
 					found = true
-					seenFlags["files"] = true
 					// Value flag
 					value := ""
 					if j+1 < len(shorts) {
