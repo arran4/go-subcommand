@@ -1,9 +1,134 @@
 package commentv1
 
 import (
+	"go/token"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestParseGoFile(t *testing.T) {
+	tests := []struct {
+		name                string
+		src                 string
+		wantCmdName         string
+		wantDescription     string
+		wantSubCommands     []string
+		wantMissing         bool
+	}{
+		{
+			name: "Implicit Command Name",
+			src: `package main
+
+// Parent is a subcommand that Does work in a directory
+func Parent(dir string) {}
+`,
+			wantCmdName:     "parent",
+			wantDescription: "Does work in a directory",
+		},
+		{
+			name: "Explicit Command Name",
+			src: `package main
+
+// Parent is a subcommand ` + "`my-parent`" + ` that Does work explicitly
+func Parent(dir string) {}
+`,
+			wantCmdName:     "my-parent",
+			wantDescription: "Does work explicitly",
+		},
+		{
+			name: "Implicit Subcommand of Implicit Parent",
+			src: `package main
+
+// Parent is a subcommand that Does work in a directory
+func Parent(dir string) {}
+
+// Child is a subcommand ` + "`parent child`" + ` that is a child
+func Child(dir string) {}
+`,
+			wantCmdName:     "parent",
+			wantDescription: "Does work in a directory",
+			wantSubCommands: []string{"child"},
+		},
+		{
+			name: "Implicit Command Name with Acronym",
+			src: `package main
+
+// HTTPClient is a subcommand that does http things
+func HTTPClient(url string) {}
+`,
+			wantCmdName:     "http-client",
+			wantDescription: "does http things",
+		},
+		{
+			name: "Not a subcommand",
+			src: `package main
+
+// NotACmd is just a function
+func NotACmd() {}
+`,
+			wantMissing: true,
+		},
+		{
+			name: "Subcommand with receiver (ignored)",
+			src: `package main
+
+type T struct{}
+
+// Method is a subcommand that should be ignored
+func (t *T) Method() {}
+`,
+			wantMissing: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			cmdTree := &CommandsTree{
+				Commands:    make(map[string]*CommandTree),
+				PackagePath: "example.com/test",
+			}
+
+			err := ParseGoFile(fset, "test.go", "example.com/test", strings.NewReader(tt.src), cmdTree)
+			if err != nil {
+				t.Fatalf("ParseGoFile failed: %v", err)
+			}
+
+			if tt.wantMissing {
+				if len(cmdTree.Commands) > 0 {
+					t.Errorf("Expected no commands, but got keys: %v", getKeys(cmdTree.Commands))
+				}
+				return
+			}
+
+			if _, ok := cmdTree.Commands[tt.wantCmdName]; !ok {
+				t.Errorf("Expected command '%s' to be created, but got keys: %v", tt.wantCmdName, getKeys(cmdTree.Commands))
+			} else {
+				ct := cmdTree.Commands[tt.wantCmdName]
+				if ct.Description != tt.wantDescription {
+					t.Errorf("Expected description '%s', got '%s'", tt.wantDescription, ct.Description)
+				}
+
+				if len(tt.wantSubCommands) > 0 {
+					for _, subName := range tt.wantSubCommands {
+						if _, ok := ct.SubCommands[subName]; !ok {
+							t.Errorf("Expected subcommand '%s' in '%s', but not found", subName, tt.wantCmdName)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func getKeys(m map[string]*CommandTree) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
 
 func TestParseSubCommandComments(t *testing.T) {
 	tests := []struct {
@@ -108,6 +233,13 @@ that can handle missing tokens`,
 			wantSubCommandSequence: []string{"cmd"},
 			wantDescription:        "description",
 			wantOk:                 true,
+		},
+		{
+			name:            "Implicit Command Name",
+			text:            "Parent is a subcommand that Does work in a directory",
+			wantCmdName:     "",
+			wantDescription: "Does work in a directory",
+			wantOk:          true,
 		},
 	}
 	for _, tt := range tests {

@@ -289,6 +289,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 
+			if cmdName == "" && len(subCommandSequence) == 0 {
+				cmdName = parsers.ToKebabCase(s.Name.Name)
+			}
+
 			if len(subCommandSequence) > 0 && description == "" {
 				fullCmdName := cmdName + " " + strings.Join(subCommandSequence, " ")
 				log.Printf("Warning: Subcommand '%s' (function %s) is missing a short description.", fullCmdName, s.Name.Name)
@@ -582,6 +586,7 @@ var (
 	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
 )
 
 type ParsedParam struct {
@@ -624,12 +629,14 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if strings.Contains(line, "is a subcommand `") {
+		if idx := strings.Index(line, "is a subcommand"); idx != -1 {
 			ok = true
-			start := strings.Index(line, "`")
-			end := strings.LastIndex(line, "`")
+			subCmdPart := line[idx+len("is a subcommand"):]
+
+			start := strings.Index(subCmdPart, "`")
+			end := strings.LastIndex(subCmdPart, "`")
 			if start != -1 && end != -1 && start < end {
-				commandPart := line[start+1 : end]
+				commandPart := subCmdPart[start+1 : end]
 				parts := strings.Fields(commandPart)
 				if len(parts) > 0 {
 					cmdName = parts[0]
@@ -637,33 +644,33 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 						subCommandSequence = parts[1:]
 					}
 				}
+				subCmdPart = subCmdPart[end+1:]
+			}
 
-				rest := strings.TrimSpace(line[end+1:])
+			rest := strings.TrimSpace(subCmdPart)
 
-				// Check for inline aliases
-				// Format: (aliases: a, b) or (aka: a, b)
-				// Regex to capture content inside parens
-				reAlias := regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
-				if matches := reAlias.FindStringSubmatch(rest); matches != nil {
-					aliasStr := matches[1]
-					parts := strings.Split(aliasStr, ",")
-					for _, p := range parts {
-						a := strings.TrimSpace(p)
-						if a != "" {
-							aliases = append(aliases, a)
-						}
+			// Check for inline aliases
+			// Format: (aliases: a, b) or (aka: a, b)
+			// Regex to capture content inside parens
+			if matches := reAlias.FindStringSubmatch(rest); matches != nil {
+				aliasStr := matches[1]
+				parts := strings.Split(aliasStr, ",")
+				for _, p := range parts {
+					a := strings.TrimSpace(p)
+					if a != "" {
+						aliases = append(aliases, a)
 					}
-					// Remove the alias part from rest to keep description clean
-					rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
 				}
+				// Remove the alias part from rest to keep description clean
+				rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
+			}
 
-				if strings.HasPrefix(rest, "that ") {
-					description = strings.TrimPrefix(rest, "that ")
-				} else if strings.HasPrefix(rest, "-- ") {
-					description = strings.TrimPrefix(rest, "-- ")
-				} else if rest != "" {
-					description = rest
-				}
+			if strings.HasPrefix(rest, "that ") {
+				description = strings.TrimPrefix(rest, "that ")
+			} else if strings.HasPrefix(rest, "-- ") {
+				description = strings.TrimPrefix(rest, "-- ")
+			} else if rest != "" {
+				description = rest
 			}
 			continue
 		}
