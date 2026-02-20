@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
@@ -29,6 +30,17 @@ func (c *InternalCommand) Execute(args []string) error {
 
 func (c *InternalCommand) Usage() {
 	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
 }
 
 type UserError struct {
@@ -53,7 +65,7 @@ func executeUsage(out io.Writer, templateName string, data any) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands      map[string]Cmd
+	Commands      map[string]func() Cmd
 	Version       string
 	Commit        string
 	Date          string
@@ -86,7 +98,7 @@ func (c *RootCmd) UsageRecursive() {
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
-		Commands: make(map[string]Cmd),
+		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
@@ -94,19 +106,19 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.FlagSet.Usage = c.Usage
 
 	{
-		subCmd := c.NewFormat()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFormat() })
 		c.Commands["format"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewFormatSourceComments()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFormatSourceComments() })
 		c.Commands["format-source-comments"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewGenerate()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewGenerate() })
 		c.Commands["generate"] = subCmd
 
 		c.Commands["gen"] = subCmd
@@ -114,64 +126,70 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 
 	{
-		subCmd := c.NewGoreleaser()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewGoreleaser() })
 		c.Commands["goreleaser"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewList()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewList() })
 		c.Commands["list"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewScan()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewScan() })
 		c.Commands["scan"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewSyntax()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSyntax() })
 		c.Commands["syntax"] = subCmd
 
 	}
 
 	{
-		subCmd := c.NewValidate()
+		subCmd := NewLazyCommand(func() Cmd { return c.NewValidate() })
 		c.Commands["validate"] = subCmd
 
 	}
-	c.Commands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				c.UsageRecursive()
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
 				return nil
-			}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
+			},
+			UsageFunc: c.Usage,
+		}
 	}
-	c.Commands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				c.UsageRecursive()
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
 				return nil
-			}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
+			},
+			UsageFunc: c.Usage,
+		}
 	}
-	c.Commands["version"] = &InternalCommand{
-		Exec: func(args []string) error {
-			fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
-			return nil
-		},
-		UsageFunc: func() {
-			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
-		},
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
 	}
 	return c, nil
 }
@@ -226,7 +244,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 	c.Usage()
