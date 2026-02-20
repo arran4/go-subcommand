@@ -133,11 +133,11 @@ func (c *MySliceCmd) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				iv, err := strconv.Atoi(value)
+				v, err := strconv.Atoi(value)
 				if err != nil {
 					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
 				}
-				c.counts = append(c.counts, iv)
+				c.counts = append(c.counts, v)
 
 			case "debugs":
 				if hasValue {
@@ -159,11 +159,11 @@ func (c *MySliceCmd) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				d, err := time.ParseDuration(value)
+				v, err := time.ParseDuration(value)
 				if err != nil {
 					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
-				c.timeouts = append(c.timeouts, d)
+				c.timeouts = append(c.timeouts, v)
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}

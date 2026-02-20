@@ -81,6 +81,102 @@ func (p *FunctionParameter) DefaultString() string {
 	return fmt.Sprintf("(default: %s)", def)
 }
 
+// IsSlice returns true if the type is a slice.
+func (p *FunctionParameter) IsSlice() bool {
+	return strings.HasPrefix(p.Type, "[]")
+}
+
+// IsPointer returns true if the type is a pointer (or slice of pointers).
+func (p *FunctionParameter) IsPointer() bool {
+	t := p.Type
+	if strings.HasPrefix(t, "[]") {
+		t = t[2:]
+	}
+	return strings.HasPrefix(t, "*")
+}
+
+// BaseType returns the underlying type (stripping * and []).
+func (p *FunctionParameter) BaseType() string {
+	t := p.Type
+	if strings.HasPrefix(t, "[]") {
+		t = t[2:]
+	}
+	if strings.HasPrefix(t, "*") {
+		t = t[1:]
+	}
+	return t
+}
+
+func (p *FunctionParameter) IsBool() bool {
+	return p.BaseType() == "bool"
+}
+
+func (p *FunctionParameter) IsString() bool {
+	return p.BaseType() == "string"
+}
+
+func (p *FunctionParameter) IsDuration() bool {
+	return p.BaseType() == "time.Duration"
+}
+
+func (p *FunctionParameter) ParserCall(valName string) string {
+	t := p.BaseType()
+	if t == "int" {
+		return fmt.Sprintf("strconv.Atoi(%s)", valName)
+	}
+	if t == "time.Duration" {
+		return fmt.Sprintf("time.ParseDuration(%s)", valName)
+	}
+	if t == "bool" {
+		return fmt.Sprintf("strconv.ParseBool(%s)", valName)
+	}
+	if strings.HasPrefix(t, "int") {
+		bits := t[3:]
+		if bits == "" {
+			bits = "0"
+		}
+		return fmt.Sprintf("strconv.ParseInt(%s, 10, %s)", valName, bits)
+	}
+	if strings.HasPrefix(t, "uint") {
+		bits := t[4:]
+		if bits == "" {
+			bits = "64"
+		}
+		return fmt.Sprintf("strconv.ParseUint(%s, 10, %s)", valName, bits)
+	}
+	if strings.HasPrefix(t, "float") {
+		bits := t[5:]
+		return fmt.Sprintf("strconv.ParseFloat(%s, %s)", valName, bits)
+	}
+	return ""
+}
+
+func (p *FunctionParameter) CastCode(valName string) string {
+	t := p.BaseType()
+	// No cast needed if types match the parser return type
+	switch t {
+	case "int", "int64", "float64", "bool", "time.Duration", "string":
+		return valName
+	case "uint64":
+		return valName // ParseUint returns uint64
+	}
+	return fmt.Sprintf("%s(%s)", t, valName)
+}
+
+func (p *FunctionParameter) TypeDescription() string {
+	t := p.BaseType()
+	switch t {
+	case "int":
+		return "integer"
+	case "bool":
+		return "boolean"
+	case "time.Duration":
+		return "duration"
+	default:
+		return t
+	}
+}
+
 type SubCommand struct {
 	*Command
 	Parent                 *SubCommand
