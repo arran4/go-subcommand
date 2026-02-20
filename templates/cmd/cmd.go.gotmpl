@@ -64,6 +64,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	var remainingArgs []string
 	seenFlags := make(map[string]bool)
+	_ = seenFlags
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
