@@ -10,8 +10,14 @@ Subcommands:
     help         Print this help message
     usage        Print this usage message
 
+
+
 Flags:
+
     --dir string      (default: ".")    The project root directory
+
     --inplace                           Modify files in place
+
     --path []string   (default: nil)    Paths to search for subcommands relative to dir
+
     --recursive       (default: true)   Search recursively
