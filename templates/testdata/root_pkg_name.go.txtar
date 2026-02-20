@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"example.com/myproject/cmd/mycmd/templates"
-	rootpkg "example.com/myproject/rootpkg"
+	"example.com/myproject/rootpkg"
 )
 
 type Cmd interface {
