@@ -19,7 +19,7 @@ import (
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
 	{{- if .FunctionName}}
 	{{- if .ImportPath}}
-	"{{.ImportPath}}"
+	{{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}} {{end}}"{{.ImportPath}}"
 	{{- end}}
 	{{- if .ReturnsError}}
 	"errors"
