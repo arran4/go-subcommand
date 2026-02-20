@@ -247,7 +247,7 @@ func resolveSubCommandInheritance(sc *model.SubCommand) {
 						p.FlagAliases = parentParam.FlagAliases
 					}
 				}
-			} else if sc.Command != nil && sc.Command.MainCmdName == p.DeclaredIn {
+			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
 				// Declared in Root Command
 				for _, pp := range sc.Command.Parameters {
 					if pp.Name == p.Name {

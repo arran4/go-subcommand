@@ -10,7 +10,8 @@
       "Name": "force",
       "Type": "bool",
       "FlagAliases": ["f"],
-      "Description": "Force execution"
+      "Description": "Force execution",
+      "DeclaredIn": "sub1"
     }
   ]
 }
@@ -24,5 +25,8 @@ Subcommands:
     help         Print this help message
     usage        Print this usage message
 
-Flags:
+
+
+`sub1` Flags:
+
     -f    Force execution

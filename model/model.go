@@ -189,7 +189,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 
 	// Add root command (SubCommand.Command)
 	if sc.Command != nil {
-		name := sc.Command.MainCmdName
+		name := sc.MainCmdName
 		if params, ok := grouped[name]; ok {
 			groups = append(groups, ParameterGroup{
 				CommandName: name,
@@ -238,7 +238,7 @@ func (sc *SubCommand) FullUsageString() string {
 
 	// Add root command
 	if sc.Command != nil {
-		parts = append(parts, sc.Command.MainCmdName)
+		parts = append(parts, sc.MainCmdName)
 		hasFlags := false
 		for _, p := range sc.Command.Parameters {
 			if !p.IsPositional {

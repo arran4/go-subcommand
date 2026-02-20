@@ -31,8 +31,7 @@ Subcommands:
 {{$maxFlag := add .MaxFlagLength 2}}{{$maxDef := .MaxDefaultLength}}{{if gt $maxDef 0}}{{$maxDef = add $maxDef 2}}{{end}}
 {{- range .ParameterGroups}}
 
-`{{.CommandName}}` Flags:
-{{- range .Parameters}}
+`{{.CommandName}}` Flags:{{- range .Parameters}}
 {{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
 {{- end}}
 {{- end}}
