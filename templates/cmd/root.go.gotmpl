@@ -14,7 +14,7 @@ import (
 	{{- if .SubCommands }}
 	"sync"
 	{{- end }}
-{{- template "common_imports" (slice .Parameters true) }}
+{{- template "common_imports" (list .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
 	{{- if .FunctionName}}
@@ -117,7 +117,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-{{- template "flag_definitions" (slice "c" "c" .Parameters) }}
+{{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
 		{{if .ReturnsError}}
@@ -215,8 +215,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
+	{{- $hasRequired := false }}
+	{{- range .Parameters }}{{ if .IsRequired }}{{ $hasRequired = true }}{{ end }}{{ end }}
+	{{- if $hasRequired }}
 	seenFlags := make(map[string]bool)
-	_ = seenFlags
+	{{- end }}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -243,10 +246,10 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- range .Parameters }}
 			{{- if not .IsPositional }}
 			{{$param := .}}
-			{{- $longs := slice }}
+			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
 			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
-			{{- $uniqueLongs := slice }}
+			{{- $uniqueLongs := list }}
 			{{- range $l := $longs }}
 				{{- $exists := false }}
 				{{- range $u := $uniqueLongs }}{{ if eq $u $l }}{{ $exists = true }}{{ end }}{{ end }}
@@ -254,7 +257,9 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $hasRequired }}
 				seenFlags["{{$param.Name}}"] = true
+				{{- end }}
 				{{- if $param.Parser }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
@@ -675,10 +680,10 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- range .Parameters }}
 				{{- if not .IsPositional }}
 				{{$param := .}}
-				{{- $shorts := slice }}
+				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
 				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
-				{{- $uniqueShorts := slice }}
+				{{- $uniqueShorts := list }}
 				{{- range $s := $shorts }}
 					{{- $exists := false }}
 					{{- range $u := $uniqueShorts }}{{ if eq $u $s }}{{ $exists = true }}{{ end }}{{ end }}
@@ -687,7 +692,9 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $hasRequired }}
 					seenFlags["{{$param.Name}}"] = true
+					{{- end }}
 					{{- if $param.Parser }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {

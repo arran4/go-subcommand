@@ -67,7 +67,7 @@
 		{{- end -}}
 
 		{{- $aliases := .FlagAliases }}
-		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
+		{{- if not $aliases }}{{ $aliases = list .Name }}{{ end }}
 
 		{{- range $aliases }}
 			{{- if $param.IsSlice }}

@@ -409,7 +409,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 			}
 			return res
 		},
-		"slice": func(args ...interface{}) []interface{} {
+		"list": func(args ...interface{}) []interface{} {
 			return args
 		},
 		"append": func(list []interface{}, args ...interface{}) []interface{} {

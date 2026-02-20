@@ -13,7 +13,7 @@ import (
 	{{- if .SubCommands }}
 	"sync"
 	{{- end }}
-{{- template "common_imports" (slice .AllParameters true) }}
+{{- template "common_imports" (list .AllParameters true) }}
 {{- if .ImportPath}}
 
 	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
@@ -63,8 +63,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{- end }}
 	var remainingArgs []string
+	{{- $hasRequired := false }}
+	{{- range .AllParameters }}{{ if .IsRequired }}{{ $hasRequired = true }}{{ end }}{{ end }}
+	{{- if $hasRequired }}
 	seenFlags := make(map[string]bool)
-	_ = seenFlags
+	{{- end }}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -91,10 +94,10 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- range .AllParameters }}
 			{{- if not .IsPositional }}
 			{{$param := .}}
-			{{- $longs := slice }}
+			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
 			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
-			{{- $uniqueLongs := slice }}
+			{{- $uniqueLongs := list }}
 			{{- range $l := $longs }}
 				{{- $exists := false }}
 				{{- range $u := $uniqueLongs }}{{ if eq $u $l }}{{ $exists = true }}{{ end }}{{ end }}
@@ -102,7 +105,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $hasRequired }}
 				seenFlags["{{$param.Name}}"] = true
+				{{- end }}
 				{{- if $param.IsBool }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
@@ -227,10 +232,10 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- range .AllParameters }}
 				{{- if not .IsPositional }}
 				{{$param := .}}
-				{{- $shorts := slice }}
+				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
 				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
-				{{- $uniqueShorts := slice }}
+				{{- $uniqueShorts := list }}
 				{{- range $s := $shorts }}
 					{{- $exists := false }}
 					{{- range $u := $uniqueShorts }}{{ if eq $u $s }}{{ $exists = true }}{{ end }}{{ end }}
@@ -239,7 +244,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $hasRequired }}
 					seenFlags["{{$param.Name}}"] = true
+					{{- end }}
 					{{- if $param.IsBool }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -385,7 +392,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 		Flags:   set,
 		SubCommands: make(map[string]func() Cmd),
 	}
-{{- template "flag_definitions" (slice "set" "v" .Parameters) }}
+{{- template "flag_definitions" (list "set" "v" .Parameters) }}
 	set.Usage = v.Usage
 	{{if .SubCommandFunctionName}}
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
