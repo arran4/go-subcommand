@@ -11,6 +11,9 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
+	{{- if .SubCommands }}
+	"sync"
+	{{- end }}
 {{- template "common_imports" (slice .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
@@ -43,6 +46,17 @@ func (c *InternalCommand) Usage() {
 	c.UsageFunc()
 }
 
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
 type UserError struct {
 	Err error
 	Msg string
@@ -65,7 +79,7 @@ func executeUsage(out io.Writer, templateName string, data {{if minGoVersion "1.
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands map[string]Cmd
+	Commands map[string]func() Cmd
 	Version  string
 	Commit   string
 	Date     string
@@ -102,7 +116,7 @@ func (c *RootCmd) UsageRecursive() {
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
-		Commands: make(map[string]Cmd),
+		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
@@ -139,61 +153,67 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{end}}
 	{{range .SubCommands}}
 	{
-		subCmd := c.New{{.SubCommandStructName}}()
+		subCmd := NewLazyCommand(func() Cmd { return c.New{{.SubCommandStructName}}() })
 		c.Commands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		c.Commands["{{. | lower}}"] = subCmd
 		{{end}}
 	}
 	{{end -}}
-	c.Commands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			{{- if minGoVersion "1.21" .GoVersion }}
-			if slices.Contains(args, "-deep") {
-				c.UsageRecursive()
-				return nil
-			}
-			{{- else }}
-			for _, arg := range args {
-				if arg == "-deep" {
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				{{- if minGoVersion "1.21" .GoVersion }}
+				if slices.Contains(args, "-deep") {
 					c.UsageRecursive()
 					return nil
 				}
-			}
-			{{- end }}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
-	}
-	c.Commands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			{{- if minGoVersion "1.21" .GoVersion }}
-			if slices.Contains(args, "-deep") {
-				c.UsageRecursive()
+				{{- else }}
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
+				}
+				{{- end }}
+				c.Usage()
 				return nil
-			}
-			{{- else }}
-			for _, arg := range args {
-				if arg == "-deep" {
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				{{- if minGoVersion "1.21" .GoVersion }}
+				if slices.Contains(args, "-deep") {
 					c.UsageRecursive()
 					return nil
 				}
-			}
-			{{- end }}
-			c.Usage()
-			return nil
-		},
-		UsageFunc: c.Usage,
+				{{- else }}
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
+				}
+				{{- end }}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
 	}
-	c.Commands["version"] = &InternalCommand{
-		Exec: func(args []string) error {
-			fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
-			return nil
-		},
-		UsageFunc: func() {
-			fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
-		},
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
 	}
 	return c, nil
 }
@@ -303,6 +323,146 @@ func (c *RootCmd) Execute(args []string) error {
 					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
 				c.{{$param.Name}} = &d
+				{{- else if eq $param.Type "int64" }}
+				iv, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid int64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = iv
+				{{- else if eq $param.Type "*int64" }}
+				iv, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid int64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = &iv
+				{{- else if eq $param.Type "int32" }}
+				iv, err := strconv.ParseInt(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid int32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = int32(iv)
+				{{- else if eq $param.Type "*int32" }}
+				iv, err := strconv.ParseInt(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid int32 value for flag %s: %s", name, value)
+				}
+				v := int32(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "int16" }}
+				iv, err := strconv.ParseInt(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid int16 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = int16(iv)
+				{{- else if eq $param.Type "*int16" }}
+				iv, err := strconv.ParseInt(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid int16 value for flag %s: %s", name, value)
+				}
+				v := int16(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "int8" }}
+				iv, err := strconv.ParseInt(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid int8 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = int8(iv)
+				{{- else if eq $param.Type "*int8" }}
+				iv, err := strconv.ParseInt(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid int8 value for flag %s: %s", name, value)
+				}
+				v := int8(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "uint" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = uint(iv)
+				{{- else if eq $param.Type "*uint" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
+				}
+				v := uint(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "uint64" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = iv
+				{{- else if eq $param.Type "*uint64" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = &iv
+				{{- else if eq $param.Type "uint32" }}
+				iv, err := strconv.ParseUint(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid uint32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = uint32(iv)
+				{{- else if eq $param.Type "*uint32" }}
+				iv, err := strconv.ParseUint(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid uint32 value for flag %s: %s", name, value)
+				}
+				v := uint32(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "uint16" }}
+				iv, err := strconv.ParseUint(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid uint16 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = uint16(iv)
+				{{- else if eq $param.Type "*uint16" }}
+				iv, err := strconv.ParseUint(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid uint16 value for flag %s: %s", name, value)
+				}
+				v := uint16(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "uint8" }}
+				iv, err := strconv.ParseUint(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid uint8 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = uint8(iv)
+				{{- else if eq $param.Type "*uint8" }}
+				iv, err := strconv.ParseUint(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid uint8 value for flag %s: %s", name, value)
+				}
+				v := uint8(iv)
+				c.{{$param.Name}} = &v
+				{{- else if eq $param.Type "float64" }}
+				f, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					return fmt.Errorf("invalid float64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = f
+				{{- else if eq $param.Type "*float64" }}
+				f, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					return fmt.Errorf("invalid float64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = &f
+				{{- else if eq $param.Type "float32" }}
+				f, err := strconv.ParseFloat(value, 32)
+				if err != nil {
+					return fmt.Errorf("invalid float32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = float32(f)
+				{{- else if eq $param.Type "*float32" }}
+				f, err := strconv.ParseFloat(value, 32)
+				if err != nil {
+					return fmt.Errorf("invalid float32 value for flag %s: %s", name, value)
+				}
+				v := float32(f)
+				c.{{$param.Name}} = &v
 				{{- else if eq $param.Type "[]string" }}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, value)
 				{{- else if eq $param.Type "[]*string" }}
@@ -329,9 +489,149 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- else if eq $param.Type "[]*time.Duration" }}
 				d, err := time.ParseDuration(value)
 				if err != nil {
-					return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
 				}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
+				{{- else if eq $param.Type "[]int64" }}
+				iv, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid int64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+				{{- else if eq $param.Type "[]*int64" }}
+				iv, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid int64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+				{{- else if eq $param.Type "[]int32" }}
+				iv, err := strconv.ParseInt(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid int32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, int32(iv))
+				{{- else if eq $param.Type "[]*int32" }}
+				iv, err := strconv.ParseInt(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid int32 value for flag %s: %s", name, value)
+				}
+				v := int32(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]int16" }}
+				iv, err := strconv.ParseInt(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid int16 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, int16(iv))
+				{{- else if eq $param.Type "[]*int16" }}
+				iv, err := strconv.ParseInt(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid int16 value for flag %s: %s", name, value)
+				}
+				v := int16(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]int8" }}
+				iv, err := strconv.ParseInt(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid int8 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, int8(iv))
+				{{- else if eq $param.Type "[]*int8" }}
+				iv, err := strconv.ParseInt(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid int8 value for flag %s: %s", name, value)
+				}
+				v := int8(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]uint" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, uint(iv))
+				{{- else if eq $param.Type "[]*uint" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
+				}
+				v := uint(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]uint64" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+				{{- else if eq $param.Type "[]*uint64" }}
+				iv, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid uint64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+				{{- else if eq $param.Type "[]uint32" }}
+				iv, err := strconv.ParseUint(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid uint32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, uint32(iv))
+				{{- else if eq $param.Type "[]*uint32" }}
+				iv, err := strconv.ParseUint(value, 10, 32)
+				if err != nil {
+					return fmt.Errorf("invalid uint32 value for flag %s: %s", name, value)
+				}
+				v := uint32(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]uint16" }}
+				iv, err := strconv.ParseUint(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid uint16 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, uint16(iv))
+				{{- else if eq $param.Type "[]*uint16" }}
+				iv, err := strconv.ParseUint(value, 10, 16)
+				if err != nil {
+					return fmt.Errorf("invalid uint16 value for flag %s: %s", name, value)
+				}
+				v := uint16(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]uint8" }}
+				iv, err := strconv.ParseUint(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid uint8 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, uint8(iv))
+				{{- else if eq $param.Type "[]*uint8" }}
+				iv, err := strconv.ParseUint(value, 10, 8)
+				if err != nil {
+					return fmt.Errorf("invalid uint8 value for flag %s: %s", name, value)
+				}
+				v := uint8(iv)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+				{{- else if eq $param.Type "[]float64" }}
+				f, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					return fmt.Errorf("invalid float64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, f)
+				{{- else if eq $param.Type "[]*float64" }}
+				f, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					return fmt.Errorf("invalid float64 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &f)
+				{{- else if eq $param.Type "[]float32" }}
+				f, err := strconv.ParseFloat(value, 32)
+				if err != nil {
+					return fmt.Errorf("invalid float32 value for flag %s: %s", name, value)
+				}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, float32(f))
+				{{- else if eq $param.Type "[]*float32" }}
+				f, err := strconv.ParseFloat(value, 32)
+				if err != nil {
+					return fmt.Errorf("invalid float32 value for flag %s: %s", name, value)
+				}
+				v := float32(f)
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 				{{- else }}
 				// TODO: Implement parsing for flag type {{$param.Type}}
 				{{- end }}
@@ -424,6 +724,146 @@ func (c *RootCmd) Execute(args []string) error {
 						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
 					}
 					c.{{$param.Name}} = &d
+					{{- else if eq $param.Type "int64" }}
+					iv, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid int64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = iv
+					{{- else if eq $param.Type "*int64" }}
+					iv, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid int64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = &iv
+					{{- else if eq $param.Type "int32" }}
+					iv, err := strconv.ParseInt(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid int32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = int32(iv)
+					{{- else if eq $param.Type "*int32" }}
+					iv, err := strconv.ParseInt(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid int32 value for flag -%s: %s", char, value)
+					}
+					v := int32(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "int16" }}
+					iv, err := strconv.ParseInt(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid int16 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = int16(iv)
+					{{- else if eq $param.Type "*int16" }}
+					iv, err := strconv.ParseInt(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid int16 value for flag -%s: %s", char, value)
+					}
+					v := int16(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "int8" }}
+					iv, err := strconv.ParseInt(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid int8 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = int8(iv)
+					{{- else if eq $param.Type "*int8" }}
+					iv, err := strconv.ParseInt(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid int8 value for flag -%s: %s", char, value)
+					}
+					v := int8(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "uint" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = uint(iv)
+					{{- else if eq $param.Type "*uint" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
+					}
+					v := uint(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "uint64" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = iv
+					{{- else if eq $param.Type "*uint64" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = &iv
+					{{- else if eq $param.Type "uint32" }}
+					iv, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid uint32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = uint32(iv)
+					{{- else if eq $param.Type "*uint32" }}
+					iv, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid uint32 value for flag -%s: %s", char, value)
+					}
+					v := uint32(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "uint16" }}
+					iv, err := strconv.ParseUint(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid uint16 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = uint16(iv)
+					{{- else if eq $param.Type "*uint16" }}
+					iv, err := strconv.ParseUint(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid uint16 value for flag -%s: %s", char, value)
+					}
+					v := uint16(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "uint8" }}
+					iv, err := strconv.ParseUint(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid uint8 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = uint8(iv)
+					{{- else if eq $param.Type "*uint8" }}
+					iv, err := strconv.ParseUint(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid uint8 value for flag -%s: %s", char, value)
+					}
+					v := uint8(iv)
+					c.{{$param.Name}} = &v
+					{{- else if eq $param.Type "float64" }}
+					f, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return fmt.Errorf("invalid float64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = f
+					{{- else if eq $param.Type "*float64" }}
+					f, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return fmt.Errorf("invalid float64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = &f
+					{{- else if eq $param.Type "float32" }}
+					f, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return fmt.Errorf("invalid float32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = float32(f)
+					{{- else if eq $param.Type "*float32" }}
+					f, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return fmt.Errorf("invalid float32 value for flag -%s: %s", char, value)
+					}
+					v := float32(f)
+					c.{{$param.Name}} = &v
 					{{- else if eq $param.Type "[]string" }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, value)
 					{{- else if eq $param.Type "[]*string" }}
@@ -453,6 +893,146 @@ func (c *RootCmd) Execute(args []string) error {
 						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
 					}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &d)
+					{{- else if eq $param.Type "[]int64" }}
+					iv, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid int64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+					{{- else if eq $param.Type "[]*int64" }}
+					iv, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid int64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+					{{- else if eq $param.Type "[]int32" }}
+					iv, err := strconv.ParseInt(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid int32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, int32(iv))
+					{{- else if eq $param.Type "[]*int32" }}
+					iv, err := strconv.ParseInt(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid int32 value for flag -%s: %s", char, value)
+					}
+					v := int32(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]int16" }}
+					iv, err := strconv.ParseInt(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid int16 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, int16(iv))
+					{{- else if eq $param.Type "[]*int16" }}
+					iv, err := strconv.ParseInt(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid int16 value for flag -%s: %s", char, value)
+					}
+					v := int16(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]int8" }}
+					iv, err := strconv.ParseInt(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid int8 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, int8(iv))
+					{{- else if eq $param.Type "[]*int8" }}
+					iv, err := strconv.ParseInt(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid int8 value for flag -%s: %s", char, value)
+					}
+					v := int8(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]uint" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, uint(iv))
+					{{- else if eq $param.Type "[]*uint" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
+					}
+					v := uint(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]uint64" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, iv)
+					{{- else if eq $param.Type "[]*uint64" }}
+					iv, err := strconv.ParseUint(value, 10, 64)
+					if err != nil {
+						return fmt.Errorf("invalid uint64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &iv)
+					{{- else if eq $param.Type "[]uint32" }}
+					iv, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid uint32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, uint32(iv))
+					{{- else if eq $param.Type "[]*uint32" }}
+					iv, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return fmt.Errorf("invalid uint32 value for flag -%s: %s", char, value)
+					}
+					v := uint32(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]uint16" }}
+					iv, err := strconv.ParseUint(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid uint16 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, uint16(iv))
+					{{- else if eq $param.Type "[]*uint16" }}
+					iv, err := strconv.ParseUint(value, 10, 16)
+					if err != nil {
+						return fmt.Errorf("invalid uint16 value for flag -%s: %s", char, value)
+					}
+					v := uint16(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]uint8" }}
+					iv, err := strconv.ParseUint(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid uint8 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, uint8(iv))
+					{{- else if eq $param.Type "[]*uint8" }}
+					iv, err := strconv.ParseUint(value, 10, 8)
+					if err != nil {
+						return fmt.Errorf("invalid uint8 value for flag -%s: %s", char, value)
+					}
+					v := uint8(iv)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
+					{{- else if eq $param.Type "[]float64" }}
+					f, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return fmt.Errorf("invalid float64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, f)
+					{{- else if eq $param.Type "[]*float64" }}
+					f, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return fmt.Errorf("invalid float64 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &f)
+					{{- else if eq $param.Type "[]float32" }}
+					f, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return fmt.Errorf("invalid float32 value for flag -%s: %s", char, value)
+					}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, float32(f))
+					{{- else if eq $param.Type "[]*float32" }}
+					f, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return fmt.Errorf("invalid float32 value for flag -%s: %s", char, value)
+					}
+					v := float32(f)
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 					{{- else }}
 					// TODO: Implement parsing for flag type {{$param.Type}}
 					{{- end }}
@@ -473,7 +1053,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 

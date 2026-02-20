@@ -2,6 +2,8 @@
 
 ## Code Generation & Testing
 * **Keep README.md and txtar tests up to date:** When adding new features, ensure that the `README.md` documentation and `txtar` tests (in `templates/testdata`) are updated to reflect the changes. This helps maintain a comprehensive regression suite and up-to-date documentation.
+* **Embed Large Test Data:** When writing unit tests (e.g., in `issues_test.go` or new test files) that require significant source code strings, put the source code in a file within the `testdata/` directory and use `//go:embed` to load it. This avoids large, messy string literals in test files and potential file system issues.
+* **Avoid Disk I/O in Tests:** Use `testing/fstest.MapFS` and in-memory writers (like `CollectingFileWriter`) for tests instead of reading/writing actual files to the disk. This ensures tests are hermetic and faster. If you need to test file system interactions, mock the file system interface.
 
 ## Tooling Generation (Bootstrapping)
 

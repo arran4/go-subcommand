@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"path"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -70,6 +71,7 @@ type FunctionParameter struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
+	DeclaredIn         string
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -107,6 +109,96 @@ func (p *FunctionParameter) DefaultString() string {
 		def = fmt.Sprintf("%q", def)
 	}
 	return fmt.Sprintf("(default: %s)", def)
+}
+
+// IsSlice returns true if the type is a slice.
+func (p *FunctionParameter) IsSlice() bool {
+	return strings.HasPrefix(p.Type, "[]")
+}
+
+// HasPointer returns true if the type is a pointer (or slice of pointers).
+func (p *FunctionParameter) HasPointer() bool {
+	t := p.Type
+	t = strings.TrimPrefix(t, "[]")
+	return strings.HasPrefix(t, "*")
+}
+
+// BaseType returns the underlying type (stripping * and []).
+func (p *FunctionParameter) BaseType() string {
+	t := p.Type
+	t = strings.TrimPrefix(t, "[]")
+	t = strings.TrimPrefix(t, "*")
+	return t
+}
+
+func (p *FunctionParameter) IsBool() bool {
+	return p.BaseType() == "bool"
+}
+
+func (p *FunctionParameter) IsString() bool {
+	return p.BaseType() == "string"
+}
+
+func (p *FunctionParameter) IsDuration() bool {
+	return p.BaseType() == "time.Duration"
+}
+
+func (p *FunctionParameter) ParserCall(valName string) string {
+	t := p.BaseType()
+	if t == "int" {
+		return fmt.Sprintf("strconv.Atoi(%s)", valName)
+	}
+	if t == "time.Duration" {
+		return fmt.Sprintf("time.ParseDuration(%s)", valName)
+	}
+	if t == "bool" {
+		return fmt.Sprintf("strconv.ParseBool(%s)", valName)
+	}
+	if strings.HasPrefix(t, "int") {
+		bits := t[3:]
+		if bits == "" {
+			bits = "0"
+		}
+		return fmt.Sprintf("strconv.ParseInt(%s, 10, %s)", valName, bits)
+	}
+	if strings.HasPrefix(t, "uint") {
+		bits := t[4:]
+		if bits == "" {
+			bits = "64"
+		}
+		return fmt.Sprintf("strconv.ParseUint(%s, 10, %s)", valName, bits)
+	}
+	if strings.HasPrefix(t, "float") {
+		bits := t[5:]
+		return fmt.Sprintf("strconv.ParseFloat(%s, %s)", valName, bits)
+	}
+	return ""
+}
+
+func (p *FunctionParameter) CastCode(valName string) string {
+	t := p.BaseType()
+	// No cast needed if types match the parser return type
+	switch t {
+	case "int", "int64", "float64", "bool", "time.Duration", "string":
+		return valName
+	case "uint64":
+		return valName // ParseUint returns uint64
+	}
+	return fmt.Sprintf("%s(%s)", t, valName)
+}
+
+func (p *FunctionParameter) TypeDescription() string {
+	t := p.BaseType()
+	switch t {
+	case "int":
+		return "integer"
+	case "bool":
+		return "boolean"
+	case "time.Duration":
+		return "duration"
+	default:
+		return t
+	}
 }
 
 type SubCommand struct {
@@ -168,13 +260,79 @@ func (sc *SubCommand) ProgName() string {
 
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
-	for _, p := range sc.Parameters {
+	for _, p := range sc.AllParameters() {
 		l := len(p.FlagString())
 		if l > max {
 			max = l
 		}
 	}
 	return max
+}
+
+func (sc *SubCommand) ResolveInheritance() {
+	for _, p := range sc.Parameters {
+		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
+			ancestor := sc.FindAncestor(p.DeclaredIn)
+			if ancestor != nil {
+				// Find matching parameter in ancestor
+				var parentParam *FunctionParameter
+				for _, pp := range ancestor.Parameters {
+					if pp.Name == p.Name {
+						parentParam = pp
+						break
+					}
+				}
+
+				if parentParam != nil {
+					if p.Description == "" {
+						p.Description = parentParam.Description
+					}
+					if p.Default == "" {
+						p.Default = parentParam.Default
+					}
+					if len(p.FlagAliases) == 0 {
+						p.FlagAliases = parentParam.FlagAliases
+					}
+				}
+			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
+				// Declared in Root Command
+				for _, pp := range sc.Command.Parameters {
+					if pp.Name == p.Name {
+						if p.Description == "" {
+							p.Description = pp.Description
+						}
+						if p.Default == "" {
+							p.Default = pp.Default
+						}
+						if len(p.FlagAliases) == 0 {
+							p.FlagAliases = pp.FlagAliases
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+	for _, child := range sc.SubCommands {
+		child.ResolveInheritance()
+	}
+}
+
+func (sc *SubCommand) FindAncestor(name string) *SubCommand {
+	curr := sc.Parent
+	for curr != nil {
+		if curr.SubCommandName == name {
+			return curr
+		}
+		curr = curr.Parent
+	}
+	return nil
+}
+
+func (cmd *Command) ResolveInheritance() {
+	for _, sc := range cmd.SubCommands {
+		sc.ResolveInheritance()
+	}
 }
 
 func (sc *SubCommand) AllParameters() []*FunctionParameter {
@@ -202,9 +360,143 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 	return params
 }
 
+type ParameterGroup struct {
+	CommandName string
+	Parameters  []*FunctionParameter
+}
+
+func (sc *SubCommand) ParameterGroups() []ParameterGroup {
+	allParams := sc.AllParameters()
+	grouped := make(map[string][]*FunctionParameter)
+	for _, p := range allParams {
+		if p.IsPositional {
+			continue
+		}
+		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
+	}
+
+	var groups []ParameterGroup
+
+	// Traverse from root to current to ensure order
+	var stack []*SubCommand
+	current := sc
+	for current != nil {
+		stack = append(stack, current)
+		current = current.Parent
+	}
+
+	// Add root command (SubCommand.Command)
+	if sc.Command != nil {
+		name := sc.MainCmdName
+		if params, ok := grouped[name]; ok {
+			groups = append(groups, ParameterGroup{
+				CommandName: name,
+				Parameters:  params,
+			})
+			delete(grouped, name)
+		}
+	}
+
+	// Iterate stack in reverse (Root -> Parent -> Child)
+	for i := len(stack) - 1; i >= 0; i-- {
+		cmd := stack[i]
+		name := cmd.SubCommandName
+		if params, ok := grouped[name]; ok {
+			groups = append(groups, ParameterGroup{
+				CommandName: name,
+				Parameters:  params,
+			})
+			delete(grouped, name)
+		}
+	}
+
+	// Add any remaining groups (shouldn't happen if DeclaredIn is correct)
+	var keys []string
+	for k := range grouped {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		params := grouped[name]
+		if name == "" {
+			name = "unknown"
+		}
+		groups = append(groups, ParameterGroup{
+			CommandName: name,
+			Parameters:  params,
+		})
+	}
+
+	return groups
+}
+
+func (sc *SubCommand) FullUsageString() string {
+	var parts []string
+
+	// Add root command
+	if sc.Command != nil {
+		parts = append(parts, sc.MainCmdName)
+		hasFlags := false
+		for _, p := range sc.Command.Parameters {
+			if !p.IsPositional {
+				hasFlags = true
+				break
+			}
+		}
+		if hasFlags {
+			parts = append(parts, "[flags...]")
+		}
+	}
+
+	// Traverse from root to current
+	var stack []*SubCommand
+	current := sc
+	for current != nil {
+		stack = append(stack, current)
+		current = current.Parent
+	}
+
+	for i := len(stack) - 1; i >= 0; i-- {
+		cmd := stack[i]
+		parts = append(parts, cmd.SubCommandName)
+
+		// Check for flags declared in THIS command
+		hasFlags := false
+		for _, p := range cmd.Parameters {
+			if !p.IsPositional {
+				hasFlags = true
+				break
+			}
+		}
+
+		if hasFlags {
+			parts = append(parts, "[flags...]")
+		}
+	}
+
+	// Add positional arguments for the LEAF command (sc)
+	// We only show positionals for the command we are running.
+	for _, p := range sc.Parameters {
+		if p.IsPositional {
+			if p.IsVarArg {
+				parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+			} else {
+				parts = append(parts, fmt.Sprintf("<%s>", p.Name))
+			}
+		}
+	}
+
+	if len(sc.SubCommands) > 0 {
+		parts = append(parts, "<subcommand>")
+	}
+
+	return strings.Join(parts, " ")
+}
+
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
-	for _, p := range sc.Parameters {
+	for _, p := range sc.AllParameters() {
 		if p.IsPositional {
 			continue
 		}

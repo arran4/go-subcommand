@@ -9,21 +9,24 @@
       "Type": "bool",
       "FlagAliases": ["s"],
       "Default": "false",
-      "Description": "Short flag"
+      "Description": "Short flag",
+      "DeclaredIn": "align"
     },
     {
       "Name": "very-very-long-flag-name-to-test-alignment-limits",
       "Type": "string",
       "FlagAliases": ["long"],
       "Default": "",
-      "Description": "This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long."
+      "Description": "This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.",
+      "DeclaredIn": "align"
     },
     {
       "Name": "another",
       "Type": "int",
       "FlagAliases": [],
       "Default": "42",
-      "Description": "Another flag"
+      "Description": "Another flag",
+      "DeclaredIn": "align"
     }
   ],
   "SubCommands": [
@@ -52,7 +55,12 @@ Subcommands:
     very-long-subcommand-name-here Description for long subcommand
 {{end}}
 
+
+
 Flags:
+
     -s              (default: false)   Short flag
+
     --long string                      This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
+
     --another int   (default: 42)      Another flag

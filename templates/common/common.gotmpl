@@ -12,7 +12,20 @@
 		{{- $hasDuration = true }}
 		{{- end }}
 	{{- end }}
-	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "*int") (eq .Type "*bool") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]*int") (eq .Type "[]*bool") }}
+	{{- if or (eq .Type "int") (eq .Type "bool") (eq .Type "*int") (eq .Type "*bool") (eq .Type "[]int") (eq .Type "[]bool") (eq .Type "[]*int") (eq .Type "[]*bool")
+		(eq .Type "int64") (eq .Type "int32") (eq .Type "int16") (eq .Type "int8")
+		(eq .Type "uint") (eq .Type "uint64") (eq .Type "uint32") (eq .Type "uint16") (eq .Type "uint8")
+		(eq .Type "float64") (eq .Type "float32")
+		(eq .Type "*int64") (eq .Type "*int32") (eq .Type "*int16") (eq .Type "*int8")
+		(eq .Type "*uint") (eq .Type "*uint64") (eq .Type "*uint32") (eq .Type "*uint16") (eq .Type "*uint8")
+		(eq .Type "*float64") (eq .Type "*float32")
+		(eq .Type "[]int64") (eq .Type "[]int32") (eq .Type "[]int16") (eq .Type "[]int8")
+		(eq .Type "[]uint") (eq .Type "[]uint64") (eq .Type "[]uint32") (eq .Type "[]uint16") (eq .Type "[]uint8")
+		(eq .Type "[]float64") (eq .Type "[]float32")
+		(eq .Type "[]*int64") (eq .Type "[]*int32") (eq .Type "[]*int16") (eq .Type "[]*int8")
+		(eq .Type "[]*uint") (eq .Type "[]*uint64") (eq .Type "[]*uint32") (eq .Type "[]*uint16") (eq .Type "[]*uint8")
+		(eq .Type "[]*float64") (eq .Type "[]*float32")
+	}}
 		{{- if or .IsPositional $needStrconvForFlags }}
 		{{- $hasStrconv = true }}
 		{{- end }}
@@ -42,7 +55,7 @@
 			{{- else if eq .Type "bool" }}{{ $default = "false" }}
 			{{- else if eq .Type "time.Duration" }}{{ $default = "0" }}
 			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
-			{{- else }}{{ $default = "0" }}{{ end -}}
+			{{- else if or (eq .Type "int") (eq .Type "int64") (eq .Type "int32") (eq .Type "int16") (eq .Type "int8") (eq .Type "uint") (eq .Type "uint64") (eq .Type "uint32") (eq .Type "uint16") (eq .Type "uint8") (eq .Type "float64") (eq .Type "float32") }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
 			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
 			{{- else }}{{ $default = .Default }}{{ end -}}
@@ -57,66 +70,55 @@
 		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
 
 		{{- range $aliases }}
-			{{- if eq $param.Type "time.Duration" }}
+			{{- if $param.IsSlice }}
+				{{- $baseName := $param.BaseType | title }}
+				{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
+				{{- $helperName := printf "%sSlice" $baseName }}
+				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
+	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else }}
+				{{- if $param.HasPointer }}
+					{{- if $param.IsString }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		{{$struct}}.{{$param.Name}} = &s
+		return nil
+	})
+					{{- else }}
+						{{- $funcName := "Func" }}
+						{{- if $param.IsBool }}{{ $funcName = "BoolFunc" }}{{ end }}
+	{{$set}}.{{$funcName}}("{{.}}", "{{$desc}}", func(s string) error {
+		v, err := {{$param.ParserCall "s"}}
+		if err != nil {
+			return err
+		}
+		val := {{$param.CastCode "v"}}
+		{{$struct}}.{{$param.Name}} = &val
+		return nil
+	})
+					{{- end }}
+				{{- else }}
+					{{- if $param.IsDuration }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
-			{{- else if eq $param.Type "[]string" }}
-	{{$set}}.Var((*StringSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]int" }}
-	{{$set}}.Var((*IntSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]bool" }}
-	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]time.Duration" }}
-	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "*string" }}
+					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "string") (eq $param.BaseType "bool") (eq $param.BaseType "uint") (eq $param.BaseType "uint64") (eq $param.BaseType "int64") (eq $param.BaseType "float64") }}
+						{{- $varType := $param.BaseType | title }}
+	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+					{{- else }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		{{$struct}}.{{$param.Name}} = &s
-		return nil
-	})
-			{{- else if eq $param.Type "*int" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.Atoi(s)
+		v, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
 		}
-		{{$struct}}.{{$param.Name}} = &i
+		{{$struct}}.{{$param.Name}} = {{$param.CastCode "v"}}
 		return nil
 	})
-			{{- else if eq $param.Type "*bool" }}
-	{{$set}}.BoolFunc("{{.}}", "{{$desc}}", func(s string) error {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &b
-		return nil
-	})
-			{{- else if eq $param.Type "*time.Duration" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &d
-		return nil
-	})
-			{{- else if eq $param.Type "[]*string" }}
-	{{$set}}.Var((*StringPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int" }}
-	{{$set}}.Var((*IntPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*bool" }}
-	{{$set}}.Var((*BoolPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*time.Duration" }}
-	{{$set}}.Var((*DurationPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if or (eq $param.Type "string") (eq $param.Type "int") (eq $param.Type "bool") }}
-	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else }}
-	// TODO: Implement flag definition for type {{$param.Type}}
+					{{- end }}
+				{{- end }}
 			{{- end }}
-		{{- end -}}
+		{{- end }}
 		{{- end }}
 	{{- end}}
 {{- end -}}
@@ -158,18 +160,16 @@
 			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
-		{{- if eq .Type "string" }}
+		{{- if .IsString }}
 		c.{{.Name}} = varArgs
-		{{- else if eq .Type "int" }}
-		for _, arg := range varArgs {
-			i, err := strconv.Atoi(arg)
-			if err != nil {
-				return fmt.Errorf("invalid integer argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, i)
-		}
 		{{- else }}
-		// TODO: Implement parsing for vararg type {{.Type}}
+		for _, arg := range varArgs {
+			v, err := {{.ParserCall "arg"}}
+			if err != nil {
+				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}}: %s", arg)
+			}
+			c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
+		}
 		{{- end }}
 	}
 			{{- else }}
@@ -178,28 +178,14 @@
 		argIndex := {{.PositionalArgIndex | add -1}}
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
-			{{- if eq .Type "string" }}
+			{{- if .IsString }}
 			c.{{.Name}} = argVal
-			{{- else if eq .Type "int" }}
-			i, err := strconv.Atoi(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid integer argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = i
-			{{- else if eq .Type "bool" }}
-			b, err := strconv.ParseBool(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid boolean argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = b
-			{{- else if eq .Type "time.Duration" }}
-			d, err := time.ParseDuration(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid duration argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = d
 			{{- else }}
-			// TODO: Implement parsing for positional type {{.Type}}
+			v, err := {{.ParserCall "argVal"}}
+			if err != nil {
+				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = {{.CastCode "v"}}
 			{{- end }}
 		}
 	}
@@ -238,6 +224,204 @@ func (s *IntSlice) Set(value string) error {
 		return err
 	}
 	*s = append(*s, i)
+	return nil
+}
+
+type Int64Slice []int64
+
+func (s *Int64Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Int64Slice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, i)
+	return nil
+}
+
+type Int32Slice []int32
+
+func (s *Int32Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Int32Slice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, int32(i))
+	return nil
+}
+
+type Int16Slice []int16
+
+func (s *Int16Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Int16Slice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 16)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, int16(i))
+	return nil
+}
+
+type Int8Slice []int8
+
+func (s *Int8Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Int8Slice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 8)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, int8(i))
+	return nil
+}
+
+type UintSlice []uint
+
+func (s *UintSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *UintSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 64) // uint can be 32 or 64 bit, but 64 covers both
+	if err != nil {
+		return err
+	}
+	*s = append(*s, uint(i))
+	return nil
+}
+
+type Uint64Slice []uint64
+
+func (s *Uint64Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Uint64Slice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, i)
+	return nil
+}
+
+type Uint32Slice []uint32
+
+func (s *Uint32Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Uint32Slice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, uint32(i))
+	return nil
+}
+
+type Uint16Slice []uint16
+
+func (s *Uint16Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Uint16Slice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 16)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, uint16(i))
+	return nil
+}
+
+type Uint8Slice []uint8
+
+func (s *Uint8Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Uint8Slice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 8)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, uint8(i))
+	return nil
+}
+
+type Float64Slice []float64
+
+func (s *Float64Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Float64Slice) Set(value string) error {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, f)
+	return nil
+}
+
+type Float32Slice []float32
+
+func (s *Float32Slice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *Float32Slice) Set(value string) error {
+	f, err := strconv.ParseFloat(value, 32)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, float32(f))
 	return nil
 }
 
@@ -327,6 +511,300 @@ func (s *IntPointerSlice) Set(value string) error {
 		return err
 	}
 	*s = append(*s, &i)
+	return nil
+}
+
+type Int64PointerSlice []*int64
+
+func (s *Int64PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Int64PointerSlice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &i)
+	return nil
+}
+
+type Int32PointerSlice []*int32
+
+func (s *Int32PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Int32PointerSlice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	v := int32(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Int16PointerSlice []*int16
+
+func (s *Int16PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Int16PointerSlice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 16)
+	if err != nil {
+		return err
+	}
+	v := int16(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Int8PointerSlice []*int8
+
+func (s *Int8PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Int8PointerSlice) Set(value string) error {
+	i, err := strconv.ParseInt(value, 10, 8)
+	if err != nil {
+		return err
+	}
+	v := int8(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type UintPointerSlice []*uint
+
+func (s *UintPointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *UintPointerSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	v := uint(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Uint64PointerSlice []*uint64
+
+func (s *Uint64PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Uint64PointerSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &i)
+	return nil
+}
+
+type Uint32PointerSlice []*uint32
+
+func (s *Uint32PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Uint32PointerSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return err
+	}
+	v := uint32(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Uint16PointerSlice []*uint16
+
+func (s *Uint16PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Uint16PointerSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 16)
+	if err != nil {
+		return err
+	}
+	v := uint16(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Uint8PointerSlice []*uint8
+
+func (s *Uint8PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%d", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Uint8PointerSlice) Set(value string) error {
+	i, err := strconv.ParseUint(value, 10, 8)
+	if err != nil {
+		return err
+	}
+	v := uint8(i)
+	*s = append(*s, &v)
+	return nil
+}
+
+type Float64PointerSlice []*float64
+
+func (s *Float64PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%v", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Float64PointerSlice) Set(value string) error {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return err
+	}
+	*s = append(*s, &f)
+	return nil
+}
+
+type Float32PointerSlice []*float32
+
+func (s *Float32PointerSlice) String() string {
+	if s == nil {
+		return "[]"
+	}
+	var parts []string
+	for _, p := range *s {
+		if p != nil {
+			parts = append(parts, fmt.Sprintf("%v", *p))
+		} else {
+			parts = append(parts, "<nil>")
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+func (s *Float32PointerSlice) Set(value string) error {
+	f, err := strconv.ParseFloat(value, 32)
+	if err != nil {
+		return err
+	}
+	v := float32(f)
+	*s = append(*s, &v)
 	return nil
 }
 
