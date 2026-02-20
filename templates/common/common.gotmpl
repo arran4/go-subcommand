@@ -74,10 +74,10 @@
 				{{- $baseName := $param.BaseType | title }}
 				{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
 				{{- $helperName := printf "%sSlice" $baseName }}
-				{{- if $param.IsPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
+				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
 	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else }}
-				{{- if $param.IsPointer }}
+				{{- if $param.HasPointer }}
 					{{- if $param.IsString }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
 		{{$struct}}.{{$param.Name}} = &s

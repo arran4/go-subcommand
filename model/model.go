@@ -86,8 +86,8 @@ func (p *FunctionParameter) IsSlice() bool {
 	return strings.HasPrefix(p.Type, "[]")
 }
 
-// IsPointer returns true if the type is a pointer (or slice of pointers).
-func (p *FunctionParameter) IsPointer() bool {
+// HasPointer returns true if the type is a pointer (or slice of pointers).
+func (p *FunctionParameter) HasPointer() bool {
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
 	return strings.HasPrefix(t, "*")

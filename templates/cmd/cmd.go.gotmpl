@@ -107,13 +107,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
 					{{- if $param.IsSlice }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
 					{{- else }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, b)
 					{{- end }}
 					{{- else }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					c.{{$param.Name}} = &b
 					{{- else }}
 					c.{{$param.Name}} = b
@@ -121,14 +121,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					{{- end }}
 				} else {
 					{{- if $param.IsSlice }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					b := true
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
 					{{- else }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, true)
 					{{- end }}
 					{{- else }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					b := true
 					c.{{$param.Name}} = &b
 					{{- else }}
@@ -147,14 +147,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				}
 				{{- if $param.IsString }}
 				{{- if $param.IsSlice }}
-				{{- if $param.IsPointer }}
+				{{- if $param.HasPointer }}
 				s := value
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
 				{{- else }}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, value)
 				{{- end }}
 				{{- else }}
-				{{- if $param.IsPointer }}
+				{{- if $param.HasPointer }}
 				s := value
 				c.{{$param.Name}} = &s
 				{{- else }}
@@ -167,14 +167,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
 				}
 				{{- if $param.IsSlice }}
-				{{- if $param.IsPointer }}
+				{{- if $param.HasPointer }}
 				val := {{$param.CastCode "v"}}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
 				{{- else }}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, {{$param.CastCode "v"}})
 				{{- end }}
 				{{- else }}
-				{{- if $param.IsPointer }}
+				{{- if $param.HasPointer }}
 				val := {{$param.CastCode "v"}}
 				c.{{$param.Name}} = &val
 				{{- else }}
@@ -216,14 +216,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					found = true
 					{{- if $param.IsBool }}
 					{{- if $param.IsSlice }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					b := true
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
 					{{- else }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, true)
 					{{- end }}
 					{{- else }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					b := true
 					c.{{$param.Name}} = &b
 					{{- else }}
@@ -248,14 +248,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					}
 					{{- if $param.IsString }}
 					{{- if $param.IsSlice }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					s := value
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
 					{{- else }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, value)
 					{{- end }}
 					{{- else }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					s := value
 					c.{{$param.Name}} = &s
 					{{- else }}
@@ -268,14 +268,14 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
 					}
 					{{- if $param.IsSlice }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					val := {{$param.CastCode "v"}}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
 					{{- else }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, {{$param.CastCode "v"}})
 					{{- end }}
 					{{- else }}
-					{{- if $param.IsPointer }}
+					{{- if $param.HasPointer }}
 					val := {{$param.CastCode "v"}}
 					c.{{$param.Name}} = &val
 					{{- else }}
