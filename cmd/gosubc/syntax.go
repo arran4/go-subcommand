@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"errors"
-	"github.com/arran4/go-subcommand"
+	go_subcommand "github.com/arran4/go-subcommand"
 	"github.com/arran4/go-subcommand/cmd"
 )
 
