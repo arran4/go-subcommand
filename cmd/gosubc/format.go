@@ -24,7 +24,7 @@ type Format struct {
 	inplace       bool
 	paths         []string
 	recursive     bool
-	SubCommands   map[string]Cmd
+	SubCommands   map[string]func() Cmd
 	CommandAction func(c *Format) error
 }
 
@@ -142,7 +142,7 @@ func (c *Format) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 
@@ -162,7 +162,7 @@ func (c *RootCmd) NewFormat() *Format {
 	v := &Format{
 		RootCmd:     c,
 		Flags:       set,
-		SubCommands: make(map[string]Cmd),
+		SubCommands: make(map[string]func() Cmd),
 	}
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory")
@@ -194,27 +194,31 @@ func (c *RootCmd) NewFormat() *Format {
 		return nil
 	}
 
-	v.SubCommands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
 				return nil
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+			},
+			UsageFunc: v.Usage,
+		}
 	}
-	v.SubCommands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
 				return nil
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+			},
+			UsageFunc: v.Usage,
+		}
 	}
 	return v
 }

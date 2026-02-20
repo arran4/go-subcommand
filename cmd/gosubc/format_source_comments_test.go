@@ -11,7 +11,7 @@ func TestFormatSourceComments_Execute(t *testing.T) {
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
-		Commands: make(map[string]Cmd),
+		Commands: make(map[string]func() Cmd),
 	}
 	cmd := parent.NewFormatSourceComments()
 

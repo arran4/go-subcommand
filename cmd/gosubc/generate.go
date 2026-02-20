@@ -26,7 +26,7 @@ type Generate struct {
 	paths         []string
 	recursive     bool
 	force         bool
-	SubCommands   map[string]Cmd
+	SubCommands   map[string]func() Cmd
 	CommandAction func(c *Generate) error
 }
 
@@ -166,7 +166,7 @@ func (c *Generate) Execute(args []string) error {
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
-			return cmd.Execute(remainingArgs[1:])
+			return cmd().Execute(remainingArgs[1:])
 		}
 	}
 
@@ -186,7 +186,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 	v := &Generate{
 		RootCmd:     c,
 		Flags:       set,
-		SubCommands: make(map[string]Cmd),
+		SubCommands: make(map[string]func() Cmd),
 	}
 
 	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
@@ -222,27 +222,31 @@ func (c *RootCmd) NewGenerate() *Generate {
 		return nil
 	}
 
-	v.SubCommands["help"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
 				return nil
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+			},
+			UsageFunc: v.Usage,
+		}
 	}
-	v.SubCommands["usage"] = &InternalCommand{
-		Exec: func(args []string) error {
-			if slices.Contains(args, "-deep") {
-				v.UsageRecursive()
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
 				return nil
-			}
-			v.Usage()
-			return nil
-		},
-		UsageFunc: v.Usage,
+			},
+			UsageFunc: v.Usage,
+		}
 	}
 	return v
 }
