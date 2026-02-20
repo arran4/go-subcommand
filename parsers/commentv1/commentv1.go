@@ -631,7 +631,8 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if strings.HasPrefix(trimmedLine, "Aliases:") || strings.HasPrefix(trimmedLine, "Alias:") {
+		lowerTrimmedLine := strings.ToLower(trimmedLine)
+		if strings.HasPrefix(lowerTrimmedLine, "aliases:") || strings.HasPrefix(lowerTrimmedLine, "alias:") {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {
 				parts := strings.Split(lineParts[1], ",")
