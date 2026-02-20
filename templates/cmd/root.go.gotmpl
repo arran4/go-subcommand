@@ -257,6 +257,27 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $param.Parser }}
+				v, err := {{$param.ParserCall "value"}}
+				if err != nil {
+					return fmt.Errorf("invalid value for flag %s: %w", name, err)
+				}
+				{{- if $param.IsSlice }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+				{{- else }}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+				{{- end }}
+				{{- else }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = &val
+				{{- else }}
+				c.{{$param.Name}} = v
+				{{- end }}
+				{{- end }}
+				{{- else }}
 				{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
@@ -636,6 +657,7 @@ func (c *RootCmd) Execute(args []string) error {
 				// TODO: Implement parsing for flag type {{$param.Type}}
 				{{- end }}
 				{{- end }}
+				{{- end }}
 			{{- end }}
 			{{- end }}
 			{{- end }}
@@ -667,6 +689,27 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $param.Parser }}
+					v, err := {{$param.ParserCall "value"}}
+					if err != nil {
+						return fmt.Errorf("invalid value for flag -%s: %w", char, err)
+					}
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+					{{- end }}
+					{{- else }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = &val
+					{{- else }}
+					c.{{$param.Name}} = v
+					{{- end }}
+					{{- end }}
+					{{- else }}
 					{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
 					{{- if eq $param.Type "bool" }}
 					c.{{$param.Name}} = true
@@ -685,6 +728,9 @@ func (c *RootCmd) Execute(args []string) error {
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -1037,6 +1083,7 @@ func (c *RootCmd) Execute(args []string) error {
 					// TODO: Implement parsing for flag type {{$param.Type}}
 					{{- end }}
 					{{- end }}
+					{{- end }}
 				}
 				{{- end }}
 				{{- end }}
@@ -1052,6 +1099,13 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 
 	if len(remainingArgs) > 0 {
+		{{- if .Global }}
+		if c.CommandAction != nil {
+			if err := c.CommandAction(c); err != nil {
+				return fmt.Errorf("global init failed: %w", err)
+			}
+		}
+		{{- end }}
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
@@ -1061,11 +1115,13 @@ func (c *RootCmd) Execute(args []string) error {
 
 {{- template "positional_args_parsing" .Parameters }}
 
+	{{- if not .Global }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 		}
 	}
+	{{- end }}
 	return nil
 
 	{{- else}}

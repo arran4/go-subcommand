@@ -55,6 +55,7 @@ type CommandTree struct {
 	Description    string
 	ExtendedHelp   string
 	ImportPath     string
+	Global         bool
 }
 
 type CommandsTree struct {
@@ -203,6 +204,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ReturnCount:        cmdTree.ReturnCount,
 			Description:        cmdTree.Description,
 			ExtendedHelp:       cmdTree.ExtendedHelp,
+			Global:             cmdTree.Global,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -284,7 +286,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, global, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -421,6 +423,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.Parser != "" {
+								fp.Parser = c.Parser
+							}
 						}
 
 						// Merge Inline (2nd)
@@ -447,6 +455,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.Parser != "" {
+								fp.Parser = c.Parser
+							}
 						}
 
 						// Merge Flags Block (Top)
@@ -472,6 +486,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Inherited {
 								inherited = true
+							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.Parser != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -559,6 +579,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.ReturnCount = returnCount
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
+				ct.Global = global
 				continue
 			}
 
@@ -587,6 +608,9 @@ var (
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
+	reRequired        = regexp.MustCompile(`\(required\)`)
+	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
+	reGlobal          = regexp.MustCompile(`\(global\)`)
 )
 
 type ParsedParam struct {
@@ -599,11 +623,13 @@ type ParsedParam struct {
 	VarArgMin          int
 	VarArgMax          int
 	Inherited          bool
+	IsRequired         bool
+	Parser             string
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, global bool, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -627,6 +653,15 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, "")
 			}
 			continue
+		}
+
+		if reGlobal.MatchString(line) {
+			global = true
+			line = reGlobal.ReplaceAllString(line, "")
+			trimmedLine = strings.TrimSpace(line)
+			if trimmedLine == "" {
+				continue
+			}
 		}
 
 		if idx := strings.Index(line, "is a subcommand"); idx != -1 {
@@ -763,6 +798,16 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
+
+	if reRequired.MatchString(text) {
+		p.IsRequired = true
+		text = reRequired.ReplaceAllString(text, "")
+	}
+
+	if matches := reParser.FindStringSubmatch(text); matches != nil {
+		p.Parser = matches[1]
+		text = strings.Replace(text, matches[0], "", 1)
+	}
 
 	if strings.Contains(text, "(from parent)") {
 		p.Inherited = true

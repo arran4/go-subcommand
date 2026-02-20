@@ -214,7 +214,6 @@ func (c *RootCmd) Execute(args []string) error {
 			return cmd().Execute(remainingArgs[1:])
 		}
 	}
-
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("mycmd failed: %w", err)

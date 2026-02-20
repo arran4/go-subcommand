@@ -502,8 +502,8 @@ func MyCmd(filename string) {}
 	if strings.Contains(string(content), "-filename") {
 		t.Errorf("Argument 'filename' treated as flag. Should be positional.")
 	}
-	if !strings.Contains(string(content), "<filename>") {
-		t.Errorf("Usage string missing positional arg <filename>")
+	if !strings.Contains(string(content), "[filename]") {
+		t.Errorf("Usage string missing positional arg [filename]")
 	}
 }
 
@@ -547,7 +547,7 @@ func MyCmd(id int, name string, files ...string) {}
 		t.Fatalf("Usage file not found: %s", usagePath)
 	}
 	usage := string(usageContent)
-	if !strings.Contains(usage, "<id> <name> [files...]") {
+	if !strings.Contains(usage, "[id] [name] [files...]") {
 		t.Errorf("Usage string incorrect format: %s", usage)
 	}
 }

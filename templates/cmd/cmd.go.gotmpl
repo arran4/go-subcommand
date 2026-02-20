@@ -145,6 +145,27 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
+				{{- if $param.Parser }}
+				v, err := {{$param.ParserCall "value"}}
+				if err != nil {
+					return fmt.Errorf("invalid value for flag %s: %w", name, err)
+				}
+				{{- if $param.IsSlice }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+				{{- else }}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+				{{- end }}
+				{{- else }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = &val
+				{{- else }}
+				c.{{$param.Name}} = v
+				{{- end }}
+				{{- end }}
+				{{- else }}
 				{{- if $param.IsString }}
 				{{- if $param.IsSlice }}
 				{{- if $param.HasPointer }}
@@ -179,6 +200,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				c.{{$param.Name}} = &val
 				{{- else }}
 				c.{{$param.Name}} = {{$param.CastCode "v"}}
+				{{- end }}
 				{{- end }}
 				{{- end }}
 				{{- end }}
@@ -236,6 +258,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -246,6 +271,27 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 							return fmt.Errorf("flag -%s requires a value", char)
 						}
 					}
+					{{- if $param.Parser }}
+					v, err := {{$param.ParserCall "value"}}
+					if err != nil {
+						return fmt.Errorf("invalid value for flag -%s: %w", char, err)
+					}
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+					{{- end }}
+					{{- else }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = &val
+					{{- else }}
+					c.{{$param.Name}} = v
+					{{- end }}
+					{{- end }}
+					{{- else }}
 					{{- if $param.IsString }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -280,6 +326,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					c.{{$param.Name}} = &val
 					{{- else }}
 					c.{{$param.Name}} = {{$param.CastCode "v"}}
+					{{- end }}
 					{{- end }}
 					{{- end }}
 					{{- end }}

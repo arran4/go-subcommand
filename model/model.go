@@ -44,6 +44,7 @@ type Command struct {
 	Parameters     []*FunctionParameter
 	ReturnsError   bool
 	ReturnCount    int
+	Global         bool
 }
 
 func (c *Command) ImportAlias() string {
@@ -72,6 +73,8 @@ type FunctionParameter struct {
 	VarArgMin          int
 	VarArgMax          int
 	DeclaredIn         string
+	IsRequired         bool
+	Parser             string
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -101,6 +104,9 @@ func (p *FunctionParameter) FlagString() string {
 }
 
 func (p *FunctionParameter) DefaultString() string {
+	if p.IsRequired {
+		return "(required)"
+	}
 	if p.Default == "" {
 		return ""
 	}
@@ -144,6 +150,9 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
+	if p.Parser != "" {
+		return fmt.Sprintf("%s(%s)", p.Parser, valName)
+	}
 	t := p.BaseType()
 	if t == "int" {
 		return fmt.Sprintf("strconv.Atoi(%s)", valName)
@@ -479,10 +488,18 @@ func (sc *SubCommand) FullUsageString() string {
 	// We only show positionals for the command we are running.
 	for _, p := range sc.Parameters {
 		if p.IsPositional {
-			if p.IsVarArg {
-				parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+			if p.IsRequired {
+				if p.IsVarArg {
+					parts = append(parts, fmt.Sprintf("<%s...>", p.Name))
+				} else {
+					parts = append(parts, fmt.Sprintf("<%s>", p.Name))
+				}
 			} else {
-				parts = append(parts, fmt.Sprintf("<%s>", p.Name))
+				if p.IsVarArg {
+					parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+				} else {
+					parts = append(parts, fmt.Sprintf("[%s]", p.Name))
+				}
 			}
 		}
 	}
