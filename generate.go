@@ -411,6 +411,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
+		"base": filepath.Base,
 	})
 
 	var patterns []string
