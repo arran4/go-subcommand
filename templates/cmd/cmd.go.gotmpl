@@ -13,7 +13,7 @@ import (
 {{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
 
-	{{if and .SubCommandPackageName (ne .SubCommandPackageName "main") (ne .SubCommandPackageName (base .ImportPath))}}{{.SubCommandPackageName}} {{end}}"{{.ImportPath}}"
+	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
 {{- end}}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"

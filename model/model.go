@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"go/token"
+	"path"
 	"strings"
 )
 
@@ -29,6 +30,20 @@ type Command struct {
 	Parameters     []*FunctionParameter
 	ReturnsError   bool
 	ReturnCount    int
+}
+
+func (c *Command) ImportAlias() string {
+	if c.CommandPackageName == "" || c.CommandPackageName == "main" {
+		return ""
+	}
+	if c.ImportPath == "" {
+		return ""
+	}
+	base := path.Base(c.ImportPath)
+	if c.CommandPackageName != base {
+		return c.CommandPackageName
+	}
+	return ""
 }
 
 type FunctionParameter struct {
@@ -100,6 +115,20 @@ type SubCommand struct {
 	Parameters             []*FunctionParameter
 	ReturnsError           bool
 	ReturnCount            int
+}
+
+func (sc *SubCommand) ImportAlias() string {
+	if sc.SubCommandPackageName == "" || sc.SubCommandPackageName == "main" {
+		return ""
+	}
+	if sc.ImportPath == "" {
+		return ""
+	}
+	base := path.Base(sc.ImportPath)
+	if sc.SubCommandPackageName != base {
+		return sc.SubCommandPackageName
+	}
+	return ""
 }
 
 func (sc *SubCommand) SubCommandSequence() string {
