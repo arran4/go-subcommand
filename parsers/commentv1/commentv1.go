@@ -209,6 +209,8 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)
+
+		cmd.ResolveInheritance()
 	}
 	d.Commands = commands
 	return d, nil
@@ -292,6 +294,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				log.Printf("Warning: Subcommand '%s' (function %s) is missing a short description.", fullCmdName, s.Name.Name)
 			}
 
+			currentCmdName := cmdName
+			if len(subCommandSequence) > 0 {
+				currentCmdName = subCommandSequence[len(subCommandSequence)-1]
+			}
+
 			var params []*model.FunctionParameter
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
@@ -309,10 +316,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						if err != nil {
 							return fmt.Errorf("error processing parameter %s in function %s: %w", name.Name, s.Name.Name, err)
 						}
+
 						fp := &model.FunctionParameter{
-							Name:     name.Name,
-							Type:     typeName,
-							IsVarArg: isVarArg,
+							Name:       name.Name,
+							Type:       typeName,
+							IsVarArg:   isVarArg,
+							DeclaredIn: currentCmdName,
 						}
 						// Extract details from different sources with priority
 						// Priority:
@@ -376,11 +385,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							candidates = append(candidates, ParsedParam{})
 						}
 
-						// Merge Logic based on Priority
-						// We fill the 'fp' fields starting from the lowest priority (Preceding)
-						// and overwrite with higher priority if the field is present/non-empty in the higher one.
-						// EXCEPT for Description: if higher priority has description, it overwrites.
-						// But what if higher priority has NO description? Then we keep the lower one.
+						// Merge Logic Priority:
+						// 1. Flags: block (Top)
+						// 2. Inline comment (2nd)
+						// 3. Preceding comment (3rd)
+						// Fields are filled from lowest priority up, overwriting if present.
+
+						inherited := false
 
 						// Start with Preceding (3rd)
 						if len(candidates) > 2 {
@@ -402,6 +413,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.IsVarArg = true
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
 							}
 						}
 
@@ -426,6 +440,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
 							}
+							if c.Inherited {
+								inherited = true
+							}
 						}
 
 						// Merge Flags Block (Top)
@@ -448,6 +465,22 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								fp.IsVarArg = true
 								fp.VarArgMin = c.VarArgMin
 								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
+							}
+						}
+
+						if inherited {
+							parentCmdName := cmdName
+							if len(subCommandSequence) > 1 {
+								parentCmdName = subCommandSequence[len(subCommandSequence)-2]
+							} else if len(subCommandSequence) == 0 {
+								// No parent
+								parentCmdName = ""
+							}
+							if parentCmdName != "" {
+								fp.DeclaredIn = parentCmdName
 							}
 						}
 
@@ -474,7 +507,10 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				if p.Description != "" {
 					hasDescription = true
 				} else {
-					missingDescription = append(missingDescription, p.Name)
+					// If declared in parent, we expect description to be inherited later
+					if p.DeclaredIn == currentCmdName {
+						missingDescription = append(missingDescription, p.Name)
+					}
 				}
 			}
 			if hasDescription && len(missingDescription) > 0 {
@@ -557,6 +593,7 @@ type ParsedParam struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
+	Inherited          bool
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -719,6 +756,11 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
+
+	if strings.Contains(text, "(from parent)") {
+		p.Inherited = true
+		text = strings.ReplaceAll(text, "(from parent)", "")
+	}
 
 	defaultRegex := regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
 	loc := defaultRegex.FindStringSubmatchIndex(text)

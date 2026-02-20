@@ -45,7 +45,8 @@
         "v"
       ],
       "Default": "false",
-      "Description": "Enable verbose"
+      "Description": "Enable verbose",
+      "DeclaredIn": "foo"
     },
     {
       "Name": "count",
@@ -54,7 +55,8 @@
         "c"
       ],
       "Default": "0",
-      "Description": "Count items"
+      "Description": "Count items",
+      "DeclaredIn": "foo"
     }
   ],
   "ReturnsError": false,
@@ -75,6 +77,10 @@ Subcommands:
     help         Print this help message
     usage        Print this usage message
 
+
+
 Flags:
+
     -v       (default: false)   Enable verbose
+
     -c int   (default: 0)       Count items

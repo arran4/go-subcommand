@@ -9,14 +9,16 @@
       "Type": "bool",
       "FlagAliases": ["f"],
       "Default": "false",
-      "Description": "Force action"
+      "Description": "Force action",
+      "DeclaredIn": "leaf"
     },
     {
       "Name": "file",
       "Type": "string",
       "IsPositional": true,
       "PositionalArgIndex": 1,
-      "Description": "Target file"
+      "Description": "Target file",
+      "DeclaredIn": "leaf"
     }
   ]
 }
@@ -28,7 +30,10 @@ Subcommands:
     help         Print this help message
     usage        Print this usage message
 
+
+
 Flags:
+
     -f              (default: false)   Force action
 
 Positional Arguments:
