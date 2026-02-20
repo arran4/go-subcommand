@@ -70,288 +70,55 @@
 		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
 
 		{{- range $aliases }}
-			{{- if eq $param.Type "time.Duration" }}
+			{{- if $param.IsSlice }}
+				{{- $baseName := $param.BaseType | title }}
+				{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
+				{{- $helperName := printf "%sSlice" $baseName }}
+				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
+	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+			{{- else }}
+				{{- if $param.HasPointer }}
+					{{- if $param.IsString }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		{{$struct}}.{{$param.Name}} = &s
+		return nil
+	})
+					{{- else }}
+						{{- $funcName := "Func" }}
+						{{- if $param.IsBool }}{{ $funcName = "BoolFunc" }}{{ end }}
+	{{$set}}.{{$funcName}}("{{.}}", "{{$desc}}", func(s string) error {
+		v, err := {{$param.ParserCall "s"}}
+		if err != nil {
+			return err
+		}
+		val := {{$param.CastCode "v"}}
+		{{$struct}}.{{$param.Name}} = &val
+		return nil
+	})
+					{{- end }}
+				{{- else }}
+					{{- if $param.IsDuration }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
-			{{- else if eq $param.Type "[]string" }}
-	{{$set}}.Var((*StringSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]int" }}
-	{{$set}}.Var((*IntSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]bool" }}
-	{{$set}}.Var((*BoolSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]time.Duration" }}
-	{{$set}}.Var((*DurationSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "*string" }}
+					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "string") (eq $param.BaseType "bool") (eq $param.BaseType "uint") (eq $param.BaseType "uint64") (eq $param.BaseType "int64") (eq $param.BaseType "float64") }}
+						{{- $varType := $param.BaseType | title }}
+	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+					{{- else }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		{{$struct}}.{{$param.Name}} = &s
-		return nil
-	})
-			{{- else if eq $param.Type "*int" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.Atoi(s)
+		v, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
 		}
-		{{$struct}}.{{$param.Name}} = &i
+		{{$struct}}.{{$param.Name}} = {{$param.CastCode "v"}}
 		return nil
 	})
-			{{- else if eq $param.Type "*bool" }}
-	{{$set}}.BoolFunc("{{.}}", "{{$desc}}", func(s string) error {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &b
-		return nil
-	})
-			{{- else if eq $param.Type "*time.Duration" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &d
-		return nil
-	})
-			{{- else if eq $param.Type "[]*string" }}
-	{{$set}}.Var((*StringPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int" }}
-	{{$set}}.Var((*IntPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*bool" }}
-	{{$set}}.Var((*BoolPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*time.Duration" }}
-	{{$set}}.Var((*DurationPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if or (eq $param.Type "string") (eq $param.Type "int") (eq $param.Type "bool") }}
-	{{$set}}.{{$typeTitle}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else if eq $param.Type "int64" }}
-	{{$set}}.Int64Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else if eq $param.Type "int32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = int32(i)
-		return nil
-	})
-			{{- else if eq $param.Type "int16" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = int16(i)
-		return nil
-	})
-			{{- else if eq $param.Type "int8" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 8)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = int8(i)
-		return nil
-	})
-			{{- else if eq $param.Type "uint" }}
-	{{$set}}.UintVar(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else if eq $param.Type "uint64" }}
-	{{$set}}.Uint64Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else if eq $param.Type "uint32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = uint32(i)
-		return nil
-	})
-			{{- else if eq $param.Type "uint16" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = uint16(i)
-		return nil
-	})
-			{{- else if eq $param.Type "uint8" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 8)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = uint8(i)
-		return nil
-	})
-			{{- else if eq $param.Type "float64" }}
-	{{$set}}.Float64Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
-			{{- else if eq $param.Type "float32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		f, err := strconv.ParseFloat(s, 32)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = float32(f)
-		return nil
-	})
-			{{- else if eq $param.Type "*int64" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &i
-		return nil
-	})
-			{{- else if eq $param.Type "*int32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		v := int32(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*int16" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		v := int16(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*int8" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseInt(s, 10, 8)
-		if err != nil {
-			return err
-		}
-		v := int8(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*uint" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		v := uint(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*uint64" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &i
-		return nil
-	})
-			{{- else if eq $param.Type "*uint32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		v := uint32(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*uint16" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		v := uint16(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*uint8" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		i, err := strconv.ParseUint(s, 10, 8)
-		if err != nil {
-			return err
-		}
-		v := uint8(i)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "*float64" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		f, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return err
-		}
-		{{$struct}}.{{$param.Name}} = &f
-		return nil
-	})
-			{{- else if eq $param.Type "*float32" }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
-		f, err := strconv.ParseFloat(s, 32)
-		if err != nil {
-			return err
-		}
-		v := float32(f)
-		{{$struct}}.{{$param.Name}} = &v
-		return nil
-	})
-			{{- else if eq $param.Type "[]int64" }}
-	{{$set}}.Var((*Int64Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]int32" }}
-	{{$set}}.Var((*Int32Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]int16" }}
-	{{$set}}.Var((*Int16Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]int8" }}
-	{{$set}}.Var((*Int8Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]uint" }}
-	{{$set}}.Var((*UintSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]uint64" }}
-	{{$set}}.Var((*Uint64Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]uint32" }}
-	{{$set}}.Var((*Uint32Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]uint16" }}
-	{{$set}}.Var((*Uint16Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]uint8" }}
-	{{$set}}.Var((*Uint8Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]float64" }}
-	{{$set}}.Var((*Float64Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]float32" }}
-	{{$set}}.Var((*Float32Slice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int64" }}
-	{{$set}}.Var((*Int64PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int32" }}
-	{{$set}}.Var((*Int32PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int16" }}
-	{{$set}}.Var((*Int16PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*int8" }}
-	{{$set}}.Var((*Int8PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*uint" }}
-	{{$set}}.Var((*UintPointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*uint64" }}
-	{{$set}}.Var((*Uint64PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*uint32" }}
-	{{$set}}.Var((*Uint32PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*uint16" }}
-	{{$set}}.Var((*Uint16PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*uint8" }}
-	{{$set}}.Var((*Uint8PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*float64" }}
-	{{$set}}.Var((*Float64PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else if eq $param.Type "[]*float32" }}
-	{{$set}}.Var((*Float32PointerSlice)(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
-			{{- else }}
-	// TODO: Implement flag definition for type {{$param.Type}}
+					{{- end }}
+				{{- end }}
 			{{- end }}
-		{{- end -}}
+		{{- end }}
 		{{- end }}
 	{{- end}}
 {{- end -}}
@@ -393,106 +160,16 @@
 			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
-		{{- if eq .Type "string" }}
+		{{- if .IsString }}
 		c.{{.Name}} = varArgs
-		{{- else if eq .Type "int" }}
-		for _, arg := range varArgs {
-			i, err := strconv.Atoi(arg)
-			if err != nil {
-				return fmt.Errorf("invalid integer argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, i)
-		}
-		{{- else if eq .Type "int64" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseInt(arg, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid int64 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, i)
-		}
-		{{- else if eq .Type "int32" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseInt(arg, 10, 32)
-			if err != nil {
-				return fmt.Errorf("invalid int32 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, int32(i))
-		}
-		{{- else if eq .Type "int16" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseInt(arg, 10, 16)
-			if err != nil {
-				return fmt.Errorf("invalid int16 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, int16(i))
-		}
-		{{- else if eq .Type "int8" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseInt(arg, 10, 8)
-			if err != nil {
-				return fmt.Errorf("invalid int8 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, int8(i))
-		}
-		{{- else if eq .Type "uint" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseUint(arg, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid uint argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, uint(i))
-		}
-		{{- else if eq .Type "uint64" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseUint(arg, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid uint64 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, i)
-		}
-		{{- else if eq .Type "uint32" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseUint(arg, 10, 32)
-			if err != nil {
-				return fmt.Errorf("invalid uint32 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, uint32(i))
-		}
-		{{- else if eq .Type "uint16" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseUint(arg, 10, 16)
-			if err != nil {
-				return fmt.Errorf("invalid uint16 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, uint16(i))
-		}
-		{{- else if eq .Type "uint8" }}
-		for _, arg := range varArgs {
-			i, err := strconv.ParseUint(arg, 10, 8)
-			if err != nil {
-				return fmt.Errorf("invalid uint8 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, uint8(i))
-		}
-		{{- else if eq .Type "float64" }}
-		for _, arg := range varArgs {
-			f, err := strconv.ParseFloat(arg, 64)
-			if err != nil {
-				return fmt.Errorf("invalid float64 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, f)
-		}
-		{{- else if eq .Type "float32" }}
-		for _, arg := range varArgs {
-			f, err := strconv.ParseFloat(arg, 32)
-			if err != nil {
-				return fmt.Errorf("invalid float32 argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, float32(f))
-		}
 		{{- else }}
-		// TODO: Implement parsing for vararg type {{.Type}}
+		for _, arg := range varArgs {
+			v, err := {{.ParserCall "arg"}}
+			if err != nil {
+				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}}: %s", arg)
+			}
+			c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
+		}
 		{{- end }}
 	}
 			{{- else }}
@@ -501,94 +178,14 @@
 		argIndex := {{.PositionalArgIndex | add -1}}
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
-			{{- if eq .Type "string" }}
+			{{- if .IsString }}
 			c.{{.Name}} = argVal
-			{{- else if eq .Type "int" }}
-			i, err := strconv.Atoi(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid integer argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = i
-			{{- else if eq .Type "bool" }}
-			b, err := strconv.ParseBool(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid boolean argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = b
-			{{- else if eq .Type "time.Duration" }}
-			d, err := time.ParseDuration(argVal)
-			if err != nil {
-				return fmt.Errorf("invalid duration argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = d
-			{{- else if eq .Type "int64" }}
-			i, err := strconv.ParseInt(argVal, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid int64 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = i
-			{{- else if eq .Type "int32" }}
-			i, err := strconv.ParseInt(argVal, 10, 32)
-			if err != nil {
-				return fmt.Errorf("invalid int32 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = int32(i)
-			{{- else if eq .Type "int16" }}
-			i, err := strconv.ParseInt(argVal, 10, 16)
-			if err != nil {
-				return fmt.Errorf("invalid int16 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = int16(i)
-			{{- else if eq .Type "int8" }}
-			i, err := strconv.ParseInt(argVal, 10, 8)
-			if err != nil {
-				return fmt.Errorf("invalid int8 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = int8(i)
-			{{- else if eq .Type "uint" }}
-			i, err := strconv.ParseUint(argVal, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid uint argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = uint(i)
-			{{- else if eq .Type "uint64" }}
-			i, err := strconv.ParseUint(argVal, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid uint64 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = i
-			{{- else if eq .Type "uint32" }}
-			i, err := strconv.ParseUint(argVal, 10, 32)
-			if err != nil {
-				return fmt.Errorf("invalid uint32 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = uint32(i)
-			{{- else if eq .Type "uint16" }}
-			i, err := strconv.ParseUint(argVal, 10, 16)
-			if err != nil {
-				return fmt.Errorf("invalid uint16 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = uint16(i)
-			{{- else if eq .Type "uint8" }}
-			i, err := strconv.ParseUint(argVal, 10, 8)
-			if err != nil {
-				return fmt.Errorf("invalid uint8 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = uint8(i)
-			{{- else if eq .Type "float64" }}
-			f, err := strconv.ParseFloat(argVal, 64)
-			if err != nil {
-				return fmt.Errorf("invalid float64 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = f
-			{{- else if eq .Type "float32" }}
-			f, err := strconv.ParseFloat(argVal, 32)
-			if err != nil {
-				return fmt.Errorf("invalid float32 argument for {{.Name}} at index %d: %s", argIndex, argVal)
-			}
-			c.{{.Name}} = float32(f)
 			{{- else }}
-			// TODO: Implement parsing for positional type {{.Type}}
+			v, err := {{.ParserCall "argVal"}}
+			if err != nil {
+				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", argIndex, argVal)
+			}
+			c.{{.Name}} = {{.CastCode "v"}}
 			{{- end }}
 		}
 	}
