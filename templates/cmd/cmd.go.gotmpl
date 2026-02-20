@@ -63,6 +63,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{- end }}
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -100,6 +101,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				seenFlags["{{$param.Name}}"] = true
 				{{- if $param.IsBool }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
@@ -236,6 +238,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					seenFlags["{{$param.Name}}"] = true
 					{{- if $param.IsBool }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -355,6 +358,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 
 	{{if .SubCommandFunctionName}}
 	if c.CommandAction != nil {
+		{{- range .AllParameters }}
+		{{- if and .IsRequired (not .IsPositional) }}
+		if !seenFlags["{{.Name}}"] {
+			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
+		}
+		{{- end }}
+		{{- end }}
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}

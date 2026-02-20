@@ -38,13 +38,14 @@ type Command struct {
 	Description        string
 	ExtendedHelp       string
 	FunctionName       string
-	DefinitionFile string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
-	Global         bool
+	DefinitionFile     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
+	Global             bool
+	UsageFileName      string
 }
 
 func (c *Command) ImportAlias() string {
@@ -446,16 +447,7 @@ func (sc *SubCommand) FullUsageString() string {
 	// Add root command
 	if sc.Command != nil {
 		parts = append(parts, sc.MainCmdName)
-		hasFlags := false
-		for _, p := range sc.Command.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, sc.Command.Parameters)
 	}
 
 	// Traverse from root to current
@@ -469,19 +461,7 @@ func (sc *SubCommand) FullUsageString() string {
 	for i := len(stack) - 1; i >= 0; i-- {
 		cmd := stack[i]
 		parts = append(parts, cmd.SubCommandName)
-
-		// Check for flags declared in THIS command
-		hasFlags := false
-		for _, p := range cmd.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, cmd.Parameters)
 	}
 
 	// Add positional arguments for the LEAF command (sc)
@@ -509,6 +489,46 @@ func (sc *SubCommand) FullUsageString() string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func appendFlagsUsage(parts *[]string, parameters []*FunctionParameter) {
+	var flags []*FunctionParameter
+	for _, p := range parameters {
+		if !p.IsPositional {
+			flags = append(flags, p)
+		}
+	}
+
+	if len(flags) == 0 {
+		return
+	}
+
+	if len(flags) <= 3 {
+		for _, f := range flags {
+			name := f.Name
+			if len(f.FlagAliases) > 0 {
+				// Pick the shortest or first alias
+				name = f.FlagAliases[0]
+				for _, alias := range f.FlagAliases {
+					if len(alias) < len(name) {
+						name = alias
+					}
+				}
+			}
+			prefix := "-"
+			if len(name) > 1 {
+				prefix = "--"
+			}
+
+			if f.IsBool() {
+				*parts = append(*parts, fmt.Sprintf("[%s%s]", prefix, name))
+			} else {
+				*parts = append(*parts, fmt.Sprintf("[%s%s <%s>]", prefix, name, f.Name)) // Use param name as value placeholder
+			}
+		}
+	} else {
+		*parts = append(*parts, "[flags...]")
+	}
 }
 
 func (sc *SubCommand) MaxDefaultLength() int {

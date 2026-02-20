@@ -89,28 +89,23 @@ type RootCmd struct {
 	CommandAction func(c *RootCmd) error
 }
 
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
 func (c *RootCmd) Usage() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	for name := range c.Commands {
-		fmt.Fprintf(os.Stderr, "    %s\n", name)
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-{{- define "root_subcommands" -}}
-{{- range .SubCommands}}
-	fmt.Fprintf(os.Stderr, "    %s\n", "{{.SubCommandSequence}}")
-{{- if .SubCommands}}
-{{- template "root_subcommands" . }}
-{{- end}}
-{{- end}}
-{{- end}}
-{{- template "root_subcommands" . }}
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
@@ -220,6 +215,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -257,6 +253,7 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				seenFlags["{{$param.Name}}"] = true
 				{{- if $param.Parser }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
@@ -689,6 +686,7 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					seenFlags["{{$param.Name}}"] = true
 					{{- if $param.Parser }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
@@ -1117,6 +1115,13 @@ func (c *RootCmd) Execute(args []string) error {
 
 	{{- if not .Global }}
 	if c.CommandAction != nil {
+		{{- range .Parameters }}
+		{{- if and .IsRequired (not .IsPositional) }}
+		if !seenFlags["{{.Name}}"] {
+			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
+		}
+		{{- end }}
+		{{- end }}
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 		}

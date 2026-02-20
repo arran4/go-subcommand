@@ -65,6 +65,7 @@ func (c *MyCmd) UsageRecursive() {
 
 func (c *MyCmd) Execute(args []string) error {
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -90,6 +91,7 @@ func (c *MyCmd) Execute(args []string) error {
 			switch name {
 
 			case "verbose":
+				seenFlags["verbose"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -115,6 +117,7 @@ func (c *MyCmd) Execute(args []string) error {
 
 				if char == "v" || char == "[v]" || char == "1" {
 					found = true
+					seenFlags["verbose"] = true
 					c.verbose = true
 				}
 				if !found {

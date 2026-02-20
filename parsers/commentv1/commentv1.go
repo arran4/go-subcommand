@@ -580,7 +580,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
 				ct.Global = global
-				continue
+			continue
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
