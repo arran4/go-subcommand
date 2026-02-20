@@ -109,6 +109,13 @@ that can handle missing tokens`,
 			wantDescription:        "description",
 			wantOk:                 true,
 		},
+		{
+			name:            "Implicit Command Name",
+			text:            "Parent is a subcommand that Does work in a directory",
+			wantCmdName:     "",
+			wantDescription: "Does work in a directory",
+			wantOk:          true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
