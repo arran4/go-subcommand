@@ -32,14 +32,14 @@ Subcommands:
 {{- if eq (len .ParameterGroups) 1 -}}
 {{- range .ParameterGroups}}
 
-Flags:{{- range .Parameters}}
+Flags:{{- range .Parameters -}}
 {{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
 {{- end}}
 {{- end}}
 {{- else -}}
 {{- range .ParameterGroups}}
 
-`{{.CommandName}}` Flags:{{- range .Parameters}}
+`{{.CommandName}}` Flags:{{- range .Parameters -}}
 {{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
 {{- end}}
 {{- end}}
