@@ -74,6 +74,12 @@ func TestGoTemplates(t *testing.T) {
 				if err := json.Unmarshal(inputData, &sc); err != nil {
 					t.Fatalf("failed to unmarshal input.json into SubCommand: %v", err)
 				}
+				if sc.Command == nil {
+					sc.Command = &model.Command{}
+				}
+				if sc.Command.DataModel == nil {
+					sc.Command.DataModel = &model.DataModel{GoVersion: "1.21"}
+				}
 				populateParents(&sc, nil)
 				data = &sc
 			} else {
@@ -81,6 +87,9 @@ func TestGoTemplates(t *testing.T) {
 				var cmd model.Command
 				if err := json.Unmarshal(inputData, &cmd); err != nil {
 					t.Fatalf("failed to unmarshal input.json into Command: %v", err)
+				}
+				if cmd.DataModel == nil {
+					cmd.DataModel = &model.DataModel{GoVersion: "1.21"}
 				}
 				for _, sc := range cmd.SubCommands {
 					populateParents(sc, nil)

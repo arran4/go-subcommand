@@ -37,6 +37,13 @@
 	{{- if $hasDuration }}
 	"time"
 	{{- end }}
+	{{- /* The receiver (dot) for RequiredImports depends on whether we have a SubCommand or Command context available. */}}
+	{{- /* However, common_imports is passed a list of parameters, not the command object. */}}
+	{{- /* The original code extracted imports from params, which is what we should stick to or pass the command object. */}}
+	{{- /* Given the template constraints, let's keep the logic here but cleaner, OR check if we can pass the command object. */}}
+	{{- /* The caller templates pass `(list .Parameters true)` or `(list .AllParameters true)`. */}}
+	{{- /* So we don't have the command object here easily without changing all call sites. */}}
+	{{- /* But we can implement the deduplication logic cleanly here using a map if possible, or just the list iteration as before but robustly. */}}
 	{{- $imports := list }}
 	{{- range $params }}
 		{{- if .ParserPkg }}

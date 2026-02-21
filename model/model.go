@@ -77,6 +77,8 @@ type FunctionParameter struct {
 	IsRequired         bool
 	ParserFunc         string
 	ParserPkg          string
+	// Parser is deprecated, use ParserFunc and ParserPkg instead
+	Parser string
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -284,6 +286,22 @@ func (sc *SubCommand) MaxFlagLength() int {
 	return max
 }
 
+// RequiredImports returns a deduplicated list of imports needed for custom parsers.
+func (sc *SubCommand) RequiredImports() []string {
+	var imports []string
+	seen := make(map[string]bool)
+	for _, p := range sc.Parameters {
+		if p.ParserPkg != "" {
+			if !seen[p.ParserPkg] {
+				imports = append(imports, p.ParserPkg)
+				seen[p.ParserPkg] = true
+			}
+		}
+	}
+	sort.Strings(imports)
+	return imports
+}
+
 func (sc *SubCommand) ResolveInheritance() {
 	for _, p := range sc.Parameters {
 		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
@@ -348,6 +366,22 @@ func (cmd *Command) ResolveInheritance() {
 	for _, sc := range cmd.SubCommands {
 		sc.ResolveInheritance()
 	}
+}
+
+// RequiredImports returns a deduplicated list of imports needed for custom parsers.
+func (cmd *Command) RequiredImports() []string {
+	var imports []string
+	seen := make(map[string]bool)
+	for _, p := range cmd.Parameters {
+		if p.ParserPkg != "" {
+			if !seen[p.ParserPkg] {
+				imports = append(imports, p.ParserPkg)
+				seen[p.ParserPkg] = true
+			}
+		}
+	}
+	sort.Strings(imports)
+	return imports
 }
 
 func (sc *SubCommand) AllParameters() []*FunctionParameter {
