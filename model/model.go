@@ -77,8 +77,6 @@ type FunctionParameter struct {
 	IsRequired         bool
 	ParserFunc         string
 	ParserPkg          string
-	// Parser is deprecated, use ParserFunc and ParserPkg instead
-	Parser string
 }
 
 func (p *FunctionParameter) FlagString() string {

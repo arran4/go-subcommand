@@ -1,0 +1,33 @@
+-- input.comment --
+MyCmd is a subcommand `app mycmd`
+myflag: --json-data (parser: "encoding/json".Unmarshal)
+-- expected.json --
+{
+  "CmdName": "app",
+  "SubCommandSequence": [
+    "mycmd"
+  ],
+  "Description": "",
+  "ExtendedHelp": "",
+  "Aliases": null,
+  "Params": {
+    "myflag": {
+      "Flags": [
+        "json-data"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "ParserFunc": "Unmarshal",
+      "ParserPkg": "encoding/json"
+    }
+  },
+  "Global": false,
+  "Ok": true
+}

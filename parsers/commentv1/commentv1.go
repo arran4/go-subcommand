@@ -731,6 +731,18 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				}
 			}
 			continue
+		} else if matches := reAlias.FindStringSubmatch(trimmedLine); matches != nil {
+			aliasStr := matches[1]
+			parts := strings.FieldsFunc(aliasStr, func(r rune) bool {
+				return r == ',' || r == ';'
+			})
+			for _, p := range parts {
+				a := strings.TrimSpace(p)
+				if a != "" {
+					aliases = append(aliases, a)
+				}
+			}
+			continue
 		}
 
 		if trimmedLine == "Flags:" {

@@ -1,0 +1,39 @@
+-- input.comment --
+MyCmd is a subcommand `app mycmd`
+(aliases: a, b; c)
+(global)
+myflag: --flag (parser: ParseFunc)
+-- expected.json --
+{
+  "CmdName": "app",
+  "SubCommandSequence": [
+    "mycmd"
+  ],
+  "Description": "",
+  "ExtendedHelp": "",
+  "Aliases": [
+    "a",
+    "b",
+    "c"
+  ],
+  "Params": {
+    "myflag": {
+      "Flags": [
+        "flag"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "ParserFunc": "ParseFunc",
+      "ParserPkg": ""
+    }
+  },
+  "Global": true,
+  "Ok": true
+}
