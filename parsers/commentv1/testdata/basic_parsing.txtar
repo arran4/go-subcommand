@@ -2,7 +2,10 @@
 MyCmd is a subcommand `app mycmd`
 (aliases: a, b; c)
 (global)
-myflag: --flag (parser: ParseFunc)
+
+Flags:
+
+	myflag: --flag (parser: ParseFunc)
 -- expected.json --
 {
   "CmdName": "app",
@@ -30,8 +33,12 @@ myflag: --flag (parser: ParseFunc)
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "ParserFunc": "ParseFunc",
-      "ParserPkg": ""
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "ParseFunc"
+      }
     }
   },
   "Global": true,

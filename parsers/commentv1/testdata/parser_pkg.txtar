@@ -24,8 +24,12 @@ myflag: --json-data (parser: "encoding/json".Unmarshal)
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "ParserFunc": "Unmarshal",
-      "ParserPkg": "encoding/json"
+      "ParserFunc": {
+        "PackagePath": "encoding/json",
+        "ImportPath": "encoding/json",
+        "CommandPackageName": "json",
+        "FunctionName": "Unmarshal"
+      }
     }
   },
   "Global": false,

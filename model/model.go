@@ -28,6 +28,13 @@ type DataModel struct {
 	GoVersion   string
 }
 
+type FuncRef struct {
+	PackagePath        string
+	ImportPath         string
+	CommandPackageName string
+	FunctionName       string
+}
+
 type Command struct {
 	*DataModel
 	MainCmdName        string
@@ -75,8 +82,7 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
-	ParserFunc         string
-	ParserPkg          string
+	ParserFunc         *FuncRef
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -152,12 +158,11 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
-	if p.ParserFunc != "" {
-		if p.ParserPkg != "" {
-			pkg := path.Base(p.ParserPkg)
-			return fmt.Sprintf("%s.%s(%s)", pkg, p.ParserFunc, valName)
+	if p.ParserFunc != nil {
+		if p.ParserFunc.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.ParserFunc.CommandPackageName, p.ParserFunc.FunctionName, valName)
 		}
-		return fmt.Sprintf("%s(%s)", p.ParserFunc, valName)
+		return fmt.Sprintf("%s(%s)", p.ParserFunc.FunctionName, valName)
 	}
 	t := p.BaseType()
 	if t == "int" {
@@ -288,11 +293,11 @@ func (sc *SubCommand) MaxFlagLength() int {
 func (sc *SubCommand) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
-	for _, p := range sc.Parameters {
-		if p.ParserPkg != "" {
-			if !seen[p.ParserPkg] {
-				imports = append(imports, p.ParserPkg)
-				seen[p.ParserPkg] = true
+	for _, p := range sc.AllParameters() {
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
 			}
 		}
 	}
@@ -371,10 +376,10 @@ func (cmd *Command) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
 	for _, p := range cmd.Parameters {
-		if p.ParserPkg != "" {
-			if !seen[p.ParserPkg] {
-				imports = append(imports, p.ParserPkg)
-				seen[p.ParserPkg] = true
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
 			}
 		}
 	}

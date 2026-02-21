@@ -426,9 +426,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.ParserFunc != "" {
+							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -459,9 +458,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.ParserFunc != "" {
+							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -492,9 +490,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.ParserFunc != "" {
+							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -627,8 +624,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
-	ParserFunc         string
-	ParserPkg          string
+	ParserFunc         *model.FuncRef
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -804,7 +800,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != "" || details.IsRequired {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired {
 					params[name] = details
 					continue
 				}
@@ -827,10 +823,16 @@ func parseParamDetails(text string) ParsedParam {
 	if matches := reParser.FindStringSubmatch(text); matches != nil {
 		parserVal := strings.TrimSpace(matches[1])
 		if idx := strings.LastIndex(parserVal, "."); idx != -1 {
-			p.ParserPkg = strings.Trim(parserVal[:idx], "\"")
-			p.ParserFunc = parserVal[idx+1:]
+			p.ParserFunc = &model.FuncRef{
+				ImportPath:   strings.Trim(parserVal[:idx], "\""),
+				FunctionName: parserVal[idx+1:],
+			}
+			p.ParserFunc.PackagePath = p.ParserFunc.ImportPath
+			p.ParserFunc.CommandPackageName = filepath.Base(p.ParserFunc.ImportPath)
 		} else {
-			p.ParserFunc = parserVal
+			p.ParserFunc = &model.FuncRef{
+				FunctionName: parserVal,
+			}
 		}
 		text = strings.Replace(text, matches[0], "", 1)
 	}

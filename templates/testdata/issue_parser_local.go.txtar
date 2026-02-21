@@ -12,7 +12,9 @@ cmd.go.gotmpl
       "Name": "myflag",
       "Type": "string",
       "DeclaredIn": "mycmd",
-      "ParserFunc": "ParseMyType"
+      "ParserFunc": {
+        "FunctionName": "ParseMyType"
+      }
     }
   ],
   "ImportPath": "example.com/test/cmd/app",

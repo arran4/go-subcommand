@@ -12,8 +12,12 @@ cmd.go.gotmpl
       "Name": "myflag",
       "Type": "string",
       "DeclaredIn": "mycmd",
-      "ParserFunc": "Unmarshal",
-      "ParserPkg": "encoding/json"
+      "ParserFunc": {
+        "PackagePath": "encoding/json",
+        "ImportPath": "encoding/json",
+        "CommandPackageName": "json",
+        "FunctionName": "Unmarshal"
+      }
     }
   ],
   "ImportPath": "example.com/test/cmd/app",
@@ -26,12 +30,13 @@ cmd.go.gotmpl
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
+
+	"encoding/json"
 
 	"example.com/test/cmd/app"
 )
