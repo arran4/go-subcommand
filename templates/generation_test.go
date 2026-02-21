@@ -77,8 +77,8 @@ func TestGoTemplates(t *testing.T) {
 				if sc.Command == nil {
 					sc.Command = &model.Command{}
 				}
-				if sc.Command.DataModel == nil {
-					sc.Command.DataModel = &model.DataModel{GoVersion: "1.21"}
+				if sc.DataModel == nil {
+					sc.DataModel = &model.DataModel{GoVersion: "1.21"}
 				}
 				populateParents(&sc, nil)
 				data = &sc
