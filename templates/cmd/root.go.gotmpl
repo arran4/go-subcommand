@@ -1105,13 +1105,6 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 
 	if len(remainingArgs) > 0 {
-		{{- if .Global }}
-		if c.CommandAction != nil {
-			if err := c.CommandAction(c); err != nil {
-				return fmt.Errorf("global init failed: %w", err)
-			}
-		}
-		{{- end }}
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
@@ -1121,7 +1114,6 @@ func (c *RootCmd) Execute(args []string) error {
 
 {{- template "positional_args_parsing" .Parameters }}
 
-	{{- if not .Global }}
 	if c.CommandAction != nil {
 		{{- range .Parameters }}
 		{{- if and .IsRequired (not .IsPositional) }}
@@ -1134,7 +1126,6 @@ func (c *RootCmd) Execute(args []string) error {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 		}
 	}
-	{{- end }}
 	return nil
 
 	{{- else}}

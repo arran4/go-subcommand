@@ -1,11 +1,11 @@
 -- input.comment --
 MyCmd is a subcommand `app mycmd`
 (aliases: a, b; c)
-(global)
 
 Flags:
 
 	myflag: --flag (parser: ParseFunc)
+	config: (global; generator: rootPkg.LoadConfig)
 -- expected.json --
 {
   "CmdName": "app",
@@ -33,14 +33,35 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
+      "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "",
         "ImportPath": "",
         "CommandPackageName": "",
         "FunctionName": "ParseFunc"
+      },
+      "Generator": null
+    },
+    "config": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "rootPkg",
+        "ImportPath": "rootPkg",
+        "CommandPackageName": "rootPkg",
+        "FunctionName": "LoadConfig"
       }
     }
   },
-  "Global": true,
   "Ok": true
 }

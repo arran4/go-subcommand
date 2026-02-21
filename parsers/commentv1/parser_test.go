@@ -47,7 +47,7 @@ func TestParseSubCommandComments(t *testing.T) {
 				t.Fatal("expected.json not found")
 			}
 
-			cmdName, subCommandSequence, description, extendedHelp, aliases, params, global, ok := ParseSubCommandComments(inputComment)
+			cmdName, subCommandSequence, description, extendedHelp, aliases, params, ok := ParseSubCommandComments(inputComment)
 
 			result := struct {
 				CmdName            string
@@ -56,7 +56,6 @@ func TestParseSubCommandComments(t *testing.T) {
 				ExtendedHelp       string
 				Aliases            []string
 				Params             map[string]ParsedParam
-				Global             bool
 				Ok                 bool
 			}{
 				CmdName:            cmdName,
@@ -65,7 +64,6 @@ func TestParseSubCommandComments(t *testing.T) {
 				ExtendedHelp:       extendedHelp,
 				Aliases:            aliases,
 				Params:             params,
-				Global:             global,
 				Ok:                 ok,
 			}
 

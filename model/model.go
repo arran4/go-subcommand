@@ -51,7 +51,6 @@ type Command struct {
 	Parameters         []*FunctionParameter
 	ReturnsError       bool
 	ReturnCount        int
-	Global             bool
 	UsageFileName      string
 }
 
@@ -82,7 +81,9 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
+	IsGlobal           bool
 	ParserFunc         *FuncRef
+	Generator          *FuncRef
 }
 
 func (p *FunctionParameter) FlagString() string {
