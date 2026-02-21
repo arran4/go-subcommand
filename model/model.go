@@ -75,7 +75,8 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
-	Parser             string
+	ParserFunc         string
+	ParserPkg          string
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -151,8 +152,12 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
-	if p.Parser != "" {
-		return fmt.Sprintf("%s(%s)", p.Parser, valName)
+	if p.ParserFunc != "" {
+		if p.ParserPkg != "" {
+			pkg := path.Base(p.ParserPkg)
+			return fmt.Sprintf("%s.%s(%s)", pkg, p.ParserFunc, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.ParserFunc, valName)
 	}
 	t := p.BaseType()
 	if t == "int" {

@@ -260,7 +260,7 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if $hasRequired }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
-				{{- if $param.Parser }}
+				{{- if $param.ParserFunc }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
 					return fmt.Errorf("invalid value for flag %s: %w", name, err)
@@ -695,7 +695,7 @@ func (c *RootCmd) Execute(args []string) error {
 					{{- if $hasRequired }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
-					{{- if $param.Parser }}
+				{{- if $param.ParserFunc }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
 						return fmt.Errorf("invalid value for flag -%s: %w", char, err)

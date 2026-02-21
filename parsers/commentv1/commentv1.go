@@ -426,8 +426,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.Parser != "" {
-								fp.Parser = c.Parser
+							if c.ParserFunc != "" {
+								fp.ParserFunc = c.ParserFunc
+								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -458,8 +459,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.Parser != "" {
-								fp.Parser = c.Parser
+							if c.ParserFunc != "" {
+								fp.ParserFunc = c.ParserFunc
+								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -490,8 +492,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.Parser != "" {
-								fp.Parser = c.Parser
+							if c.ParserFunc != "" {
+								fp.ParserFunc = c.ParserFunc
+								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
@@ -624,7 +627,8 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
-	Parser             string
+	ParserFunc         string
+	ParserPkg          string
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -689,7 +693,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			// Regex to capture content inside parens
 			if matches := reAlias.FindStringSubmatch(rest); matches != nil {
 				aliasStr := matches[1]
-				parts := strings.Split(aliasStr, ",")
+				parts := strings.FieldsFunc(aliasStr, func(r rune) bool {
+					return r == ',' || r == ';'
+				})
 				for _, p := range parts {
 					a := strings.TrimSpace(p)
 					if a != "" {
@@ -714,7 +720,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		if strings.HasPrefix(lowerTrimmedLine, "aliases:") || strings.HasPrefix(lowerTrimmedLine, "alias:") {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {
-				parts := strings.Split(lineParts[1], ",")
+				parts := strings.FieldsFunc(lineParts[1], func(r rune) bool {
+					return r == ',' || r == ';'
+				})
 				for _, p := range parts {
 					a := strings.TrimSpace(p)
 					if a != "" {
@@ -784,7 +792,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != "" || details.IsRequired {
 					params[name] = details
 					continue
 				}
@@ -805,7 +813,13 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	if matches := reParser.FindStringSubmatch(text); matches != nil {
-		p.Parser = matches[1]
+		parserVal := strings.TrimSpace(matches[1])
+		if idx := strings.LastIndex(parserVal, "."); idx != -1 {
+			p.ParserPkg = strings.Trim(parserVal[:idx], "\"")
+			p.ParserFunc = parserVal[idx+1:]
+		} else {
+			p.ParserFunc = parserVal
+		}
 		text = strings.Replace(text, matches[0], "", 1)
 	}
 
