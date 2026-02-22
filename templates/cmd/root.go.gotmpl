@@ -120,6 +120,21 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 {{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
+		{{- range .Parameters }}
+		{{- if and .Generator (not .IsGlobal) }}
+		{
+			var err error
+			{{- if .Generator.CommandPackageName }}
+			c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+			{{- else }}
+			c.{{.Name}}, err = {{.Generator.FunctionName}}()
+			{{- end }}
+			if err != nil {
+				return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+			}
+		}
+		{{- end }}
+		{{- end }}
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
 		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
@@ -244,7 +259,7 @@ func (c *RootCmd) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if not .IsPositional }}
+			{{- if and (not .IsPositional) (not .Generator) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -678,7 +693,7 @@ func (c *RootCmd) Execute(args []string) error {
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if not .IsPositional }}
+				{{- if and (not .IsPositional) (not .Generator) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -1103,6 +1118,22 @@ func (c *RootCmd) Execute(args []string) error {
 			break
 		}
 	}
+
+	{{- range .Parameters }}
+	{{- if and .IsGlobal .Generator }}
+	{
+		var err error
+		{{- if .Generator.CommandPackageName }}
+		c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+		{{- else }}
+		c.{{.Name}}, err = {{.Generator.FunctionName}}()
+		{{- end }}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+	}
+	{{- end }}
+	{{- end }}
 
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {

@@ -640,7 +640,9 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
+	IsGlobal           bool
 	ParserFunc         *model.FuncRef
+	Generator          *model.FuncRef
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -807,7 +809,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
 					params[name] = details
 					continue
 				}
@@ -821,6 +823,21 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
+
+	// Preprocess: split (a; b) into (a) (b)
+	parenRegex := regexp.MustCompile(`\(([^)]*)\)`)
+	text = parenRegex.ReplaceAllStringFunc(text, func(match string) string {
+		content := match[1 : len(match)-1] // strip parens
+		if strings.Contains(content, ";") {
+			parts := strings.Split(content, ";")
+			var newParts []string
+			for _, part := range parts {
+				newParts = append(newParts, "("+strings.TrimSpace(part)+")")
+			}
+			return strings.Join(newParts, " ")
+		}
+		return match
+	})
 
 	if reRequired.MatchString(text) {
 		p.IsRequired = true

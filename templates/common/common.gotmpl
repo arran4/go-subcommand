@@ -51,6 +51,17 @@
 				{{- $imports = append $imports .ParserFunc.ImportPath }}
 			{{- end }}
 		{{- end }}
+		{{- if and .Generator .Generator.ImportPath }}
+			{{- $exists := false }}
+			{{- range $i := $imports }}
+				{{- if eq $i $param.Generator.ImportPath }}
+					{{- $exists = true }}
+				{{- end }}
+			{{- end }}
+			{{- if not $exists }}
+				{{- $imports = append $imports .Generator.ImportPath }}
+			{{- end }}
+		{{- end }}
 	{{- end }}
 	{{- range $imports }}
 	"{{.}}"
@@ -62,7 +73,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if not .IsPositional }}
+		{{- if and (not .IsPositional) (not .Generator) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}

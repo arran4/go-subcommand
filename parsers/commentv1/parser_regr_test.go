@@ -89,7 +89,7 @@ func TestParserRegression(t *testing.T) {
 			}
 
 			// 3. Extract params using the parser
-			_, _, _, _, _, gotParams, _, ok := ParseSubCommandComments(funcDecl.Doc.Text())
+			_, _, _, _, _, gotParams, ok := ParseSubCommandComments(funcDecl.Doc.Text())
 			if !ok {
 				t.Fatalf("ParseSubCommandComments returned !ok")
 			}

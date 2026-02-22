@@ -56,6 +56,32 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 }
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
+	{{- $subCommandName := .SubCommandName }}
+	{{- $parentStructName := "RootCmd" }}
+	{{- if .Parent }}
+	{{- $parentStructName = .Parent.SubCommandStructName }}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if .IsGlobal }}
+	{{- if eq .DeclaredIn $subCommandName }}
+	{{- if .Generator }}
+	{
+		var err error
+		{{- if .Generator.CommandPackageName }}
+		c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+		{{- else }}
+		c.{{.Name}}, err = {{.Generator.FunctionName}}()
+		{{- end }}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+	}
+	{{- end }}
+	{{- else }}
+	c.{{.Name}} = c.{{$parentStructName}}.{{.Name}}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .AllParameters }}
 	{{- if or .IsPositional .IsVarArg }}
@@ -92,7 +118,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 			{{- range .AllParameters }}
-			{{- if not .IsPositional }}
+			{{- if and (not .IsPositional) (not .Generator) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -230,7 +256,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				}
 				found := false
 				{{- range .AllParameters }}
-				{{- if not .IsPositional }}
+				{{- if and (not .IsPositional) (not .Generator) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -396,6 +422,21 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	set.Usage = v.Usage
 	{{if .SubCommandFunctionName}}
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
+		{{- range .Parameters }}
+		{{- if and .Generator (not .IsGlobal) }}
+		{
+			var err error
+			{{- if .Generator.CommandPackageName }}
+			c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+			{{- else }}
+			c.{{.Name}}, err = {{.Generator.FunctionName}}()
+			{{- end }}
+			if err != nil {
+				return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+			}
+		}
+		{{- end }}
+		{{- end }}
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
 		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})

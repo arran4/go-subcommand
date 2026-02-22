@@ -20,6 +20,26 @@ Flags:
     "c"
   ],
   "Params": {
+    "config": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "rootPkg",
+        "ImportPath": "rootPkg",
+        "CommandPackageName": "rootPkg",
+        "FunctionName": "LoadConfig"
+      }
+    },
     "myflag": {
       "Flags": [
         "flag"
@@ -41,26 +61,6 @@ Flags:
         "FunctionName": "ParseFunc"
       },
       "Generator": null
-    },
-    "config": {
-      "Flags": null,
-      "Default": "",
-      "Description": "",
-      "IsPositional": false,
-      "PositionalArgIndex": 0,
-      "IsVarArg": false,
-      "VarArgMin": 0,
-      "VarArgMax": 0,
-      "Inherited": false,
-      "IsRequired": false,
-      "IsGlobal": true,
-      "ParserFunc": null,
-      "Generator": {
-        "PackagePath": "rootPkg",
-        "ImportPath": "rootPkg",
-        "CommandPackageName": "rootPkg",
-        "FunctionName": "LoadConfig"
-      }
     }
   },
   "Ok": true

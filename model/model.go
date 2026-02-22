@@ -301,6 +301,12 @@ func (sc *SubCommand) RequiredImports() []string {
 				seen[p.ParserFunc.ImportPath] = true
 			}
 		}
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
+			}
+		}
 	}
 	sort.Strings(imports)
 	return imports
@@ -330,6 +336,12 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
+					if !p.IsGlobal && parentParam.IsGlobal {
+						p.IsGlobal = parentParam.IsGlobal
+					}
+					if p.Generator == nil && parentParam.Generator != nil {
+						p.Generator = parentParam.Generator
+					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
 				// Declared in Root Command
@@ -343,6 +355,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
+						}
+						if !p.IsGlobal && pp.IsGlobal {
+							p.IsGlobal = pp.IsGlobal
+						}
+						if p.Generator == nil && pp.Generator != nil {
+							p.Generator = pp.Generator
 						}
 						break
 					}
@@ -381,6 +399,12 @@ func (cmd *Command) RequiredImports() []string {
 			if !seen[p.ParserFunc.ImportPath] {
 				imports = append(imports, p.ParserFunc.ImportPath)
 				seen[p.ParserFunc.ImportPath] = true
+			}
+		}
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
 			}
 		}
 	}
