@@ -421,6 +421,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.IsGlobal {
+								fp.IsGlobal = true
+							}
+							if c.ParserFunc != nil {
+								fp.ParserFunc = c.ParserFunc
+							}
+							if c.Generator != nil {
+								fp.Generator = c.Generator
+							}
 						}
 
 						// Merge Inline (2nd)
@@ -447,6 +459,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.IsGlobal {
+								fp.IsGlobal = true
+							}
+							if c.ParserFunc != nil {
+								fp.ParserFunc = c.ParserFunc
+							}
+							if c.Generator != nil {
+								fp.Generator = c.Generator
+							}
 						}
 
 						// Merge Flags Block (Top)
@@ -472,6 +496,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Inherited {
 								inherited = true
+							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.IsGlobal {
+								fp.IsGlobal = true
+							}
+							if c.ParserFunc != nil {
+								fp.ParserFunc = c.ParserFunc
+							}
+							if c.Generator != nil {
+								fp.Generator = c.Generator
 							}
 						}
 
@@ -559,7 +595,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.ReturnCount = returnCount
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
-				continue
+			continue
 			}
 
 			subCommandName := subCommandSequence[len(subCommandSequence)-1]
@@ -587,6 +623,10 @@ var (
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
+	reRequired        = regexp.MustCompile(`\(required\)`)
+	reGlobal          = regexp.MustCompile(`\(global\)`)
+	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
+	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
 )
 
 type ParsedParam struct {
@@ -599,6 +639,10 @@ type ParsedParam struct {
 	VarArgMin          int
 	VarArgMax          int
 	Inherited          bool
+	IsRequired         bool
+	IsGlobal           bool
+	ParserFunc         *model.FuncRef
+	Generator          *model.FuncRef
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -654,7 +698,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			// Regex to capture content inside parens
 			if matches := reAlias.FindStringSubmatch(rest); matches != nil {
 				aliasStr := matches[1]
-				parts := strings.Split(aliasStr, ",")
+				parts := strings.FieldsFunc(aliasStr, func(r rune) bool {
+					return r == ',' || r == ';'
+				})
 				for _, p := range parts {
 					a := strings.TrimSpace(p)
 					if a != "" {
@@ -679,12 +725,26 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		if strings.HasPrefix(lowerTrimmedLine, "aliases:") || strings.HasPrefix(lowerTrimmedLine, "alias:") {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {
-				parts := strings.Split(lineParts[1], ",")
+				parts := strings.FieldsFunc(lineParts[1], func(r rune) bool {
+					return r == ',' || r == ';'
+				})
 				for _, p := range parts {
 					a := strings.TrimSpace(p)
 					if a != "" {
 						aliases = append(aliases, a)
 					}
+				}
+			}
+			continue
+		} else if matches := reAlias.FindStringSubmatch(trimmedLine); matches != nil {
+			aliasStr := matches[1]
+			parts := strings.FieldsFunc(aliasStr, func(r rune) bool {
+				return r == ',' || r == ';'
+			})
+			for _, p := range parts {
+				a := strings.TrimSpace(p)
+				if a != "" {
+					aliases = append(aliases, a)
 				}
 			}
 			continue
@@ -749,7 +809,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
 					params[name] = details
 					continue
 				}
@@ -763,6 +823,65 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
+
+	// Preprocess: split (a; b) into (a) (b)
+	parenRegex := regexp.MustCompile(`\(([^)]*)\)`)
+	text = parenRegex.ReplaceAllStringFunc(text, func(match string) string {
+		content := match[1 : len(match)-1] // strip parens
+		if strings.Contains(content, ";") {
+			parts := strings.Split(content, ";")
+			var newParts []string
+			for _, part := range parts {
+				newParts = append(newParts, "("+strings.TrimSpace(part)+")")
+			}
+			return strings.Join(newParts, " ")
+		}
+		return match
+	})
+
+	if reRequired.MatchString(text) {
+		p.IsRequired = true
+		text = reRequired.ReplaceAllString(text, "")
+	}
+
+	if reGlobal.MatchString(text) {
+		p.IsGlobal = true
+		text = reGlobal.ReplaceAllString(text, "")
+	}
+
+	if matches := reGenerator.FindStringSubmatch(text); matches != nil {
+		generatorVal := strings.TrimSpace(matches[1])
+		if idx := strings.LastIndex(generatorVal, "."); idx != -1 {
+			p.Generator = &model.FuncRef{
+				ImportPath:   strings.Trim(generatorVal[:idx], "\""),
+				FunctionName: generatorVal[idx+1:],
+			}
+			p.Generator.PackagePath = p.Generator.ImportPath
+			p.Generator.CommandPackageName = filepath.Base(p.Generator.ImportPath)
+		} else {
+			p.Generator = &model.FuncRef{
+				FunctionName: generatorVal,
+			}
+		}
+		text = strings.Replace(text, matches[0], "", 1)
+	}
+
+	if matches := reParser.FindStringSubmatch(text); matches != nil {
+		parserVal := strings.TrimSpace(matches[1])
+		if idx := strings.LastIndex(parserVal, "."); idx != -1 {
+			p.ParserFunc = &model.FuncRef{
+				ImportPath:   strings.Trim(parserVal[:idx], "\""),
+				FunctionName: parserVal[idx+1:],
+			}
+			p.ParserFunc.PackagePath = p.ParserFunc.ImportPath
+			p.ParserFunc.CommandPackageName = filepath.Base(p.ParserFunc.ImportPath)
+		} else {
+			p.ParserFunc = &model.FuncRef{
+				FunctionName: parserVal,
+			}
+		}
+		text = strings.Replace(text, matches[0], "", 1)
+	}
 
 	if strings.Contains(text, "(from parent)") {
 		p.Inherited = true

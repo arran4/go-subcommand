@@ -1,0 +1,104 @@
+-- input.comment --
+MyCmd is a subcommand `app mycmd`
+
+Flags:
+	myflag: --json-data (parser: "encoding/json".Unmarshal)
+	local_parser: (parser: LocalFunc)
+	gen_pkg: (generator: "example.com/pkg".Gen)
+	gen_local: (generator: Gen)
+
+-- expected.json --
+{
+  "CmdName": "app",
+  "SubCommandSequence": [
+    "mycmd"
+  ],
+  "Description": "",
+  "ExtendedHelp": "",
+  "Aliases": null,
+  "Params": {
+    "gen_local": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "Gen"
+      }
+    },
+    "gen_pkg": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "example.com/pkg",
+        "ImportPath": "example.com/pkg",
+        "CommandPackageName": "pkg",
+        "FunctionName": "Gen"
+      }
+    },
+    "local_parser": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "LocalFunc"
+      },
+      "Generator": null
+    },
+    "myflag": {
+      "Flags": [
+        "json-data"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "encoding/json",
+        "ImportPath": "encoding/json",
+        "CommandPackageName": "json",
+        "FunctionName": "Unmarshal"
+      },
+      "Generator": null
+    }
+  },
+  "Ok": true
+}

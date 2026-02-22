@@ -28,6 +28,13 @@ type DataModel struct {
 	GoVersion   string
 }
 
+type FuncRef struct {
+	PackagePath        string
+	ImportPath         string
+	CommandPackageName string
+	FunctionName       string
+}
+
 type Command struct {
 	*DataModel
 	MainCmdName        string
@@ -38,12 +45,13 @@ type Command struct {
 	Description        string
 	ExtendedHelp       string
 	FunctionName       string
-	DefinitionFile string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
+	DefinitionFile     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
+	UsageFileName      string
 }
 
 func (c *Command) ImportAlias() string {
@@ -72,6 +80,10 @@ type FunctionParameter struct {
 	VarArgMin          int
 	VarArgMax          int
 	DeclaredIn         string
+	IsRequired         bool
+	IsGlobal           bool
+	ParserFunc         *FuncRef
+	Generator          *FuncRef
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -101,6 +113,9 @@ func (p *FunctionParameter) FlagString() string {
 }
 
 func (p *FunctionParameter) DefaultString() string {
+	if p.IsRequired {
+		return "(required)"
+	}
 	if p.Default == "" {
 		return ""
 	}
@@ -144,6 +159,12 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
+	if p.ParserFunc != nil {
+		if p.ParserFunc.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.ParserFunc.CommandPackageName, p.ParserFunc.FunctionName, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.ParserFunc.FunctionName, valName)
+	}
 	t := p.BaseType()
 	if t == "int" {
 		return fmt.Sprintf("strconv.Atoi(%s)", valName)
@@ -269,6 +290,28 @@ func (sc *SubCommand) MaxFlagLength() int {
 	return max
 }
 
+// RequiredImports returns a deduplicated list of imports needed for custom parsers.
+func (sc *SubCommand) RequiredImports() []string {
+	var imports []string
+	seen := make(map[string]bool)
+	for _, p := range sc.AllParameters() {
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
+			}
+		}
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
+			}
+		}
+	}
+	sort.Strings(imports)
+	return imports
+}
+
 func (sc *SubCommand) ResolveInheritance() {
 	for _, p := range sc.Parameters {
 		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
@@ -293,6 +336,12 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
+					if !p.IsGlobal && parentParam.IsGlobal {
+						p.IsGlobal = parentParam.IsGlobal
+					}
+					if p.Generator == nil && parentParam.Generator != nil {
+						p.Generator = parentParam.Generator
+					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
 				// Declared in Root Command
@@ -306,6 +355,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
+						}
+						if !p.IsGlobal && pp.IsGlobal {
+							p.IsGlobal = pp.IsGlobal
+						}
+						if p.Generator == nil && pp.Generator != nil {
+							p.Generator = pp.Generator
 						}
 						break
 					}
@@ -333,6 +388,28 @@ func (cmd *Command) ResolveInheritance() {
 	for _, sc := range cmd.SubCommands {
 		sc.ResolveInheritance()
 	}
+}
+
+// RequiredImports returns a deduplicated list of imports needed for custom parsers.
+func (cmd *Command) RequiredImports() []string {
+	var imports []string
+	seen := make(map[string]bool)
+	for _, p := range cmd.Parameters {
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
+			}
+		}
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
+			}
+		}
+	}
+	sort.Strings(imports)
+	return imports
 }
 
 func (sc *SubCommand) AllParameters() []*FunctionParameter {
@@ -437,16 +514,7 @@ func (sc *SubCommand) FullUsageString() string {
 	// Add root command
 	if sc.Command != nil {
 		parts = append(parts, sc.MainCmdName)
-		hasFlags := false
-		for _, p := range sc.Command.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, sc.Command.Parameters)
 	}
 
 	// Traverse from root to current
@@ -460,29 +528,25 @@ func (sc *SubCommand) FullUsageString() string {
 	for i := len(stack) - 1; i >= 0; i-- {
 		cmd := stack[i]
 		parts = append(parts, cmd.SubCommandName)
-
-		// Check for flags declared in THIS command
-		hasFlags := false
-		for _, p := range cmd.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, cmd.Parameters)
 	}
 
 	// Add positional arguments for the LEAF command (sc)
 	// We only show positionals for the command we are running.
 	for _, p := range sc.Parameters {
 		if p.IsPositional {
-			if p.IsVarArg {
-				parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+			if p.IsRequired {
+				if p.IsVarArg {
+					parts = append(parts, fmt.Sprintf("<%s...>", p.Name))
+				} else {
+					parts = append(parts, fmt.Sprintf("<%s>", p.Name))
+				}
 			} else {
-				parts = append(parts, fmt.Sprintf("<%s>", p.Name))
+				if p.IsVarArg {
+					parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+				} else {
+					parts = append(parts, fmt.Sprintf("[%s]", p.Name))
+				}
 			}
 		}
 	}
@@ -492,6 +556,46 @@ func (sc *SubCommand) FullUsageString() string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func appendFlagsUsage(parts *[]string, parameters []*FunctionParameter) {
+	var flags []*FunctionParameter
+	for _, p := range parameters {
+		if !p.IsPositional {
+			flags = append(flags, p)
+		}
+	}
+
+	if len(flags) == 0 {
+		return
+	}
+
+	if len(flags) <= 3 {
+		for _, f := range flags {
+			name := f.Name
+			if len(f.FlagAliases) > 0 {
+				// Pick the shortest or first alias
+				name = f.FlagAliases[0]
+				for _, alias := range f.FlagAliases {
+					if len(alias) < len(name) {
+						name = alias
+					}
+				}
+			}
+			prefix := "-"
+			if len(name) > 1 {
+				prefix = "--"
+			}
+
+			if f.IsBool() {
+				*parts = append(*parts, fmt.Sprintf("[%s%s]", prefix, name))
+			} else {
+				*parts = append(*parts, fmt.Sprintf("[%s%s <%s>]", prefix, name, f.Name)) // Use param name as value placeholder
+			}
+		}
+	} else {
+		*parts = append(*parts, "[flags...]")
+	}
 }
 
 func (sc *SubCommand) MaxDefaultLength() int {

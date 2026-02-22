@@ -34,14 +34,16 @@ func TestIssue330_ParentFlagsReporting(t *testing.T) {
 	// Check that --dir is under parent Flags
 	parentIndex := strings.Index(usageText, "`parent` Flags:")
 	childIndex := strings.Index(usageText, "`child` Flags:")
-	dirIndex := strings.Index(usageText, "--dir")
+	// Look for flag DEFINITION, not just usage string presence
+	// Flag definition typically starts with indentation
+	dirIndex := strings.Index(usageText, "\n    --dir")
 
 	if parentIndex != -1 && childIndex != -1 && dirIndex != -1 {
 		if dirIndex < parentIndex {
-			t.Error("--dir flag appears before `parent` Flags: header")
+			t.Error("--dir flag definition appears before `parent` Flags: header")
 		}
 		if dirIndex > childIndex {
-			t.Error("--dir flag appears after `child` Flags: header (should be under parent)")
+			t.Error("--dir flag definition appears after `child` Flags: header (should be under parent)")
 		}
 	}
 
