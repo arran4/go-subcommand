@@ -9,12 +9,12 @@ import (
 
 func TestParseGoFile(t *testing.T) {
 	tests := []struct {
-		name                string
-		src                 string
-		wantCmdName         string
-		wantDescription     string
-		wantSubCommands     []string
-		wantMissing         bool
+		name            string
+		src             string
+		wantCmdName     string
+		wantDescription string
+		wantSubCommands []string
+		wantMissing     bool
 	}{
 		{
 			name: "Implicit Command Name",

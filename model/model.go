@@ -38,12 +38,12 @@ type Command struct {
 	Description        string
 	ExtendedHelp       string
 	FunctionName       string
-	DefinitionFile string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
+	DefinitionFile     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
 }
 
 func (c *Command) ImportAlias() string {

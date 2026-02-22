@@ -346,6 +346,22 @@ func assignUsageFileNames(subCommands []*model.SubCommand) {
 		}
 	}
 }
+
+func sanitizeManFileName(mainCmdName, subCmdSequence string) string {
+	safeMain := filepath.Base(mainCmdName)
+	// subCmdSequence is space separated
+	parts := strings.Fields(subCmdSequence)
+	var safeParts []string
+	for _, p := range parts {
+		safeParts = append(safeParts, filepath.Base(p))
+	}
+	safeSeq := strings.Join(safeParts, "-")
+	if safeSeq == "" {
+		return fmt.Sprintf("%s.1", safeMain)
+	}
+	return fmt.Sprintf("%s-%s.1", safeMain, safeSeq)
+}
+
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
 	fileName := strings.ReplaceAll(parsers.ToKebabCase(subCmd.SubCommandStructName), "-", "_")
 	if err := generateFile(writer, cmdOutDir, fileName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
@@ -358,7 +374,7 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 		return err
 	}
 	if manDir != "" {
-		manFileName := fmt.Sprintf("%s-%s.1", subCmd.MainCmdName, strings.ReplaceAll(subCmd.SubCommandSequence(), " ", "-"))
+		manFileName := sanitizeManFileName(subCmd.MainCmdName, subCmd.SubCommandSequence())
 		if err := generateFile(writer, manDir, manFileName, "man.gotmpl", subCmd, false); err != nil {
 			return err
 		}
