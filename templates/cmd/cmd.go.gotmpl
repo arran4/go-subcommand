@@ -393,7 +393,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{if .SubCommandFunctionName}}
 	if c.CommandAction != nil {
 		{{- range .AllParameters }}
-		{{- if and .IsRequired (not .IsPositional) }}
+		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
 		}

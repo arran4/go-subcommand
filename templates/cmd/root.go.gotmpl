@@ -1147,7 +1147,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		{{- range .Parameters }}
-		{{- if and .IsRequired (not .IsPositional) }}
+		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
 		}
