@@ -395,7 +395,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		{{- range .AllParameters }}
 		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
+			{{- if gt (len .FlagAliases) 0 }}
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
+			{{- else }}
+			return fmt.Errorf("required flag -{{.Name}} not provided")
+			{{- end }}
 		}
 		{{- end }}
 		{{- end }}
