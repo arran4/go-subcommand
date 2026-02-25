@@ -10,11 +10,7 @@ Subcommands:
 
 
 Flags:
-
     --dir string           (default: ".")           The project root directory containing go.mod
-
     --parser-name string   (default: "commentv1")   Name of the parser to use
-
-    --path []string        (default: nil)           Paths to search for subcommands relative to dir
-
+    --path []string        (default: nil)           Paths to search for subcommands
     --recursive            (default: true)          Search recursively
