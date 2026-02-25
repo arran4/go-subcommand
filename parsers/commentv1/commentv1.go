@@ -828,74 +828,91 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
 
-	// Preprocess: split (a; b) into (a) (b)
-	parenRegex := regexp.MustCompile(`\(([^)]*)\)`)
-	text = parenRegex.ReplaceAllStringFunc(text, func(match string) string {
-		content := match[1 : len(match)-1] // strip parens
-		if strings.Contains(content, ";") {
-			parts := strings.Split(content, ";")
-			var newParts []string
-			for _, part := range parts {
-				newParts = append(newParts, "("+strings.TrimSpace(part)+")")
+	text = replaceParenthesizedBlocks(text, func(content string) string {
+		parts := splitBySemicolonSafe(content)
+		var remainingParts []string
+
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			lowerPart := strings.ToLower(part)
+			consumed := false
+
+			if part == "required" {
+				p.IsRequired = true
+				consumed = true
+			} else if part == "global" {
+				p.IsPersistent = true
+				consumed = true
+			} else if part == "from parent" {
+				p.Inherited = true
+				consumed = true
+			} else if strings.HasPrefix(part, "parser:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "parser:"))
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.ParserFunc = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.ParserFunc.PackagePath = p.ParserFunc.ImportPath
+					p.ParserFunc.CommandPackageName = filepath.Base(p.ParserFunc.ImportPath)
+				} else {
+					p.ParserFunc = &model.FuncRef{FunctionName: val}
+				}
+				consumed = true
+			} else if strings.HasPrefix(part, "generator:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "generator:"))
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.Generator = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.Generator.PackagePath = p.Generator.ImportPath
+					p.Generator.CommandPackageName = filepath.Base(p.Generator.ImportPath)
+				} else {
+					p.Generator = &model.FuncRef{FunctionName: val}
+				}
+				consumed = true
+			} else if strings.HasPrefix(part, "default:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "default:"))
+				if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") {
+					val = strings.Trim(val, "\"")
+				}
+				p.Default = val
+				consumed = true
+			} else if strings.HasPrefix(lowerPart, "aliases:") || strings.HasPrefix(lowerPart, "alias:") || strings.HasPrefix(lowerPart, "aka:") {
+				idx := strings.Index(part, ":")
+				val := strings.TrimSpace(part[idx+1:])
+				subParts := strings.FieldsFunc(val, func(r rune) bool { return r == ',' || r == ';' })
+				for _, sp := range subParts {
+					sp = strings.TrimSpace(sp)
+					if strings.HasPrefix(sp, "-") {
+						p.Flags = append(p.Flags, strings.TrimLeft(sp, "-"))
+					}
+				}
+				consumed = true
 			}
-			return strings.Join(newParts, " ")
+
+			if !consumed {
+				remainingParts = append(remainingParts, part)
+			}
 		}
-		return match
+
+		if len(remainingParts) == 0 {
+			return ""
+		}
+		return "(" + strings.Join(remainingParts, "; ") + ")"
 	})
 
-	if reRequired.MatchString(text) {
-		p.IsRequired = true
-		text = reRequired.ReplaceAllString(text, "")
-	}
-
-	if reGlobal.MatchString(text) {
-		p.IsPersistent = true
-		text = reGlobal.ReplaceAllString(text, "")
-	}
-
-	if matches := reGenerator.FindStringSubmatch(text); matches != nil {
-		generatorVal := strings.TrimSpace(matches[1])
-		if idx := strings.LastIndex(generatorVal, "."); idx != -1 {
-			p.Generator = &model.FuncRef{
-				ImportPath:   strings.Trim(generatorVal[:idx], "\""),
-				FunctionName: generatorVal[idx+1:],
+	// Legacy default handling (unparenthesized)
+	if p.Default == "" {
+		loc := reDefaultValue.FindStringSubmatchIndex(text)
+		if loc != nil {
+			p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
+			if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
+				p.Default = strings.Trim(p.Default, "\"")
 			}
-			p.Generator.PackagePath = p.Generator.ImportPath
-			p.Generator.CommandPackageName = filepath.Base(p.Generator.ImportPath)
-		} else {
-			p.Generator = &model.FuncRef{
-				FunctionName: generatorVal,
-			}
+			text = text[:loc[0]] + text[loc[1]:]
 		}
-		text = strings.Replace(text, matches[0], "", 1)
-	}
-
-	if matches := reParser.FindStringSubmatch(text); matches != nil {
-		parserVal := strings.TrimSpace(matches[1])
-		if idx := strings.LastIndex(parserVal, "."); idx != -1 {
-			p.ParserFunc = &model.FuncRef{
-				ImportPath:   strings.Trim(parserVal[:idx], "\""),
-				FunctionName: parserVal[idx+1:],
-			}
-			p.ParserFunc.PackagePath = p.ParserFunc.ImportPath
-			p.ParserFunc.CommandPackageName = filepath.Base(p.ParserFunc.ImportPath)
-		} else {
-			p.ParserFunc = &model.FuncRef{
-				FunctionName: parserVal,
-			}
-		}
-		text = strings.Replace(text, matches[0], "", 1)
-	}
-
-	if strings.Contains(text, "(from parent)") {
-		p.Inherited = true
-		text = strings.ReplaceAll(text, "(from parent)", "")
-	}
-
-	loc := reDefaultValue.FindStringSubmatchIndex(text)
-	if loc != nil {
-		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
-		text = text[:loc[0]] + text[loc[1]:]
 	}
 
 	// Positional arguments: @1, @2, etc.
@@ -929,6 +946,11 @@ func parseParamDetails(text string) ParsedParam {
 	flagMatches := reFlag.FindAllString(text, -1)
 
 	seenFlags := make(map[string]bool)
+	// Add flags from aliases if any
+	for _, f := range p.Flags {
+		seenFlags[f] = true
+	}
+
 	for _, f := range flagMatches {
 		stripped := strings.TrimLeft(f, "-")
 		if !seenFlags[stripped] {
@@ -950,22 +972,67 @@ func parseParamDetails(text string) ParsedParam {
 	clean = strings.TrimSpace(clean)
 	clean = strings.TrimPrefix(clean, ":")
 	clean = strings.TrimPrefix(clean, ",")
-	clean = strings.TrimPrefix(clean, "(")
-	clean = strings.TrimPrefix(clean, ":") // Also remove leading colon if not handled
-	clean = strings.TrimSuffix(clean, ")")
 
-	clean = strings.ReplaceAll(clean, ",", " ")
-	clean = strings.ReplaceAll(clean, "(", " ")
-	clean = strings.ReplaceAll(clean, ")", " ")
 	clean = strings.Join(strings.Fields(clean), " ")
 
 	p.Description = clean
 
-	if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
-		p.Default = strings.Trim(p.Default, "\"")
-	}
-
 	return p
+}
+
+func replaceParenthesizedBlocks(text string, handler func(content string) string) string {
+	var sb strings.Builder
+
+	i := 0
+	for i < len(text) {
+		if text[i] == '(' {
+			// Find end of this block
+			count := 1
+			start := i
+			end := -1
+			for j := i + 1; j < len(text); j++ {
+				if text[j] == '(' {
+					count++
+				} else if text[j] == ')' {
+					count--
+					if count == 0 {
+						end = j
+						break
+					}
+				}
+			}
+
+			if end != -1 {
+				// Found block
+				content := text[start+1 : end]
+				replacement := handler(content)
+				sb.WriteString(replacement)
+				i = end + 1
+				continue
+			}
+		}
+		sb.WriteByte(text[i])
+		i++
+	}
+	return sb.String()
+}
+
+func splitBySemicolonSafe(text string) []string {
+	var parts []string
+	start := 0
+	count := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] == '(' {
+			count++
+		} else if text[i] == ')' {
+			count--
+		} else if text[i] == ';' && count == 0 {
+			parts = append(parts, text[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, text[start:])
+	return parts
 }
 
 func formatType(expr ast.Expr) (string, error) {
