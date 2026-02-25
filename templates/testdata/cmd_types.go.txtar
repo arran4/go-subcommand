@@ -1,34 +1,92 @@
 -- input.json --
 {
-  "PackageName": "main",
+  "Parent": null,
+  "SubCommands": null,
   "SubCommandName": "mycmd",
+  "Aliases": null,
   "SubCommandStructName": "MyCmd",
   "SubCommandFunctionName": "MyCmdFunc",
   "SubCommandDescription": "My command description",
-  "SubCommandPackageName": "mypkg",
+  "SubCommandExtendedHelp": "",
   "ImportPath": "example.com/mypkg",
+  "SubCommandPackageName": "mypkg",
   "UsageFileName": "mycmd_usage.txt",
+  "DefinitionFile": "",
+  "DocStart": 0,
+  "DocEnd": 0,
   "Parameters": [
     {
       "Name": "timeout",
       "Type": "time.Duration",
-      "FlagAliases": ["t"],
+      "FlagAliases": [
+        "t"
+      ],
+      "Default": "1s",
       "Description": "Timeout duration",
-      "Default": "1s"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     },
     {
       "Name": "count",
       "Type": "int",
+      "FlagAliases": null,
+      "Default": "3",
       "Description": "Retry count",
-      "Default": "3"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     },
     {
-        "Name": "config",
-        "Type": "string",
-        "Description": "Config file",
-        "Default": "config.yaml"
+      "Name": "config",
+      "Type": "string",
+      "FlagAliases": null,
+      "Default": "config.yaml",
+      "Description": "Config file",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     }
-  ]
+  ],
+  "ReturnsError": false,
+  "ReturnCount": 0,
+  "Recursive": false
 }
 -- template_name --
 cmd.go.gotmpl
@@ -41,6 +99,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -80,6 +139,9 @@ func (c *MyCmd) UsageRecursive() {
 }
 
 func (c *MyCmd) Execute(args []string) error {
+	c.timeout = c.RootCmd.timeout
+	c.count = c.RootCmd.count
+	c.config = c.RootCmd.config
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -241,11 +303,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	v.SubCommands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil
@@ -256,11 +316,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	v.SubCommands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil

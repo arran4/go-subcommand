@@ -81,6 +81,7 @@ func TestGoTemplates(t *testing.T) {
 					sc.DataModel = &model.DataModel{GoVersion: "1.21"}
 				}
 				populateParents(&sc, nil)
+				ApplyDefaultsToSubCommand(&sc)
 				data = &sc
 			} else {
 				// root.go.gotmpl and main.go.gotmpl use *Command
@@ -97,6 +98,7 @@ func TestGoTemplates(t *testing.T) {
 				if cmd.UsageFileName == "" && cmd.MainCmdName != "" {
 					cmd.UsageFileName = strings.ToLower(cmd.MainCmdName) + "_usage.txt"
 				}
+				ApplyDefaultsToCommand(&cmd)
 				data = &cmd
 			}
 
@@ -140,5 +142,42 @@ func populateParents(sc *model.SubCommand, parent *model.SubCommand) {
 	sc.Parent = parent
 	for _, child := range sc.SubCommands {
 		populateParents(child, sc)
+	}
+}
+
+func ApplyDefaultsToCommand(cmd *model.Command) {
+	for _, p := range cmd.Parameters {
+		applyDefaultsToParam(p)
+	}
+	for _, sc := range cmd.SubCommands {
+		ApplyDefaultsToSubCommand(sc)
+	}
+}
+
+func ApplyDefaultsToSubCommand(sc *model.SubCommand) {
+	for _, p := range sc.Parameters {
+		applyDefaultsToParam(p)
+	}
+	for _, child := range sc.SubCommands {
+		ApplyDefaultsToSubCommand(child)
+	}
+	if sc.Command != nil {
+		// Ensure root params have defaults if accessed
+		for _, p := range sc.Command.Parameters {
+			applyDefaultsToParam(p)
+		}
+	}
+}
+
+func applyDefaultsToParam(p *model.FunctionParameter) {
+	if p.Generator.Type == "" {
+		p.Generator.Type = model.SourceTypeFlag
+	}
+	if p.Parser.Type == "" {
+		if p.Generator.Type == model.SourceTypeFlag {
+			p.Parser.Type = model.ParserTypeImplicit
+		} else {
+			p.Parser.Type = model.ParserTypeIdentity
+		}
 	}
 }

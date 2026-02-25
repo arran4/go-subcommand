@@ -47,11 +47,11 @@ type CommandTree struct {
 	FunctionName       string
 	CommandPackageName string
 	DefinitionFile     string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*model.FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*model.FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
 	Description    string
 	ExtendedHelp   string
 	ImportPath     string
@@ -424,13 +424,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							// IsGlobal removed
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
-							if c.ParserFunc != nil {
-								fp.ParserFunc = c.ParserFunc
-							}
-							if c.Generator != nil {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
 						}
@@ -462,13 +460,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							// IsGlobal removed
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
-							if c.ParserFunc != nil {
-								fp.ParserFunc = c.ParserFunc
-							}
-							if c.Generator != nil {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
 						}
@@ -500,14 +496,24 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							// IsGlobal removed
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
-							if c.ParserFunc != nil {
-								fp.ParserFunc = c.ParserFunc
-							}
-							if c.Generator != nil {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
+							}
+						}
+
+						// Apply defaults if not set
+						if fp.Generator.Type == "" {
+							fp.Generator.Type = model.SourceTypeFlag
+						}
+						if fp.Parser.Type == "" {
+							if fp.Generator.Type == model.SourceTypeFlag {
+								fp.Parser.Type = model.ParserTypeImplicit
+							} else {
+								fp.Parser.Type = model.ParserTypeIdentity
 							}
 						}
 
@@ -640,9 +646,9 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
-	IsGlobal           bool
-	ParserFunc         *model.FuncRef
-	Generator          *model.FuncRef
+	// IsGlobal removed
+	Parser    model.ParserConfig
+	Generator model.GeneratorConfig
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -809,7 +815,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.Parser.Type != "" || details.IsRequired || details.Generator.Type != "" {
 					params[name] = details
 					continue
 				}
@@ -845,21 +851,22 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	if reGlobal.MatchString(text) {
-		p.IsGlobal = true
+		// p.IsGlobal = true // Removed
 		text = reGlobal.ReplaceAllString(text, "")
 	}
 
 	if matches := reGenerator.FindStringSubmatch(text); matches != nil {
 		generatorVal := strings.TrimSpace(matches[1])
+		p.Generator.Type = model.SourceTypeGenerator
 		if idx := strings.LastIndex(generatorVal, "."); idx != -1 {
-			p.Generator = &model.FuncRef{
+			p.Generator.Func = &model.FuncRef{
 				ImportPath:   strings.Trim(generatorVal[:idx], "\""),
 				FunctionName: generatorVal[idx+1:],
 			}
-			p.Generator.PackagePath = p.Generator.ImportPath
-			p.Generator.CommandPackageName = filepath.Base(p.Generator.ImportPath)
+			p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
+			p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
 		} else {
-			p.Generator = &model.FuncRef{
+			p.Generator.Func = &model.FuncRef{
 				FunctionName: generatorVal,
 			}
 		}
@@ -868,15 +875,16 @@ func parseParamDetails(text string) ParsedParam {
 
 	if matches := reParser.FindStringSubmatch(text); matches != nil {
 		parserVal := strings.TrimSpace(matches[1])
+		p.Parser.Type = model.ParserTypeCustom
 		if idx := strings.LastIndex(parserVal, "."); idx != -1 {
-			p.ParserFunc = &model.FuncRef{
+			p.Parser.Func = &model.FuncRef{
 				ImportPath:   strings.Trim(parserVal[:idx], "\""),
 				FunctionName: parserVal[idx+1:],
 			}
-			p.ParserFunc.PackagePath = p.ParserFunc.ImportPath
-			p.ParserFunc.CommandPackageName = filepath.Base(p.ParserFunc.ImportPath)
+			p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+			p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
 		} else {
-			p.ParserFunc = &model.FuncRef{
+			p.Parser.Func = &model.FuncRef{
 				FunctionName: parserVal,
 			}
 		}

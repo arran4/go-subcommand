@@ -68,6 +68,31 @@ func (c *Command) ImportAlias() string {
 	return ""
 }
 
+type SourceType string
+
+const (
+	SourceTypeFlag      SourceType = "flag"
+	SourceTypeGenerator SourceType = "generator"
+)
+
+type ParserType string
+
+const (
+	ParserTypeImplicit ParserType = "implicit"
+	ParserTypeCustom   ParserType = "custom"
+	ParserTypeIdentity ParserType = "identity"
+)
+
+type GeneratorConfig struct {
+	Type SourceType
+	Func *FuncRef // Non-nil if Type == SourceTypeGenerator
+}
+
+type ParserConfig struct {
+	Type ParserType
+	Func *FuncRef // Non-nil if Type == ParserTypeCustom
+}
+
 type FunctionParameter struct {
 	Name               string
 	Type               string
@@ -81,9 +106,9 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
-	IsGlobal           bool
-	ParserFunc         *FuncRef
-	Generator          *FuncRef
+	// IsGlobal removed
+	Parser    ParserConfig
+	Generator GeneratorConfig
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -159,11 +184,11 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
-	if p.ParserFunc != nil {
-		if p.ParserFunc.CommandPackageName != "" {
-			return fmt.Sprintf("%s.%s(%s)", p.ParserFunc.CommandPackageName, p.ParserFunc.FunctionName, valName)
+	if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil {
+		if p.Parser.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Parser.Func.CommandPackageName, p.Parser.Func.FunctionName, valName)
 		}
-		return fmt.Sprintf("%s(%s)", p.ParserFunc.FunctionName, valName)
+		return fmt.Sprintf("%s(%s)", p.Parser.Func.FunctionName, valName)
 	}
 	t := p.BaseType()
 	if t == "int" {
@@ -295,16 +320,16 @@ func (sc *SubCommand) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
 	for _, p := range sc.AllParameters() {
-		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
-			if !seen[p.ParserFunc.ImportPath] {
-				imports = append(imports, p.ParserFunc.ImportPath)
-				seen[p.ParserFunc.ImportPath] = true
+		if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.ImportPath != "" {
+			if !seen[p.Parser.Func.ImportPath] {
+				imports = append(imports, p.Parser.Func.ImportPath)
+				seen[p.Parser.Func.ImportPath] = true
 			}
 		}
-		if p.Generator != nil && p.Generator.ImportPath != "" {
-			if !seen[p.Generator.ImportPath] {
-				imports = append(imports, p.Generator.ImportPath)
-				seen[p.Generator.ImportPath] = true
+		if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.ImportPath != "" {
+			if !seen[p.Generator.Func.ImportPath] {
+				imports = append(imports, p.Generator.Func.ImportPath)
+				seen[p.Generator.Func.ImportPath] = true
 			}
 		}
 	}
@@ -336,11 +361,12 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
-					if !p.IsGlobal && parentParam.IsGlobal {
-						p.IsGlobal = parentParam.IsGlobal
-					}
-					if p.Generator == nil && parentParam.Generator != nil {
+					// IsGlobal removed
+					if p.Generator.Type == "" && parentParam.Generator.Type != "" {
 						p.Generator = parentParam.Generator
+					}
+					if p.Parser.Type == "" && parentParam.Parser.Type != "" {
+						p.Parser = parentParam.Parser
 					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
@@ -356,11 +382,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
 						}
-						if !p.IsGlobal && pp.IsGlobal {
-							p.IsGlobal = pp.IsGlobal
-						}
-						if p.Generator == nil && pp.Generator != nil {
+						// IsGlobal removed
+						if p.Generator.Type == "" && pp.Generator.Type != "" {
 							p.Generator = pp.Generator
+						}
+						if p.Parser.Type == "" && pp.Parser.Type != "" {
+							p.Parser = pp.Parser
 						}
 						break
 					}
@@ -395,16 +422,16 @@ func (cmd *Command) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
 	for _, p := range cmd.Parameters {
-		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
-			if !seen[p.ParserFunc.ImportPath] {
-				imports = append(imports, p.ParserFunc.ImportPath)
-				seen[p.ParserFunc.ImportPath] = true
+		if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.ImportPath != "" {
+			if !seen[p.Parser.Func.ImportPath] {
+				imports = append(imports, p.Parser.Func.ImportPath)
+				seen[p.Parser.Func.ImportPath] = true
 			}
 		}
-		if p.Generator != nil && p.Generator.ImportPath != "" {
-			if !seen[p.Generator.ImportPath] {
-				imports = append(imports, p.Generator.ImportPath)
-				seen[p.Generator.ImportPath] = true
+		if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.ImportPath != "" {
+			if !seen[p.Generator.Func.ImportPath] {
+				imports = append(imports, p.Generator.Func.ImportPath)
+				seen[p.Generator.Func.ImportPath] = true
 			}
 		}
 	}

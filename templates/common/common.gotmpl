@@ -40,26 +40,26 @@
 	{{- $imports := list }}
 	{{- range $params }}
 		{{$param := .}}
-		{{- if and .ParserFunc .ParserFunc.ImportPath }}
+		{{- if and (eq .Parser.Type "custom") .Parser.Func .Parser.Func.ImportPath }}
 			{{- $exists := false }}
 			{{- range $i := $imports }}
-				{{- if eq $i $param.ParserFunc.ImportPath }}
+				{{- if eq $i $param.Parser.Func.ImportPath }}
 					{{- $exists = true }}
 				{{- end }}
 			{{- end }}
 			{{- if not $exists }}
-				{{- $imports = append $imports .ParserFunc.ImportPath }}
+				{{- $imports = append $imports .Parser.Func.ImportPath }}
 			{{- end }}
 		{{- end }}
-		{{- if and .Generator .Generator.ImportPath }}
+		{{- if and (eq .Generator.Type "generator") .Generator.Func .Generator.Func.ImportPath }}
 			{{- $exists := false }}
 			{{- range $i := $imports }}
-				{{- if eq $i $param.Generator.ImportPath }}
+				{{- if eq $i $param.Generator.Func.ImportPath }}
 					{{- $exists = true }}
 				{{- end }}
 			{{- end }}
 			{{- if not $exists }}
-				{{- $imports = append $imports .Generator.ImportPath }}
+				{{- $imports = append $imports .Generator.Func.ImportPath }}
 			{{- end }}
 		{{- end }}
 	{{- end }}
@@ -73,7 +73,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if and (not .IsPositional) (not .Generator) }}
+		{{- if and (not .IsPositional) (eq .Generator.Type "flag") }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -106,7 +106,7 @@
 				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
 	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else }}
-				{{- if $param.ParserFunc }}
+				{{- if eq $param.Parser.Type "custom" }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
 		v, err := {{$param.ParserCall "s"}}
 		if err != nil {

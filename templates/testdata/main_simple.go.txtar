@@ -1,14 +1,21 @@
 -- input.json --
 {
-  "PackageName": "main",
   "MainCmdName": "mycmd",
-  "Version": "1.0.0",
+  "SubCommands": null,
+  "PackagePath": "example.com/myproject",
+  "ImportPath": "example.com/myproject/rootpkg",
+  "CommandPackageName": "",
+  "Description": "",
+  "ExtendedHelp": "",
+  "FunctionName": "MyRootFunc",
+  "DefinitionFile": "",
+  "DocStart": 0,
+  "DocEnd": 0,
+  "Parameters": null,
   "ReturnsError": true,
   "ReturnCount": 1,
-  "FunctionName": "MyRootFunc",
-  "Parameters": [],
-  "PackagePath": "example.com/myproject",
-  "ImportPath": "example.com/myproject/rootpkg"
+  "UsageFileName": "",
+  "DataModel": null
 }
 -- template_name --
 main.go.gotmpl

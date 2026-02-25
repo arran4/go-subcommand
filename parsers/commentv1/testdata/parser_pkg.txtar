@@ -28,13 +28,18 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsGlobal": false,
-      "ParserFunc": null,
+      "Parser": {
+        "Type": "",
+        "Func": null
+      },
       "Generator": {
-        "PackagePath": "",
-        "ImportPath": "",
-        "CommandPackageName": "",
-        "FunctionName": "Gen"
+        "Type": "generator",
+        "Func": {
+          "PackagePath": "",
+          "ImportPath": "",
+          "CommandPackageName": "",
+          "FunctionName": "Gen"
+        }
       }
     },
     "gen_pkg": {
@@ -48,13 +53,18 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsGlobal": false,
-      "ParserFunc": null,
+      "Parser": {
+        "Type": "",
+        "Func": null
+      },
       "Generator": {
-        "PackagePath": "example.com/pkg",
-        "ImportPath": "example.com/pkg",
-        "CommandPackageName": "pkg",
-        "FunctionName": "Gen"
+        "Type": "generator",
+        "Func": {
+          "PackagePath": "example.com/pkg",
+          "ImportPath": "example.com/pkg",
+          "CommandPackageName": "pkg",
+          "FunctionName": "Gen"
+        }
       }
     },
     "local_parser": {
@@ -68,14 +78,19 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsGlobal": false,
-      "ParserFunc": {
-        "PackagePath": "",
-        "ImportPath": "",
-        "CommandPackageName": "",
-        "FunctionName": "LocalFunc"
+      "Parser": {
+        "Type": "custom",
+        "Func": {
+          "PackagePath": "",
+          "ImportPath": "",
+          "CommandPackageName": "",
+          "FunctionName": "LocalFunc"
+        }
       },
-      "Generator": null
+      "Generator": {
+        "Type": "",
+        "Func": null
+      }
     },
     "myflag": {
       "Flags": [
@@ -90,14 +105,19 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsGlobal": false,
-      "ParserFunc": {
-        "PackagePath": "encoding/json",
-        "ImportPath": "encoding/json",
-        "CommandPackageName": "json",
-        "FunctionName": "Unmarshal"
+      "Parser": {
+        "Type": "custom",
+        "Func": {
+          "PackagePath": "encoding/json",
+          "ImportPath": "encoding/json",
+          "CommandPackageName": "json",
+          "FunctionName": "Unmarshal"
+        }
       },
-      "Generator": null
+      "Generator": {
+        "Type": "",
+        "Func": null
+      }
     }
   },
   "Ok": true
