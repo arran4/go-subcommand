@@ -147,7 +147,7 @@ func compareParams(got, expected ParsedParam) bool {
 	if got.Required != expected.Required {
 		return false
 	}
-	if got.Global != expected.Global {
+	if got.Inherited != expected.Inherited {
 		return false
 	}
 	if got.Generator != expected.Generator {

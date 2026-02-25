@@ -20,7 +20,7 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
     "Description": "Required param"
   },
   "glob": {
-    "Global": true,
+    "Inherited": true,
     "Description": "Global param"
   },
   "custom": {
@@ -38,7 +38,7 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
   },
   "mix": {
     "Required": true,
-    "Global": true,
+    "Inherited": true,
     "Description": "Mixed"
   },
   "legacy": {

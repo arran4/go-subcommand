@@ -424,9 +424,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Global {
-								fp.Global = true
-							}
 							if c.Generator != "" {
 								fp.Generator = c.Generator
 							}
@@ -463,9 +460,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Global {
-								fp.Global = true
-							}
 							if c.Generator != "" {
 								fp.Generator = c.Generator
 							}
@@ -501,9 +495,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
-							}
-							if c.Global {
-								fp.Global = true
 							}
 							if c.Generator != "" {
 								fp.Generator = c.Generator
@@ -643,7 +634,6 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
-	Global             bool
 	Generator          string
 	ParserFunc         string
 	ParserPkg          string
@@ -916,7 +906,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		case "required":
 			p.Required = true
 		case "global":
-			p.Global = true
+			p.Inherited = true
 		case "generator":
 			p.Generator = val
 		case "parser":

@@ -73,7 +73,6 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	Required           bool
-	Global             bool
 	Generator          string
 	ParserFunc         string
 	ParserPkg          string

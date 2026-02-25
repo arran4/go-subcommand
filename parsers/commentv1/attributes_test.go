@@ -86,7 +86,7 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Global",
 			attrs: "global",
 			wantParam: ParsedParam{
-				Global: true,
+				Inherited: true,
 			},
 		},
 		{
@@ -131,7 +131,7 @@ func TestParseAttributes(t *testing.T) {
 			attrs: "required; global; parser: func; aka: f",
 			wantParam: ParsedParam{
 				Required:   true,
-				Global:     true,
+				Inherited:  true,
 				ParserFunc: "func",
 				Flags:      []string{"f"},
 			},
@@ -204,7 +204,7 @@ func TestParseParamDetails_Integration(t *testing.T) {
 			name: "End Block",
 			text: "Description (global)",
 			want: ParsedParam{
-				Global:      true,
+				Inherited:   true,
 				Description: "Description",
 			},
 		},
@@ -224,8 +224,8 @@ func TestParseParamDetails_Integration(t *testing.T) {
 			if got.Required != tt.want.Required {
 				t.Errorf("Required = %v, want %v", got.Required, tt.want.Required)
 			}
-			if got.Global != tt.want.Global {
-				t.Errorf("Global = %v, want %v", got.Global, tt.want.Global)
+			if got.Inherited != tt.want.Inherited {
+				t.Errorf("Inherited = %v, want %v", got.Inherited, tt.want.Inherited)
 			}
 			if len(got.Flags) != len(tt.want.Flags) {
 				t.Errorf("Flags len = %d, want %d", len(got.Flags), len(tt.want.Flags))
