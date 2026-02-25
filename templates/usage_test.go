@@ -88,6 +88,7 @@ func TestUsageTemplate(t *testing.T) {
 			}
 
 			populateParentsUsage(data.SubCommand, nil)
+			ApplyDefaultsToSubCommand(data.SubCommand)
 
 			var buf bytes.Buffer
 			if err := tmpl.Execute(&buf, data); err != nil {

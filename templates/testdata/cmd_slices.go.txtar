@@ -1,41 +1,121 @@
 -- input.json --
 {
-  "PackageName": "main",
+  "MainCmdName": "",
   "PackagePath": "example.com/mypkg",
+  "CommandPackageName": "",
+  "Description": "",
+  "ExtendedHelp": "",
+  "FunctionName": "",
+  "DataModel": null,
+  "Parent": null,
+  "SubCommands": null,
   "SubCommandName": "myslicecmd",
+  "Aliases": null,
   "SubCommandStructName": "MySliceCmd",
   "SubCommandFunctionName": "MySliceFunc",
   "SubCommandDescription": "Slice command",
-  "SubCommandPackageName": "mypkg",
+  "SubCommandExtendedHelp": "",
   "ImportPath": "example.com/mypkg",
+  "SubCommandPackageName": "mypkg",
   "UsageFileName": "myslicecmd_usage.txt",
+  "DefinitionFile": "",
+  "DocStart": 0,
+  "DocEnd": 0,
   "Parameters": [
     {
       "Name": "files",
       "Type": "[]string",
-      "FlagAliases": ["f"],
+      "FlagAliases": [
+        "f"
+      ],
+      "Default": "nil",
       "Description": "Files list",
-      "Default": "nil"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     },
     {
       "Name": "counts",
       "Type": "[]int",
+      "FlagAliases": null,
+      "Default": "nil",
       "Description": "Counts list",
-      "Default": "nil"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     },
     {
       "Name": "debugs",
       "Type": "[]bool",
+      "FlagAliases": null,
+      "Default": "nil",
       "Description": "Debug list",
-      "Default": "nil"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     },
     {
       "Name": "timeouts",
       "Type": "[]time.Duration",
+      "FlagAliases": null,
+      "Default": "nil",
       "Description": "Timeouts list",
-      "Default": "nil"
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "DeclaredIn": "",
+      "IsRequired": false,
+      "Parser": {
+        "Type": "implicit",
+        "Func": null
+      },
+      "Generator": {
+        "Type": "flag",
+        "Func": null
+      }
     }
-  ]
+  ],
+  "ReturnsError": false,
+  "ReturnCount": 0,
+  "Recursive": false
 }
 -- template_name --
 cmd.go.gotmpl
@@ -48,6 +128,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +169,10 @@ func (c *MySliceCmd) UsageRecursive() {
 }
 
 func (c *MySliceCmd) Execute(args []string) error {
+	c.files = c.RootCmd.files
+	c.counts = c.RootCmd.counts
+	c.debugs = c.RootCmd.debugs
+	c.timeouts = c.RootCmd.timeouts
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -254,11 +339,9 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 	v.SubCommands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil
@@ -269,11 +352,9 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 	v.SubCommands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil

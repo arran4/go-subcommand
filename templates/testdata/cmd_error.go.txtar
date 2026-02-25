@@ -1,17 +1,30 @@
 -- input.json --
 {
-  "PackageName": "main",
+  "MainCmdName": "",
+  "PackagePath": "example.com/myproject",
+  "CommandPackageName": "",
+  "Description": "",
+  "ExtendedHelp": "",
+  "FunctionName": "",
+  "DataModel": null,
+  "Parent": null,
+  "SubCommands": null,
   "SubCommandName": "mycmd",
+  "Aliases": null,
   "SubCommandStructName": "MyCmd",
   "SubCommandFunctionName": "MyCmdFunc",
   "SubCommandDescription": "My command description",
-  "SubCommandPackageName": "mypkg",
+  "SubCommandExtendedHelp": "",
   "ImportPath": "example.com/mypkg",
-  "PackagePath": "example.com/myproject",
+  "SubCommandPackageName": "mypkg",
   "UsageFileName": "mycmd_usage.txt",
+  "DefinitionFile": "",
+  "DocStart": 0,
+  "DocEnd": 0,
+  "Parameters": null,
   "ReturnsError": true,
   "ReturnCount": 1,
-  "Parameters": []
+  "Recursive": false
 }
 -- template_name --
 cmd.go.gotmpl
@@ -24,6 +37,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"errors"
@@ -156,11 +170,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	v.SubCommands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil
@@ -171,11 +183,9 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	v.SubCommands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				for _, arg := range args {
-					if arg == "-deep" {
-						v.UsageRecursive()
-						return nil
-					}
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
 				}
 				v.Usage()
 				return nil
