@@ -649,8 +649,6 @@ type ParsedParam struct {
 	Generator          *model.FuncRef
 }
 
-var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
-
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
@@ -793,7 +791,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 		if parsedParam {
 			matches := reParamDefinition.FindStringSubmatch(paramLine)
-			//matches := reExplicitParam.FindStringSubmatch(paramLine)
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
@@ -802,22 +799,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
-			// Attempt to parse as parameter if it looks like one, even without prefix/block
-			matches := reImplicitParam.FindStringSubmatch(trimmedLine)
-			if matches != nil {
-				name := matches[1]
-				rest := matches[2]
-				details := parseParamDetails(rest)
-
-				// We only accept it as a parameter if it has explicit configuration
-				// that strongly suggests it is a parameter definition.
-				// e.g. @N for positional, or defined flags, or default value.
-				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsPersistent || details.Generator != nil {
-					params[name] = details
-					continue
-				}
-			}
 			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
