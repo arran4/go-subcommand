@@ -1,23 +1,25 @@
 package commentv1
 
 import (
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestParseParamDetails_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		check    func(*testing.T, ParsedParam)
+		name  string
+		input string
+		check func(*testing.T, ParsedParam)
 	}{
 		{
 			name:  "nested parens in parser",
 			input: "(parser: myfunc(true))",
 			check: func(t *testing.T, got ParsedParam) {
-				if assert.NotNil(t, got.ParserFunc) {
-					assert.Equal(t, "myfunc(true)", got.ParserFunc.FunctionName)
+				if got.ParserFunc == nil {
+					t.Fatal("ParserFunc is nil")
+				}
+				if got.ParserFunc.FunctionName != "myfunc(true)" {
+					t.Errorf("expected FunctionName 'myfunc(true)', got '%s'", got.ParserFunc.FunctionName)
 				}
 			},
 		},
@@ -25,34 +27,47 @@ func TestParseParamDetails_EdgeCases(t *testing.T) {
 			name:  "multiple parens",
 			input: "(required) (global)",
 			check: func(t *testing.T, got ParsedParam) {
-				assert.True(t, got.IsRequired)
-				assert.True(t, got.IsPersistent)
+				if !got.IsRequired {
+					t.Error("expected IsRequired to be true")
+				}
+				if !got.IsPersistent {
+					t.Error("expected IsPersistent to be true")
+				}
 			},
 		},
 		{
 			name:  "parens in description",
 			input: "some description (with parens)",
 			check: func(t *testing.T, got ParsedParam) {
-				assert.Contains(t, got.Description, "some description (with parens)")
+				if !strings.Contains(got.Description, "some description (with parens)") {
+					t.Errorf("expected description to contain 'some description (with parens)', got '%s'", got.Description)
+				}
 			},
 		},
 		{
 			name:  "unbalanced parens in description",
 			input: "some description (with unbalanced parens",
 			check: func(t *testing.T, got ParsedParam) {
-				assert.Contains(t, got.Description, "some description (with unbalanced parens")
+				if !strings.Contains(got.Description, "some description (with unbalanced parens") {
+					t.Errorf("expected description to contain 'some description (with unbalanced parens', got '%s'", got.Description)
+				}
 			},
 		},
 		{
 			name:  "parser with complex args",
 			input: `(parser: "fmt".Sprintf("%s", val))`,
 			check: func(t *testing.T, got ParsedParam) {
-				if assert.NotNil(t, got.ParserFunc) {
-					// The current parser splits by last dot for package.
-					// "fmt".Sprintf("%s", val) -> pkg: "fmt", func: Sprintf("%s", val)
-					// Let's see what happens.
-					assert.Equal(t, `Sprintf("%s", val)`, got.ParserFunc.FunctionName)
-					assert.Equal(t, `fmt`, got.ParserFunc.ImportPath)
+				if got.ParserFunc == nil {
+					t.Fatal("ParserFunc is nil")
+				}
+				// The current parser splits by last dot for package.
+				// "fmt".Sprintf("%s", val) -> pkg: "fmt", func: Sprintf("%s", val)
+				// Let's see what happens.
+				if got.ParserFunc.FunctionName != `Sprintf("%s", val)` {
+					t.Errorf("expected FunctionName `Sprintf(\"%%s\", val)`, got `%s`", got.ParserFunc.FunctionName)
+				}
+				if got.ParserFunc.ImportPath != `fmt` {
+					t.Errorf("expected ImportPath `fmt`, got `%s`", got.ParserFunc.ImportPath)
 				}
 			},
 		},
@@ -60,15 +75,20 @@ func TestParseParamDetails_EdgeCases(t *testing.T) {
 			name:  "default with parens",
 			input: "(default: foo())",
 			check: func(t *testing.T, got ParsedParam) {
-				assert.Equal(t, "foo()", got.Default)
+				if got.Default != "foo()" {
+					t.Errorf("expected Default 'foo()', got '%s'", got.Default)
+				}
 			},
 		},
 		{
 			name:  "semicolon in parser args",
 			input: `(parser: split("a;b"))`,
 			check: func(t *testing.T, got ParsedParam) {
-				if assert.NotNil(t, got.ParserFunc) {
-					assert.Equal(t, `split("a;b")`, got.ParserFunc.FunctionName)
+				if got.ParserFunc == nil {
+					t.Fatal("ParserFunc is nil")
+				}
+				if got.ParserFunc.FunctionName != `split("a;b")` {
+					t.Errorf("expected FunctionName `split(\"a;b\")`, got `%s`", got.ParserFunc.FunctionName)
 				}
 			},
 		},
