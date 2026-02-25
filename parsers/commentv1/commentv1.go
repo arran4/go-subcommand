@@ -626,13 +626,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 
 var (
 	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
+	reImplicitCheck   = regexp.MustCompile(fmt.Sprintf(`%s\d+|%s`, TagPositional, regexp.QuoteMeta(TagVarArgEllipsis)))
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
-	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
-	reRequired        = regexp.MustCompile(`\(required\)`)
-	reGlobal          = regexp.MustCompile(`\(global\)`)
-	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
-	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
+	reAlias           = regexp.MustCompile(fmt.Sprintf(`\((?i:%s|%s|%s)\s*([^)]+)\)`, TagAliases, TagAlias, TagAka))
+	reRequired        = regexp.MustCompile(regexp.QuoteMeta(TagRequired))
+	reGlobal          = regexp.MustCompile(regexp.QuoteMeta(TagGlobal))
+	reParser          = regexp.MustCompile(fmt.Sprintf(`\(%s:\s*([^)]+)\)`, TagParser))
+	reGenerator       = regexp.MustCompile(fmt.Sprintf(`\(%s:\s*([^)]+)\)`, TagGenerator))
 )
 
 type ParsedParam struct {
@@ -679,9 +679,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if idx := strings.Index(line, "is a subcommand"); idx != -1 {
+		if idx := strings.Index(line, DirectiveSubcommand); idx != -1 {
 			ok = true
-			subCmdPart := line[idx+len("is a subcommand"):]
+			subCmdPart := line[idx+len(DirectiveSubcommand):]
 
 			start := strings.Index(subCmdPart, "`")
 			end := strings.LastIndex(subCmdPart, "`")
@@ -728,7 +728,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		lowerTrimmedLine := strings.ToLower(trimmedLine)
-		if strings.HasPrefix(lowerTrimmedLine, "aliases:") || strings.HasPrefix(lowerTrimmedLine, "alias:") {
+		if strings.HasPrefix(lowerTrimmedLine, DirectiveAliases) || strings.HasPrefix(lowerTrimmedLine, DirectiveAlias) {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {
 				parts := strings.FieldsFunc(lineParts[1], func(r rune) bool {
@@ -756,7 +756,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if trimmedLine == "Flags:" {
+		if trimmedLine == DirectiveFlags {
 			inFlagsBlock = true
 			justEnteredFlagsBlock = true
 			continue
@@ -779,11 +779,11 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		if !parsedParam {
-			if strings.HasPrefix(trimmedLine, "flag ") {
-				paramLine = strings.TrimPrefix(trimmedLine, "flag ")
+			if strings.HasPrefix(trimmedLine, DirectiveFlagPrefix) {
+				paramLine = strings.TrimPrefix(trimmedLine, DirectiveFlagPrefix)
 				parsedParam = true
-			} else if strings.HasPrefix(trimmedLine, "param ") {
-				paramLine = strings.TrimPrefix(trimmedLine, "param ")
+			} else if strings.HasPrefix(trimmedLine, DirectiveParamPrefix) {
+				paramLine = strings.TrimPrefix(trimmedLine, DirectiveParamPrefix)
 				parsedParam = true
 			} else if matches := reImplicitFormat.FindStringSubmatch(trimmedLine); matches != nil {
 				if reImplicitCheck.MatchString(matches[2]) {
@@ -891,12 +891,12 @@ func parseParamDetails(text string) ParsedParam {
 		text = strings.Replace(text, matches[0], "", 1)
 	}
 
-	if strings.Contains(text, "(from parent)") {
+	if strings.Contains(text, TagFromParent) {
 		p.Inherited = true
-		text = strings.ReplaceAll(text, "(from parent)", "")
+		text = strings.ReplaceAll(text, TagFromParent, "")
 	}
 
-	defaultRegex := regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
+	defaultRegex := regexp.MustCompile(fmt.Sprintf(`(?:%s\s*)((?:"[^"]*"|[^),]+))`, TagDefault))
 	loc := defaultRegex.FindStringSubmatchIndex(text)
 	if loc != nil {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
@@ -904,7 +904,7 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	// Positional arguments: @1, @2, etc.
-	posArgRegex := regexp.MustCompile(`@(\d+)`)
+	posArgRegex := regexp.MustCompile(fmt.Sprintf(`%s(\d+)`, TagPositional))
 	posArgMatches := posArgRegex.FindStringSubmatch(text)
 	if posArgMatches != nil {
 		p.IsPositional = true
@@ -916,11 +916,11 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	// Varargs constraints: 1...3 or ...
-	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	varArgRangeRegex := regexp.MustCompile(fmt.Sprintf(`(\d+)%s(\d+)|(%s)`, regexp.QuoteMeta(TagVarArg), regexp.QuoteMeta(TagVarArgEllipsis)))
 	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
 	if varArgRangeMatches != nil {
 		p.IsVarArg = true
-		if varArgRangeMatches[3] == "..." {
+		if varArgRangeMatches[3] == TagVarArgEllipsis {
 			// Just "..." means no specific limits parsed here
 		} else {
 			if _, err := fmt.Sscanf(varArgRangeMatches[1], "%d", &p.VarArgMin); err != nil {
