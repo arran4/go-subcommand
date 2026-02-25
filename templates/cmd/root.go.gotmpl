@@ -121,7 +121,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
 		{{- range .Parameters }}
-		{{- if and .Generator (not .IsGlobal) }}
+		{{- if and .Generator (not .IsPersistent) }}
 		{
 			var err error
 			{{- if .Generator.CommandPackageName }}
@@ -1120,7 +1120,7 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 
 	{{- range .Parameters }}
-	{{- if and .IsGlobal .Generator }}
+	{{- if and .IsPersistent .Generator }}
 	{
 		var err error
 		{{- if .Generator.CommandPackageName }}

@@ -62,7 +62,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- $parentStructName = .Parent.SubCommandStructName }}
 	{{- end }}
 	{{- range .Parameters }}
-	{{- if .IsGlobal }}
+	{{- if .IsPersistent }}
 	{{- if eq .DeclaredIn $subCommandName }}
 	{{- if .Generator }}
 	{
@@ -427,7 +427,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{if .SubCommandFunctionName}}
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
 		{{- range .Parameters }}
-		{{- if and .Generator (not .IsGlobal) }}
+		{{- if and .Generator (not .IsPersistent) }}
 		{
 			var err error
 			{{- if .Generator.CommandPackageName }}

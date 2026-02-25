@@ -424,8 +424,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							if c.IsPersistent {
+								fp.IsPersistent = true
 							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
@@ -462,8 +462,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							if c.IsPersistent {
+								fp.IsPersistent = true
 							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
@@ -500,8 +500,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
+							if c.IsPersistent {
+								fp.IsPersistent = true
 							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
@@ -640,7 +640,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
-	IsGlobal           bool
+	IsPersistent       bool
 	ParserFunc         *model.FuncRef
 	Generator          *model.FuncRef
 }
@@ -809,7 +809,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsPersistent || details.Generator != nil {
 					params[name] = details
 					continue
 				}
@@ -845,7 +845,7 @@ func parseParamDetails(text string) ParsedParam {
 	}
 
 	if reGlobal.MatchString(text) {
-		p.IsGlobal = true
+		p.IsPersistent = true
 		text = reGlobal.ReplaceAllString(text, "")
 	}
 

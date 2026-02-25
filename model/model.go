@@ -81,7 +81,7 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
-	IsGlobal           bool
+	IsPersistent       bool
 	ParserFunc         *FuncRef
 	Generator          *FuncRef
 }
@@ -336,8 +336,8 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
-					if !p.IsGlobal && parentParam.IsGlobal {
-						p.IsGlobal = parentParam.IsGlobal
+					if !p.IsPersistent && parentParam.IsPersistent {
+						p.IsPersistent = parentParam.IsPersistent
 					}
 					if p.Generator == nil && parentParam.Generator != nil {
 						p.Generator = parentParam.Generator
@@ -356,8 +356,8 @@ func (sc *SubCommand) ResolveInheritance() {
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
 						}
-						if !p.IsGlobal && pp.IsGlobal {
-							p.IsGlobal = pp.IsGlobal
+						if !p.IsPersistent && pp.IsPersistent {
+							p.IsPersistent = pp.IsPersistent
 						}
 						if p.Generator == nil && pp.Generator != nil {
 							p.Generator = pp.Generator
