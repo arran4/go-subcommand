@@ -144,6 +144,22 @@ func compareParams(got, expected ParsedParam) bool {
 		return false
 	}
 
+	if got.Required != expected.Required {
+		return false
+	}
+	if got.Global != expected.Global {
+		return false
+	}
+	if got.Generator != expected.Generator {
+		return false
+	}
+	if got.ParserFunc != expected.ParserFunc {
+		return false
+	}
+	if got.ParserPkg != expected.ParserPkg {
+		return false
+	}
+
 	if len(got.Flags) != len(expected.Flags) {
 		return false
 	}

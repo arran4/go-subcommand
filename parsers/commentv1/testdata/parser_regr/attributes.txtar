@@ -1,0 +1,49 @@
+-- input.go --
+package main
+
+// MyCmd is a subcommand `app cmd`
+// Flags:
+//
+//	req: (required) Required param
+//	glob: (global) Global param
+//	custom: (parser: MyParser) Custom parser
+//	pkg: (parser: "pkg".Func) Pkg parser
+//	gen: (generator: MyGen) Generator
+//	mix: (required; global) Mixed
+//	legacy: -f (default: false) Legacy
+func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, legacy bool) {}
+
+-- expected.json --
+{
+  "req": {
+    "Required": true,
+    "Description": "Required param"
+  },
+  "glob": {
+    "Global": true,
+    "Description": "Global param"
+  },
+  "custom": {
+    "ParserFunc": "MyParser",
+    "Description": "Custom parser"
+  },
+  "pkg": {
+    "ParserPkg": "pkg",
+    "ParserFunc": "Func",
+    "Description": "Pkg parser"
+  },
+  "gen": {
+    "Generator": "MyGen",
+    "Description": "Generator"
+  },
+  "mix": {
+    "Required": true,
+    "Global": true,
+    "Description": "Mixed"
+  },
+  "legacy": {
+    "Flags": ["f"],
+    "Default": "false",
+    "Description": "Legacy"
+  }
+}
