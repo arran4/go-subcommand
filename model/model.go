@@ -72,6 +72,10 @@ type FunctionParameter struct {
 	VarArgMin          int
 	VarArgMax          int
 	DeclaredIn         string
+	Required           bool
+	Generator          string
+	ParserFunc         string
+	ParserPkg          string
 }
 
 func (p *FunctionParameter) FlagString() string {
