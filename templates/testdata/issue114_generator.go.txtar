@@ -12,7 +12,7 @@ cmd.go.gotmpl
       "Name": "config",
       "Type": "Config",
       "DeclaredIn": "mycmd",
-      "IsPersistent": true,
+      "IsGlobal": true,
       "Generator": {
         "PackagePath": "example.com/test/pkg",
         "ImportPath": "example.com/test/pkg",

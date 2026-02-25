@@ -39,7 +39,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": true,
+      "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
     },
@@ -54,7 +54,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": true,
+      "IsGlobal": true,
       "ParserFunc": null,
       "Generator": {
         "PackagePath": "rootPkg",
@@ -74,7 +74,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": true,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
         "PackagePath": "",
@@ -94,7 +94,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": true,
-      "IsPersistent": true,
+      "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
     },
@@ -111,7 +111,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": true,
+      "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
     },
@@ -128,7 +128,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
         "PackagePath": "",
@@ -150,7 +150,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "",
         "ImportPath": "",

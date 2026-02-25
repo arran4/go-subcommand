@@ -33,6 +33,7 @@ Subcommands:
 
 
 Flags:
+
     -f              (default: false)   Force action
 
 Positional Arguments:

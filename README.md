@@ -143,11 +143,6 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 *   **Flags:** `-f`, `--flag`. One or more flag aliases.
 *   **Default Value:** `default: value` or `default: "value"`.
-*   **Required:** `(required)`. Marks the flag as required.
-*   **Global:** `(global)`. Marks the flag as persistent (available to subcommands).
-*   **Inherited:** `(from parent)`. Indicates the parameter is inherited from a parent command.
-*   **Custom Parser:** `(parser: FunctionName)` or `(parser: "pkg".Function)`.
-*   **Generator:** `(generator: FunctionName)` or `(generator: "pkg".Function)`. Used for dependency injection or complex initialization.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.
@@ -227,13 +222,11 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
-### Global Flags (Inheritance)
+### Parent Flags (Inheritance)
 
-Subcommands can inherit flags from their parent command. This allows the child command to access the parent's state (like global verbosity or configuration).
+Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to update the parent's state (like global verbosity or configuration).
 
-In the child command, you can either:
-1.  **Implicitly inherit:** If the child command doesn't declare the parameter, it can still access the parent's state via the generated struct (if custom logic is used).
-2.  **Explicitly inherit:** Declare the parameter in the child command and mark it with `(from parent)` to tell `gosubc` to map it to the parent's flag instead of creating a new one.
+Use the `parent-flag: <param_name>` directive.
 
 ```go
 // Parent is a subcommand `app parent`
@@ -243,11 +236,9 @@ In the child command, you can either:
 func Parent(verbose bool) { ... }
 
 // Child is a subcommand `app parent child`
-// Flags:
-//
-//   verbose: (from parent)
+// parent-flag: verbose
 func Child(verbose bool) {
-    // verbose here refers to the same variable as Parent's verbose
+    // verbose parameter here maps to Parent's verbose variable
 }
 ```
 

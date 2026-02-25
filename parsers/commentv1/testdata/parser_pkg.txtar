@@ -28,7 +28,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
         "PackagePath": "",
@@ -48,7 +48,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
         "PackagePath": "example.com/pkg",
@@ -68,7 +68,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "",
         "ImportPath": "",
@@ -90,7 +90,7 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "IsPersistent": false,
+      "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "encoding/json",
         "ImportPath": "encoding/json",

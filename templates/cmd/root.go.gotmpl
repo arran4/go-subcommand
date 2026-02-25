@@ -121,7 +121,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
 		{{- range .Parameters }}
-		{{- if and .Generator (not .IsPersistent) }}
+		{{- if and .Generator (not .IsGlobal) }}
 		{
 			var err error
 			{{- if .Generator.CommandPackageName }}
@@ -165,9 +165,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.New{{.SubCommandStructName}}() })
 		c.Commands["{{.SubCommandName | lower}}"] = subCmd
-		{{- range .Aliases}}
+		{{range .Aliases}}
 		c.Commands["{{. | lower}}"] = subCmd
-		{{- end}}
+		{{end}}
 	}
 	{{end -}}
 	c.Commands["help"] = func() Cmd {
@@ -1120,7 +1120,7 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 
 	{{- range .Parameters }}
-	{{- if and .IsPersistent .Generator }}
+	{{- if and .IsGlobal .Generator }}
 	{
 		var err error
 		{{- if .Generator.CommandPackageName }}
