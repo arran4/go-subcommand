@@ -231,7 +231,7 @@ func ListUsers(...) { ... }
 
 Subcommands can inherit flags from their parent command. This allows the child command to access the parent's state (like global verbosity or configuration).
 
-Mark the flag as `(global)` in the parent command. In the child command, you can either:
+Mark the flag as `(global)` in the parent command (required for inheritance). In the child command, you can either:
 1.  **Implicitly inherit:** If the child command doesn't declare the parameter, it can still access the parent's state via the generated struct (if custom logic is used).
 2.  **Explicitly inherit:** Declare the parameter in the child command and mark it with `(from parent)` to tell `gosubc` to map it to the parent's flag instead of creating a new one.
 
