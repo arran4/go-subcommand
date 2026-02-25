@@ -80,6 +80,9 @@ func (c *MyCmd) UsageRecursive() {
 }
 
 func (c *MyCmd) Execute(args []string) error {
+	c.timeout = c.RootCmd.timeout
+	c.count = c.RootCmd.count
+	c.config = c.RootCmd.config
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

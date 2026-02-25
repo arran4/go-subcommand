@@ -30,9 +30,6 @@ func TestParseParamDetails_EdgeCases(t *testing.T) {
 				if !got.IsRequired {
 					t.Error("expected IsRequired to be true")
 				}
-				if !got.IsPersistent {
-					t.Error("expected IsPersistent to be true")
-				}
 			},
 		},
 		{

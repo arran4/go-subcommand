@@ -14,8 +14,7 @@ cmd.go.gotmpl
     {
       "Name": "config",
       "Type": "string",
-      "DeclaredIn": "parent",
-      "IsPersistent": true
+      "DeclaredIn": "parent"
     }
   ],
   "ImportPath": "example.com/test/cmd/app",

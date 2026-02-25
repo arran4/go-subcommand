@@ -72,6 +72,8 @@ func (c *MyCmd) UsageRecursive() {
 }
 
 func (c *MyCmd) Execute(args []string) error {
+	c.filename = c.RootCmd.filename
+	c.verbose = c.RootCmd.verbose
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

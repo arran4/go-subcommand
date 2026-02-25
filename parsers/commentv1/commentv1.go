@@ -424,9 +424,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsPersistent {
-								fp.IsPersistent = true
-							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
 							}
@@ -462,9 +459,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.IsRequired {
 								fp.IsRequired = true
 							}
-							if c.IsPersistent {
-								fp.IsPersistent = true
-							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
 							}
@@ -499,9 +493,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.IsRequired {
 								fp.IsRequired = true
-							}
-							if c.IsPersistent {
-								fp.IsPersistent = true
 							}
 							if c.ParserFunc != nil {
 								fp.ParserFunc = c.ParserFunc
@@ -624,7 +615,6 @@ var (
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
 	reRequired        = regexp.MustCompile(`\(required\)`)
-	reGlobal          = regexp.MustCompile(`\(global\)`)
 	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
 	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
 	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
@@ -644,7 +634,6 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	IsRequired         bool
-	IsPersistent       bool
 	ParserFunc         *model.FuncRef
 	Generator          *model.FuncRef
 }
@@ -822,7 +811,6 @@ func parseParamDetails(text string) ParsedParam {
 				p.IsRequired = true
 				consumed = true
 			} else if part == "global" {
-				p.IsPersistent = true
 				consumed = true
 			} else if part == "from parent" {
 				p.Inherited = true

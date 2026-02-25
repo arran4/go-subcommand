@@ -12,7 +12,6 @@ cmd.go.gotmpl
       "Name": "config",
       "Type": "Config",
       "DeclaredIn": "mycmd",
-      "IsPersistent": true,
       "Generator": {
         "PackagePath": "example.com/test/pkg",
         "ImportPath": "example.com/test/pkg",
@@ -72,13 +71,6 @@ func (c *MyCmd) UsageRecursive() {
 }
 
 func (c *MyCmd) Execute(args []string) error {
-	{
-		var err error
-		c.config, err = pkg.LoadConfig()
-		if err != nil {
-			return fmt.Errorf("failed to generate config: %w", err)
-		}
-	}
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -153,6 +145,13 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *MyCmd) error {
+		{
+			var err error
+			c.config, err = pkg.LoadConfig()
+			if err != nil {
+				return fmt.Errorf("failed to generate config: %w", err)
+			}
+		}
 
 		MyCmd(c.config)
 		return nil

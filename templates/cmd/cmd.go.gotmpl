@@ -61,10 +61,10 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- if .Parent }}
 	{{- $parentStructName = .Parent.SubCommandStructName }}
 	{{- end }}
+	{{- $cmd := . }}
 	{{- range .Parameters }}
-	{{- if .IsPersistent }}
 	{{- if eq .DeclaredIn $subCommandName }}
-	{{- if .Generator }}
+	{{- if and .Generator ($cmd.IsParameterUsedByDescendants .Name) }}
 	{
 		var err error
 		{{- if .Generator.CommandPackageName }}
@@ -79,7 +79,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{- else }}
 	c.{{.Name}} = c.{{$parentStructName}}.{{.Name}}
-	{{- end }}
 	{{- end }}
 	{{- end }}
 	{{- $needsRemainingArgs := false }}
@@ -426,8 +425,9 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	set.Usage = v.Usage
 	{{if .SubCommandFunctionName}}
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
+		{{- $cmd := . }}
 		{{- range .Parameters }}
-		{{- if and .Generator (not .IsPersistent) }}
+		{{- if and .Generator (not ($cmd.IsParameterUsedByDescendants .Name)) (eq .DeclaredIn $cmd.SubCommandName) }}
 		{
 			var err error
 			{{- if .Generator.CommandPackageName }}

@@ -120,8 +120,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 {{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
+		{{- $cmd := . }}
 		{{- range .Parameters }}
-		{{- if and .Generator (not .IsPersistent) }}
+		{{- if and .Generator (not ($cmd.IsParameterUsedByDescendants .Name)) (eq .DeclaredIn $cmd.MainCmdName) }}
 		{
 			var err error
 			{{- if .Generator.CommandPackageName }}
@@ -1119,8 +1120,9 @@ func (c *RootCmd) Execute(args []string) error {
 		}
 	}
 
+	{{- $cmd := . }}
 	{{- range .Parameters }}
-	{{- if and .IsPersistent .Generator }}
+	{{- if and .Generator ($cmd.IsParameterUsedByDescendants .Name) }}
 	{
 		var err error
 		{{- if .Generator.CommandPackageName }}

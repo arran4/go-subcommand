@@ -81,7 +81,6 @@ type FunctionParameter struct {
 	VarArgMax          int
 	DeclaredIn         string
 	IsRequired         bool
-	IsPersistent       bool
 	ParserFunc         *FuncRef
 	Generator          *FuncRef
 }
@@ -336,9 +335,6 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
-					if !p.IsPersistent && parentParam.IsPersistent {
-						p.IsPersistent = parentParam.IsPersistent
-					}
 					if p.Generator == nil && parentParam.Generator != nil {
 						p.Generator = parentParam.Generator
 					}
@@ -355,9 +351,6 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
-						}
-						if !p.IsPersistent && pp.IsPersistent {
-							p.IsPersistent = pp.IsPersistent
 						}
 						if p.Generator == nil && pp.Generator != nil {
 							p.Generator = pp.Generator
@@ -388,6 +381,40 @@ func (cmd *Command) ResolveInheritance() {
 	for _, sc := range cmd.SubCommands {
 		sc.ResolveInheritance()
 	}
+}
+
+func (c *Command) IsParameterUsedByDescendants(name string) bool {
+	for _, sc := range c.SubCommands {
+		if sc.UsesParameter(name, c.MainCmdName) {
+			return true
+		}
+	}
+	return false
+}
+
+func (sc *SubCommand) IsParameterUsedByDescendants(name string) bool {
+	for _, child := range sc.SubCommands {
+		if child.UsesParameter(name, sc.SubCommandName) {
+			return true
+		}
+	}
+	return false
+}
+
+func (sc *SubCommand) UsesParameter(name string, declaredIn string) bool {
+	// Check local parameters
+	for _, p := range sc.Parameters {
+		if p.Name == name && p.DeclaredIn == declaredIn {
+			return true
+		}
+	}
+	// Check children
+	for _, child := range sc.SubCommands {
+		if child.UsesParameter(name, declaredIn) {
+			return true
+		}
+	}
+	return false
 }
 
 // RequiredImports returns a deduplicated list of imports needed for custom parsers.
