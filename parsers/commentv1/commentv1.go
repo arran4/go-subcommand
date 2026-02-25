@@ -814,9 +814,10 @@ func extractParamAttributes(text string) (string, string) {
 	if strings.HasPrefix(text, "(") {
 		open := 0
 		for i, r := range text {
-			if r == '(' {
+			switch r {
+			case '(':
 				open++
-			} else if r == ')' {
+			case ')':
 				open--
 			}
 			if open == 0 {
@@ -829,9 +830,10 @@ func extractParamAttributes(text string) (string, string) {
 	if strings.HasSuffix(text, ")") {
 		open := 0
 		for i := len(text) - 1; i >= 0; i-- {
-			if text[i] == ')' {
+			switch text[i] {
+			case ')':
 				open++
-			} else if text[i] == '(' {
+			case '(':
 				open--
 			}
 			if open == 0 {
@@ -854,9 +856,10 @@ func splitSafe(s string, sep rune) []string {
 			inQuote = !inQuote
 		}
 		if !inQuote {
-			if r == '(' {
+			switch r {
+			case '(':
 				depth++
-			} else if r == ')' {
+			case ')':
 				depth--
 			}
 		}
