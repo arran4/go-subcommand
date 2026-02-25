@@ -1,0 +1,107 @@
+-- input.comment --
+TestCmd is a subcommand `TestCmd`
+
+param P1: (parser NewThing;required;global;aka nt)
+param P2: (required) some description
+param P3: some description (required)
+param P4: some description (required) here
+param P5: (parser: OldThing)
+
+-- expected.json --
+{
+  "CmdName": "TestCmd",
+  "SubCommandSequence": null,
+  "Description": "",
+  "ExtendedHelp": "",
+  "Aliases": null,
+  "Params": {
+    "P1": {
+      "Flags": [
+        "nt"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": true,
+      "IsGlobal": true,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "NewThing"
+      },
+      "Generator": null
+    },
+    "P2": {
+      "Flags": null,
+      "Default": "",
+      "Description": "some description",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": true,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "P3": {
+      "Flags": null,
+      "Default": "",
+      "Description": "some description",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": true,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "P4": {
+      "Flags": null,
+      "Default": "",
+      "Description": "some description (required) here",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "P5": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "OldThing"
+      },
+      "Generator": null
+    }
+  },
+  "Ok": true
+}
