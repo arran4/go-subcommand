@@ -1,7 +1,7 @@
 -- input.comment --
 TestCmd is a subcommand `TestCmd`
 
-param P1: (parser NewThing;required;global;flags nt)
+param P1: (parser NewThing;required;global;aka nt)
 param P2: (required) some description
 param P3: some description (required)
 param P4: some description (required) here

@@ -880,13 +880,11 @@ func parseParamDetails(text string) ParsedParam {
 				}
 				continue
 			}
-			if strings.HasPrefix(lowerPart, "alias") || strings.HasPrefix(lowerPart, "aka") || strings.HasPrefix(lowerPart, "flags") {
+			if strings.HasPrefix(lowerPart, "alias") || strings.HasPrefix(lowerPart, "aka") {
 				var val string
 				if strings.HasPrefix(lowerPart, "aliases") {
 					val = part[7:]
 				} else if strings.HasPrefix(lowerPart, "alias") {
-					val = part[5:]
-				} else if strings.HasPrefix(lowerPart, "flags") {
 					val = part[5:]
 				} else {
 					val = part[3:]
