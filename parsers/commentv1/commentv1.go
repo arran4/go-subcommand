@@ -627,6 +627,10 @@ var (
 	reGlobal          = regexp.MustCompile(`\(global\)`)
 	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
 	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
+	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
+	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
+	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	reFlag            = regexp.MustCompile(`-[\w-]+`)
 )
 
 type ParsedParam struct {
@@ -888,28 +892,25 @@ func parseParamDetails(text string) ParsedParam {
 		text = strings.ReplaceAll(text, "(from parent)", "")
 	}
 
-	defaultRegex := regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
-	loc := defaultRegex.FindStringSubmatchIndex(text)
+	loc := reDefaultValue.FindStringSubmatchIndex(text)
 	if loc != nil {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
 		text = text[:loc[0]] + text[loc[1]:]
 	}
 
 	// Positional arguments: @1, @2, etc.
-	posArgRegex := regexp.MustCompile(`@(\d+)`)
-	posArgMatches := posArgRegex.FindStringSubmatch(text)
+	posArgMatches := rePositionalArg.FindStringSubmatch(text)
 	if posArgMatches != nil {
 		p.IsPositional = true
 		if _, err := fmt.Sscanf(posArgMatches[1], "%d", &p.PositionalArgIndex); err != nil {
 			// fallback/ignore, though usually this regex implies digits
 			p.PositionalArgIndex = 0
 		}
-		text = posArgRegex.ReplaceAllString(text, "")
+		text = rePositionalArg.ReplaceAllString(text, "")
 	}
 
 	// Varargs constraints: 1...3 or ...
-	varArgRangeRegex := regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
-	varArgRangeMatches := varArgRangeRegex.FindStringSubmatch(text)
+	varArgRangeMatches := reVarArgRange.FindStringSubmatch(text)
 	if varArgRangeMatches != nil {
 		p.IsVarArg = true
 		if varArgRangeMatches[3] == "..." {
@@ -922,11 +923,10 @@ func parseParamDetails(text string) ParsedParam {
 				p.VarArgMax = 0
 			}
 		}
-		text = varArgRangeRegex.ReplaceAllString(text, "")
+		text = reVarArgRange.ReplaceAllString(text, "")
 	}
 
-	flagRegex := regexp.MustCompile(`-[\w-]+`)
-	flagMatches := flagRegex.FindAllString(text, -1)
+	flagMatches := reFlag.FindAllString(text, -1)
 
 	seenFlags := make(map[string]bool)
 	for _, f := range flagMatches {
@@ -944,7 +944,7 @@ func parseParamDetails(text string) ParsedParam {
 		return p.Flags[i] < p.Flags[j]
 	})
 
-	clean := flagRegex.ReplaceAllString(text, "")
+	clean := reFlag.ReplaceAllString(text, "")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)
