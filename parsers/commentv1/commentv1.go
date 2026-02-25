@@ -667,9 +667,9 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if idx := strings.Index(line, "is a subcommand"); idx != -1 {
+		if idx := strings.Index(line, DirectiveIsSubcommand); idx != -1 {
 			ok = true
-			subCmdPart := line[idx+len("is a subcommand"):]
+			subCmdPart := line[idx+len(DirectiveIsSubcommand):]
 
 			start := strings.Index(subCmdPart, "`")
 			end := strings.LastIndex(subCmdPart, "`")
@@ -714,7 +714,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		lowerTrimmedLine := strings.ToLower(trimmedLine)
-		if strings.HasPrefix(lowerTrimmedLine, "aliases:") || strings.HasPrefix(lowerTrimmedLine, "alias:") {
+		if strings.HasPrefix(lowerTrimmedLine, DirectiveAliasesPrefix) || strings.HasPrefix(lowerTrimmedLine, DirectiveAliasPrefix) {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {
 				parts := strings.Split(lineParts[1], ",")
@@ -728,7 +728,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
-		if trimmedLine == "Flags:" {
+		if trimmedLine == DirectiveFlags {
 			inFlagsBlock = true
 			justEnteredFlagsBlock = true
 			continue
@@ -751,11 +751,11 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		if !parsedParam {
-			if strings.HasPrefix(trimmedLine, "flag ") {
-				paramLine = strings.TrimPrefix(trimmedLine, "flag ")
+			if strings.HasPrefix(trimmedLine, PrefixFlag) {
+				paramLine = strings.TrimPrefix(trimmedLine, PrefixFlag)
 				parsedParam = true
-			} else if strings.HasPrefix(trimmedLine, "param ") {
-				paramLine = strings.TrimPrefix(trimmedLine, "param ")
+			} else if strings.HasPrefix(trimmedLine, PrefixParam) {
+				paramLine = strings.TrimPrefix(trimmedLine, PrefixParam)
 				parsedParam = true
 			} else if matches := reImplicitFormat.FindStringSubmatch(trimmedLine); matches != nil {
 				if reImplicitCheck.MatchString(matches[2]) {
@@ -903,13 +903,13 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		}
 
 		switch key {
-		case "required":
+		case AttributeRequired:
 			p.Required = true
-		case "global":
+		case AttributeGlobal:
 			p.Inherited = true
-		case "generator":
+		case AttributeGenerator:
 			p.Generator = val
-		case "parser":
+		case AttributeParser:
 			if strings.Contains(val, "\"") {
 				// parser: "pkg/path".Func
 				// parser: "pkg".Func
@@ -931,7 +931,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.ParserFunc = val
 				}
 			}
-		case "aka", "alias", "aliases":
+		case AttributeAka, AttributeAlias, AttributeAliases:
 			vals := strings.Split(val, ",")
 			for _, v := range vals {
 				v = strings.TrimSpace(v)
@@ -939,12 +939,12 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.Flags = append(p.Flags, strings.TrimLeft(v, "-"))
 				}
 			}
-		case "default":
+		case AttributeDefault:
 			p.Default = val
 			if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
 				p.Default = strings.Trim(p.Default, "\"")
 			}
-		case "from parent", "inherited":
+		case AttributeFromParent, AttributeInherited:
 			p.Inherited = true
 		}
 	}
