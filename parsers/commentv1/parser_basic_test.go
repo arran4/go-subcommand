@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-//go:embed testdata/legacy/*
-var legacyTestData embed.FS
+//go:embed testdata/basic/*
+var basicTestData embed.FS
 
-func TestParseGoFile_Legacy(t *testing.T) {
+func TestParseGoFile(t *testing.T) {
 	tests := []struct {
 		name            string
 		filename        string
@@ -59,7 +59,7 @@ func TestParseGoFile_Legacy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src, err := legacyTestData.ReadFile("testdata/legacy/" + tt.filename)
+			src, err := basicTestData.ReadFile("testdata/basic/" + tt.filename)
 			if err != nil {
 				t.Fatalf("failed to read test file %s: %v", tt.filename, err)
 			}
@@ -77,13 +77,13 @@ func TestParseGoFile_Legacy(t *testing.T) {
 
 			if tt.wantMissing {
 				if len(cmdTree.Commands) > 0 {
-					t.Errorf("Expected no commands, but got keys: %v", getKeysLegacy(cmdTree.Commands))
+					t.Errorf("Expected no commands, but got keys: %v", getKeys(cmdTree.Commands))
 				}
 				return
 			}
 
 			if _, ok := cmdTree.Commands[tt.wantCmdName]; !ok {
-				t.Errorf("Expected command '%s' to be created, but got keys: %v", tt.wantCmdName, getKeysLegacy(cmdTree.Commands))
+				t.Errorf("Expected command '%s' to be created, but got keys: %v", tt.wantCmdName, getKeys(cmdTree.Commands))
 			} else {
 				ct := cmdTree.Commands[tt.wantCmdName]
 				if ct.Description != tt.wantDescription {
@@ -102,7 +102,7 @@ func TestParseGoFile_Legacy(t *testing.T) {
 	}
 }
 
-func getKeysLegacy(m map[string]*CommandTree) []string {
+func getKeys(m map[string]*CommandTree) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -110,7 +110,7 @@ func getKeysLegacy(m map[string]*CommandTree) []string {
 	return keys
 }
 
-func TestParseSubCommandComments_Legacy(t *testing.T) {
+func TestParseSubCommandCommentsBasic(t *testing.T) {
 	tests := []struct {
 		name                   string
 		text                   string
@@ -220,7 +220,7 @@ func TestParseSubCommandComments_Legacy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			text := tt.text
 			if tt.filename != "" {
-				src, err := legacyTestData.ReadFile("testdata/legacy/" + tt.filename)
+				src, err := basicTestData.ReadFile("testdata/basic/" + tt.filename)
 				if err != nil {
 					t.Fatalf("failed to read test file %s: %v", tt.filename, err)
 				}
