@@ -22,17 +22,18 @@ func TestParseSubCommandComments(t *testing.T) {
 		if !strings.HasSuffix(entry.Name(), ".txtar") {
 			continue
 		}
+
+		data, err := os.ReadFile(filepath.Join("testdata", entry.Name()))
+		if err != nil {
+			t.Fatalf("failed to read file: %v", err)
+		}
+		archive := txtar.Parse(data)
+
+		if !parsers.ShouldRunTest(archive, "commentv1 parsing tests") {
+			continue
+		}
+
 		t.Run(entry.Name(), func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("testdata", entry.Name()))
-			if err != nil {
-				t.Fatalf("failed to read file: %v", err)
-			}
-			archive := txtar.Parse(data)
-
-			if !parsers.ShouldRunTest(archive, "commentv1 parsing tests") {
-				t.Skip("skipping test based on tests.txt")
-			}
-
 			var inputComment string
 			var expectedOutput []byte
 

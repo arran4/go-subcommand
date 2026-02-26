@@ -27,18 +27,19 @@ func TestE2E_Generation(t *testing.T) {
 		if !strings.HasSuffix(entry.Name(), ".txtar") {
 			continue
 		}
+
+		content, err := e2eTemplatesFS.ReadFile("templates/testdata/e2e/" + entry.Name())
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", entry.Name(), err)
+		}
+
+		archive := txtar.Parse(content)
+
+		if !parsers.ShouldRunTest(archive, "e2e generation tests") {
+			continue
+		}
+
 		t.Run(entry.Name(), func(t *testing.T) {
-			content, err := e2eTemplatesFS.ReadFile("templates/testdata/e2e/" + entry.Name())
-			if err != nil {
-				t.Fatalf("failed to read %s: %v", entry.Name(), err)
-			}
-
-			archive := txtar.Parse(content)
-
-			if !parsers.ShouldRunTest(archive, "e2e generation tests") {
-				t.Skip("skipping test based on tests.txt")
-			}
-
 			// Build input FS from txtar
 			inputFS := make(fstest.MapFS)
 			for _, f := range archive.Files {

@@ -29,17 +29,18 @@ func TestParserRegression(t *testing.T) {
 		if !strings.HasSuffix(entry.Name(), ".txtar") {
 			continue
 		}
+
+		content, err := parserRegrFS.ReadFile("testdata/parser_regr/" + entry.Name())
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", entry.Name(), err)
+		}
+
+		archive := txtar.Parse(content)
+		if !parsers.ShouldRunTest(archive, "commentv1 regression tests") {
+			continue
+		}
+
 		t.Run(entry.Name(), func(t *testing.T) {
-			content, err := parserRegrFS.ReadFile("testdata/parser_regr/" + entry.Name())
-			if err != nil {
-				t.Fatalf("failed to read %s: %v", entry.Name(), err)
-			}
-
-			archive := txtar.Parse(content)
-			if !parsers.ShouldRunTest(archive, "commentv1 regression tests") {
-				t.Skip("skipping test based on tests.txt")
-			}
-
 			var inputSrc []byte
 			var expectedJSON []byte
 
