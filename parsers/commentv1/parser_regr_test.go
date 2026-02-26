@@ -9,7 +9,6 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	"strings"
 	"testing"
 
 	"github.com/arran4/go-subcommand/parsers"
@@ -20,111 +19,95 @@ import (
 var parserRegrFS embed.FS
 
 func TestParserRegression(t *testing.T) {
-	dirEntries, err := parserRegrFS.ReadDir("testdata/parser_regr")
-	if err != nil {
-		t.Fatalf("failed to read testdata dir: %v", err)
-	}
+	// Handler for "commentv1 regression tests"
+	runRegressionTest := func(t *testing.T, archive *txtar.Archive) {
+		var inputSrc []byte
+		var expectedJSON []byte
 
-	for _, entry := range dirEntries {
-		if !strings.HasSuffix(entry.Name(), ".txtar") {
-			continue
+		for _, f := range archive.Files {
+			switch f.Name {
+			case "input.go":
+				inputSrc = f.Data
+			case "expected.json":
+				expectedJSON = f.Data
+			}
 		}
 
-		content, err := parserRegrFS.ReadFile("testdata/parser_regr/" + entry.Name())
+		if inputSrc == nil {
+			t.Fatalf("input.go not found")
+		}
+		if expectedJSON == nil {
+			t.Fatalf("expected.json not found")
+		}
+
+		// 1. Verify input source is gofmt-compliant
+		formattedSrc, err := format.Source(inputSrc)
 		if err != nil {
-			t.Fatalf("failed to read %s: %v", entry.Name(), err)
+			t.Fatalf("Failed to format source: %v", err)
 		}
 
-		archive := txtar.Parse(content)
-		if !parsers.ShouldRunTest(archive, "commentv1 regression tests") {
-			continue
+		if !bytes.Equal(bytes.TrimSpace(formattedSrc), bytes.TrimSpace(inputSrc)) {
+			t.Errorf("input.go is not gofmt compliant. Please run gofmt on the txtar content.\nDiff:\n%s",
+				diff(string(inputSrc), string(formattedSrc)))
 		}
 
-		t.Run(entry.Name(), func(t *testing.T) {
-			var inputSrc []byte
-			var expectedJSON []byte
+		// 2. Parse the formatted source
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, "", formattedSrc, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("Failed to parse source: %v", err)
+		}
 
-			for _, f := range archive.Files {
-				switch f.Name {
-				case "input.go":
-					inputSrc = f.Data
-				case "expected.json":
-					expectedJSON = f.Data
+		// Find the function doc comment
+		// Assuming there is at least one function
+		var funcDecl *ast.FuncDecl
+		for _, decl := range f.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				if fn.Doc != nil {
+					funcDecl = fn
+					break
 				}
 			}
+		}
 
-			if inputSrc == nil {
-				t.Fatalf("input.go not found in %s", entry.Name())
-			}
-			if expectedJSON == nil {
-				t.Fatalf("expected.json not found in %s", entry.Name())
-			}
+		if funcDecl == nil {
+			t.Fatalf("No function with doc comment found in input.go")
+		}
 
-			// 1. Verify input source is gofmt-compliant
-			formattedSrc, err := format.Source(inputSrc)
-			if err != nil {
-				t.Fatalf("Failed to format source: %v", err)
-			}
+		// 3. Extract params using the parser
+		_, _, _, _, _, gotParams, ok := ParseSubCommandComments(funcDecl.Doc.Text())
+		if !ok {
+			t.Fatalf("ParseSubCommandComments returned !ok")
+		}
 
-			if !bytes.Equal(bytes.TrimSpace(formattedSrc), bytes.TrimSpace(inputSrc)) {
-				t.Errorf("input.go is not gofmt compliant. Please run gofmt on the txtar content.\nDiff:\n%s",
-					diff(string(inputSrc), string(formattedSrc)))
-			}
+		// 4. Compare against expected JSON
+		var expectedParams map[string]ParsedParam
+		if err := json.Unmarshal(expectedJSON, &expectedParams); err != nil {
+			t.Fatalf("Failed to unmarshal expected.json: %v", err)
+		}
 
-			// 2. Parse the formatted source
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, "", formattedSrc, parser.ParseComments)
-			if err != nil {
-				t.Fatalf("Failed to parse source: %v", err)
-			}
-
-			// Find the function doc comment
-			// Assuming there is at least one function
-			var funcDecl *ast.FuncDecl
-			for _, decl := range f.Decls {
-				if fn, ok := decl.(*ast.FuncDecl); ok {
-					if fn.Doc != nil {
-						funcDecl = fn
-						break
-					}
-				}
+		for name, expected := range expectedParams {
+			got, found := gotParams[name]
+			if !found {
+				t.Errorf("Expected param %q not found", name)
+				continue
 			}
 
-			if funcDecl == nil {
-				t.Fatalf("No function with doc comment found in input.go")
+			if !compareParams(got, expected) {
+				t.Errorf("Param %q mismatch.\nGot:      %+v\nExpected: %+v", name, got, expected)
 			}
-
-			// 3. Extract params using the parser
-			_, _, _, _, _, gotParams, ok := ParseSubCommandComments(funcDecl.Doc.Text())
-			if !ok {
-				t.Fatalf("ParseSubCommandComments returned !ok")
+		}
+		// Also check for extra params
+		for name := range gotParams {
+			if _, found := expectedParams[name]; !found {
+				t.Errorf("Unexpected param %q found", name)
 			}
-
-			// 4. Compare against expected JSON
-			var expectedParams map[string]ParsedParam
-			if err := json.Unmarshal(expectedJSON, &expectedParams); err != nil {
-				t.Fatalf("Failed to unmarshal expected.json: %v", err)
-			}
-
-			for name, expected := range expectedParams {
-				got, found := gotParams[name]
-				if !found {
-					t.Errorf("Expected param %q not found", name)
-					continue
-				}
-
-				if !compareParams(got, expected) {
-					t.Errorf("Param %q mismatch.\nGot:      %+v\nExpected: %+v", name, got, expected)
-				}
-			}
-			// Also check for extra params
-			for name := range gotParams {
-				if _, found := expectedParams[name]; !found {
-					t.Errorf("Unexpected param %q found", name)
-				}
-			}
-		})
+		}
 	}
+
+	parsers.RunTxtarTests(t, parserRegrFS, "testdata/parser_regr", map[string]func(*testing.T, *txtar.Archive){
+		"commentv1 regression tests": runRegressionTest,
+	}, runRegressionTest)
 }
 
 func compareParams(got, expected ParsedParam) bool {
