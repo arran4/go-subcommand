@@ -9,6 +9,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -144,19 +145,16 @@ func compareParams(got, expected ParsedParam) bool {
 		return false
 	}
 
-	if got.Required != expected.Required {
+	if got.IsRequired != expected.IsRequired {
 		return false
 	}
 	if got.Inherited != expected.Inherited {
 		return false
 	}
-	if got.Generator != expected.Generator {
+	if !reflect.DeepEqual(got.Generator, expected.Generator) {
 		return false
 	}
-	if got.ParserFunc != expected.ParserFunc {
-		return false
-	}
-	if got.ParserPkg != expected.ParserPkg {
+	if !reflect.DeepEqual(got.Parser, expected.Parser) {
 		return false
 	}
 

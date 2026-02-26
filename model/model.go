@@ -162,8 +162,7 @@ type FunctionParameter struct {
 	DeclaredIn         string
 	// IsRequired indicates that the parameter is mandatory.
 	// If a required flag is missing, execution will fail.
-	// Required indicates if the parameter is mandatory.
-	Required           bool
+	IsRequired           bool
 	// Parser holds the configuration for parsing the parameter value.
 	Parser ParserConfig
 	// Generator holds the configuration for generating the parameter value.

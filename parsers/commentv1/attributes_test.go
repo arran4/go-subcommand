@@ -3,6 +3,8 @@ package commentv1
 import (
 	"reflect"
 	"testing"
+
+	"github.com/arran4/go-subcommand/model"
 )
 
 func TestExtractParamAttributes(t *testing.T) {
@@ -79,7 +81,7 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Required",
 			attrs: "required",
 			wantParam: ParsedParam{
-				Required: true,
+				IsRequired: true,
 			},
 		},
 		{
@@ -93,30 +95,54 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Parser Simple",
 			attrs: "parser: MyFunc",
 			wantParam: ParsedParam{
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{
+					Type: model.ParserTypeCustom,
+					Func: &model.FuncRef{
+						FunctionName: "MyFunc",
+					},
+				},
 			},
 		},
 		{
 			name:  "Parser Package",
 			attrs: "parser: pkg.MyFunc",
 			wantParam: ParsedParam{
-				ParserPkg:  "pkg",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{
+					Type: model.ParserTypeCustom,
+					Func: &model.FuncRef{
+						ImportPath:         "pkg",
+						PackagePath:        "pkg",
+						CommandPackageName: "pkg",
+						FunctionName:       "MyFunc",
+					},
+				},
 			},
 		},
 		{
 			name:  "Parser String Import",
 			attrs: `parser: "github.com/foo/bar".MyFunc`,
 			wantParam: ParsedParam{
-				ParserPkg:  "github.com/foo/bar",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{
+					Type: model.ParserTypeCustom,
+					Func: &model.FuncRef{
+						ImportPath:         "github.com/foo/bar",
+						PackagePath:        "github.com/foo/bar",
+						CommandPackageName: "bar",
+						FunctionName:       "MyFunc",
+					},
+				},
 			},
 		},
 		{
 			name:  "Generator",
 			attrs: "generator: MyGen",
 			wantParam: ParsedParam{
-				Generator: "MyGen",
+				Generator: model.GeneratorConfig{
+					Type: model.SourceTypeGenerator,
+					Func: &model.FuncRef{
+						FunctionName: "MyGen",
+					},
+				},
 			},
 		},
 		{
@@ -130,10 +156,15 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Multiple",
 			attrs: "required; global; parser: func; aka: f",
 			wantParam: ParsedParam{
-				Required:   true,
+				IsRequired: true,
 				Inherited:  true,
-				ParserFunc: "func",
-				Flags:      []string{"f"},
+				Parser: model.ParserConfig{
+					Type: model.ParserTypeCustom,
+					Func: &model.FuncRef{
+						FunctionName: "func",
+					},
+				},
+				Flags: []string{"f"},
 			},
 		},
 		{
@@ -169,8 +200,13 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Mixed Parser with Comma",
 			attrs: `parser: func(a,b); required`,
 			wantParam: ParsedParam{
-				ParserFunc: "func(a,b)",
-				Required:   true,
+				Parser: model.ParserConfig{
+					Type: model.ParserTypeCustom,
+					Func: &model.FuncRef{
+						FunctionName: "func(a,b)",
+					},
+				},
+				IsRequired: true,
 			},
 		},
 	}
@@ -196,7 +232,7 @@ func TestParseParamDetails_Integration(t *testing.T) {
 			name: "Start Block",
 			text: "(required) Description",
 			want: ParsedParam{
-				Required:    true,
+				IsRequired:  true,
 				Description: "Description",
 			},
 		},
@@ -212,7 +248,7 @@ func TestParseParamDetails_Integration(t *testing.T) {
 			name: "Mixed with Flag",
 			text: "(required) -f Description",
 			want: ParsedParam{
-				Required:    true,
+				IsRequired:  true,
 				Flags:       []string{"f"},
 				Description: "Description",
 			},
@@ -221,8 +257,8 @@ func TestParseParamDetails_Integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := parseParamDetails(tt.text)
-			if got.Required != tt.want.Required {
-				t.Errorf("Required = %v, want %v", got.Required, tt.want.Required)
+			if got.IsRequired != tt.want.IsRequired {
+				t.Errorf("IsRequired = %v, want %v", got.IsRequired, tt.want.IsRequired)
 			}
 			if got.Inherited != tt.want.Inherited {
 				t.Errorf("Inherited = %v, want %v", got.Inherited, tt.want.Inherited)

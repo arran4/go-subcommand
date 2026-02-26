@@ -37,7 +37,7 @@ Flags:
       "IsVarArg": false,
       "VarArgMin": 0,
       "VarArgMax": 0,
-      "Inherited": false,
+      "Inherited": true,
       "IsRequired": false,
       "Parser": {
         "Type": "",
@@ -57,7 +57,7 @@ Flags:
       "IsVarArg": false,
       "VarArgMin": 0,
       "VarArgMax": 0,
-      "Inherited": false,
+      "Inherited": true,
       "IsRequired": false,
       "Parser": {
         "Type": "",
@@ -107,7 +107,7 @@ Flags:
       "IsVarArg": false,
       "VarArgMin": 0,
       "VarArgMax": 0,
-      "Inherited": false,
+      "Inherited": true,
       "IsRequired": true,
       "Parser": {
         "Type": "",
@@ -129,7 +129,7 @@ Flags:
       "IsVarArg": false,
       "VarArgMin": 0,
       "VarArgMax": 0,
-      "Inherited": false,
+      "Inherited": true,
       "IsRequired": false,
       "Parser": {
         "Type": "",

@@ -16,7 +16,7 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
 -- expected.json --
 {
   "req": {
-    "Required": true,
+    "IsRequired": true,
     "Description": "Required param"
   },
   "glob": {
@@ -24,20 +24,37 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
     "Description": "Global param"
   },
   "custom": {
-    "ParserFunc": "MyParser",
+    "Parser": {
+        "Type": "custom",
+        "Func": {
+            "FunctionName": "MyParser"
+        }
+    },
     "Description": "Custom parser"
   },
   "pkg": {
-    "ParserPkg": "pkg",
-    "ParserFunc": "Func",
+    "Parser": {
+        "Type": "custom",
+        "Func": {
+            "ImportPath": "pkg",
+            "PackagePath": "pkg",
+            "CommandPackageName": "pkg",
+            "FunctionName": "Func"
+        }
+    },
     "Description": "Pkg parser"
   },
   "gen": {
-    "Generator": "MyGen",
+    "Generator": {
+        "Type": "generator",
+        "Func": {
+            "FunctionName": "MyGen"
+        }
+    },
     "Description": "Generator"
   },
   "mix": {
-    "Required": true,
+    "IsRequired": true,
     "Inherited": true,
     "Description": "Mixed"
   },
