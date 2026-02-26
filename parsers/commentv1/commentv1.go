@@ -398,84 +398,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						inherited := false
 
 						// Start with Preceding (3rd)
-						if len(candidates) > 2 {
-							c := candidates[2]
-							if len(c.Flags) > 0 {
-								fp.FlagAliases = c.Flags
-							}
-							if c.Default != "" {
-								fp.Default = c.Default
-							}
-							if c.Description != "" {
-								fp.Description = c.Description
-							}
-							if c.IsPositional {
-								fp.IsPositional = true
-								fp.PositionalArgIndex = c.PositionalArgIndex
-							}
-							if c.IsVarArg {
-								fp.IsVarArg = true
-								fp.VarArgMin = c.VarArgMin
-								fp.VarArgMax = c.VarArgMax
-							}
-							if c.Inherited {
-								inherited = true
-							}
-							if c.RequiredArg {
-								fp.RequiredArg = true
-							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
-							}
-							if c.ParserFunc != nil {
-								fp.ParserFunc = c.ParserFunc
-							}
-							if c.Generator != nil {
-								fp.Generator = c.Generator
-							}
-						}
-
-						// Merge Inline (2nd)
-						if len(candidates) > 1 {
-							c := candidates[1]
-							if len(c.Flags) > 0 {
-								fp.FlagAliases = c.Flags
-							}
-							if c.Default != "" {
-								fp.Default = c.Default
-							}
-							if c.Description != "" {
-								fp.Description = c.Description
-							}
-							if c.IsPositional {
-								fp.IsPositional = true
-								fp.PositionalArgIndex = c.PositionalArgIndex
-							}
-							if c.IsVarArg {
-								fp.IsVarArg = true
-								fp.VarArgMin = c.VarArgMin
-								fp.VarArgMax = c.VarArgMax
-							}
-							if c.Inherited {
-								inherited = true
-							}
-							if c.RequiredArg {
-								fp.RequiredArg = true
-							}
-							if c.IsGlobal {
-								fp.IsGlobal = true
-							}
-							if c.ParserFunc != nil {
-								fp.ParserFunc = c.ParserFunc
-							}
-							if c.Generator != nil {
-								fp.Generator = c.Generator
-							}
-						}
-
-						// Merge Flags Block (Top)
-						if len(candidates) > 0 {
-							c := candidates[0]
+						for i := len(candidates) - 1; i >= 0; i-- {
+							c := candidates[i]
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
@@ -627,6 +551,7 @@ var (
 	reGlobal          = regexp.MustCompile(`\(global\)`)
 	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
 	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
+	reImplicitParam   = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 )
 
 type ParsedParam struct {
@@ -644,8 +569,6 @@ type ParsedParam struct {
 	ParserFunc         *model.FuncRef
 	Generator          *model.FuncRef
 }
-
-var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
