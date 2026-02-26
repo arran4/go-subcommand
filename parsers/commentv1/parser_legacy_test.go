@@ -1,96 +1,76 @@
 package commentv1
 
 import (
+	"embed"
 	"go/token"
 	"reflect"
 	"strings"
 	"testing"
 )
 
+//go:embed testdata/legacy/*
+var legacyTestData embed.FS
+
 func TestParseGoFile_Legacy(t *testing.T) {
 	tests := []struct {
 		name            string
-		src             string
+		filename        string
 		wantCmdName     string
 		wantDescription string
 		wantSubCommands []string
 		wantMissing     bool
 	}{
 		{
-			name: "Implicit Command Name",
-			src: `package main
-
-// Parent is a subcommand that Does work in a directory
-func Parent(dir string) {}
-`,
+			name:            "Implicit Command Name",
+			filename:        "go_implicit_cmd.go",
 			wantCmdName:     "parent",
 			wantDescription: "Does work in a directory",
 		},
 		{
-			name: "Explicit Command Name",
-			src: `package main
-
-// Parent is a subcommand ` + "`my-parent`" + ` that Does work explicitly
-func Parent(dir string) {}
-`,
+			name:            "Explicit Command Name",
+			filename:        "go_explicit_cmd.go",
 			wantCmdName:     "my-parent",
 			wantDescription: "Does work explicitly",
 		},
 		{
-			name: "Implicit Subcommand of Implicit Parent",
-			src: `package main
-
-// Parent is a subcommand that Does work in a directory
-func Parent(dir string) {}
-
-// Child is a subcommand ` + "`parent child`" + ` that is a child
-func Child(dir string) {}
-`,
+			name:            "Implicit Subcommand of Implicit Parent",
+			filename:        "go_implicit_subcmd.go",
 			wantCmdName:     "parent",
 			wantDescription: "Does work in a directory",
 			wantSubCommands: []string{"child"},
 		},
 		{
-			name: "Implicit Command Name with Acronym",
-			src: `package main
-
-// HTTPClient is a subcommand that does http things
-func HTTPClient(url string) {}
-`,
+			name:            "Implicit Command Name with Acronym",
+			filename:        "go_implicit_acronym.go",
 			wantCmdName:     "http-client",
 			wantDescription: "does http things",
 		},
 		{
-			name: "Not a subcommand",
-			src: `package main
-
-// NotACmd is just a function
-func NotACmd() {}
-`,
+			name:        "Not a subcommand",
+			filename:    "go_not_cmd.go",
 			wantMissing: true,
 		},
 		{
-			name: "Subcommand with receiver (ignored)",
-			src: `package main
-
-type T struct{}
-
-// Method is a subcommand that should be ignored
-func (t *T) Method() {}
-`,
+			name:        "Subcommand with receiver (ignored)",
+			filename:    "go_ignored_receiver.go",
 			wantMissing: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			src, err := legacyTestData.ReadFile("testdata/legacy/" + tt.filename)
+			if err != nil {
+				t.Fatalf("failed to read test file %s: %v", tt.filename, err)
+			}
+
 			fset := token.NewFileSet()
 			cmdTree := &CommandsTree{
 				Commands:    make(map[string]*CommandTree),
 				PackagePath: "example.com/test",
 			}
 
-			err := ParseGoFile(fset, "test.go", "example.com/test", strings.NewReader(tt.src), cmdTree)
+			err = ParseGoFile(fset, "test.go", "example.com/test", strings.NewReader(string(src)), cmdTree)
 			if err != nil {
 				t.Fatalf("ParseGoFile failed: %v", err)
 			}
@@ -134,6 +114,7 @@ func TestParseSubCommandComments_Legacy(t *testing.T) {
 	tests := []struct {
 		name                   string
 		text                   string
+		filename               string
 		wantCmdName            string
 		wantSubCommandSequence []string
 		wantDescription        string
@@ -187,13 +168,8 @@ func TestParseSubCommandComments_Legacy(t *testing.T) {
 			wantOk:                 true,
 		},
 		{
-			name: "User Prototype 1",
-			text: `PrintUser is a subcommand ` + "`my-app users get`" + ` that prints the users
-Flags:
-  username: --user-name -u -user-name (default: guest) User name
-  file: (default: "out.png") Input file
-PrintUser prints in x format
-with x / y z`,
+			name:     "User Prototype 1",
+			filename: "comment_user_proto.txt",
 			wantCmdName:            "my-app",
 			wantSubCommandSequence: []string{"users", "get"},
 			wantDescription:        "prints the users",
@@ -205,9 +181,8 @@ with x / y z`,
 			wantOk: true,
 		},
 		{
-			name: "Param Style",
-			text: `Cmd is a subcommand ` + "`app cmd`" + ` -- runs cmd
-param force (-f, default: false) Force it`,
+			name:     "Param Style",
+			filename: "comment_param_style.txt",
 			wantCmdName:            "app",
 			wantSubCommandSequence: []string{"cmd"},
 			wantDescription:        "runs cmd",
@@ -217,9 +192,8 @@ param force (-f, default: false) Force it`,
 			wantOk: true,
 		},
 		{
-			name: "Optional Separators",
-			text: `Cmd is a subcommand ` + "`app cmd`" + ` -- description
-that can handle missing tokens`,
+			name:     "Optional Separators",
+			filename: "comment_optional_separators.txt",
 			wantCmdName:            "app",
 			wantSubCommandSequence: []string{"cmd"},
 			wantDescription:        "description",
@@ -244,7 +218,16 @@ that can handle missing tokens`,
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotAliases, gotParams, gotOk := ParseSubCommandComments(tt.text)
+			text := tt.text
+			if tt.filename != "" {
+				src, err := legacyTestData.ReadFile("testdata/legacy/" + tt.filename)
+				if err != nil {
+					t.Fatalf("failed to read test file %s: %v", tt.filename, err)
+				}
+				text = string(src)
+			}
+
+			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotAliases, gotParams, gotOk := ParseSubCommandComments(text)
 			if gotCmdName != tt.wantCmdName {
 				t.Errorf("gotCmdName = %v, want %v", gotCmdName, tt.wantCmdName)
 			}

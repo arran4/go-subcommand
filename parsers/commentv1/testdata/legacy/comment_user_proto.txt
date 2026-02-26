@@ -1,0 +1,6 @@
+PrintUser is a subcommand `my-app users get` that prints the users
+Flags:
+  username: --user-name -u -user-name (default: guest) User name
+  file: (default: "out.png") Input file
+PrintUser prints in x format
+with x / y z

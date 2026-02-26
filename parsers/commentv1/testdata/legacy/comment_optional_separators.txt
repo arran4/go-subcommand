@@ -1,0 +1,2 @@
+Cmd is a subcommand `app cmd` -- description
+that can handle missing tokens
