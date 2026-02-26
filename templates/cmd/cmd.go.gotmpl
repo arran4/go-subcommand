@@ -90,7 +90,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	var remainingArgs []string
 	{{- $hasRequired := false }}
-	{{- range .AllParameters }}{{ if .IsRequired }}{{ $hasRequired = true }}{{ end }}{{ end }}
+	{{- range .AllParameters }}{{ if .RequiredArg }}{{ $hasRequired = true }}{{ end }}{{ end }}
 	{{- if $hasRequired }}
 	seenFlags := make(map[string]bool)
 	{{- end }}
@@ -393,7 +393,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{if .SubCommandFunctionName}}
 	if c.CommandAction != nil {
 		{{- range .AllParameters }}
-		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
+		{{- if and .RequiredArg (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
 			{{- if gt (len .FlagAliases) 0 }}
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")

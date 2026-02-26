@@ -421,8 +421,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
-							if c.IsRequired {
-								fp.IsRequired = true
+							if c.RequiredArg {
+								fp.RequiredArg = true
 							}
 							if c.IsGlobal {
 								fp.IsGlobal = true
@@ -459,8 +459,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
-							if c.IsRequired {
-								fp.IsRequired = true
+							if c.RequiredArg {
+								fp.RequiredArg = true
 							}
 							if c.IsGlobal {
 								fp.IsGlobal = true
@@ -497,8 +497,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
-							if c.IsRequired {
-								fp.IsRequired = true
+							if c.RequiredArg {
+								fp.RequiredArg = true
 							}
 							if c.IsGlobal {
 								fp.IsGlobal = true
@@ -639,7 +639,7 @@ type ParsedParam struct {
 	VarArgMin          int
 	VarArgMax          int
 	Inherited          bool
-	IsRequired         bool
+	RequiredArg         bool
 	IsGlobal           bool
 	ParserFunc         *model.FuncRef
 	Generator          *model.FuncRef
@@ -809,7 +809,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.RequiredArg || details.IsGlobal || details.Generator != nil {
 					params[name] = details
 					continue
 				}
@@ -840,7 +840,7 @@ func parseParamDetails(text string) ParsedParam {
 	})
 
 	if reRequired.MatchString(text) {
-		p.IsRequired = true
+		p.RequiredArg = true
 		text = reRequired.ReplaceAllString(text, "")
 	}
 

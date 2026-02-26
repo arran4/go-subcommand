@@ -231,7 +231,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
 	{{- $hasRequired := false }}
-	{{- range .Parameters }}{{ if .IsRequired }}{{ $hasRequired = true }}{{ end }}{{ end }}
+	{{- range .Parameters }}{{ if .RequiredArg }}{{ $hasRequired = true }}{{ end }}{{ end }}
 	{{- if $hasRequired }}
 	seenFlags := make(map[string]bool)
 	{{- end }}
@@ -1147,7 +1147,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		{{- range .Parameters }}
-		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
+		{{- if and .RequiredArg (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
 			{{- if gt (len .FlagAliases) 0 }}
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")

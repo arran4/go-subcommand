@@ -38,7 +38,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": false,
+      "RequiredArg": false,
       "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
@@ -53,7 +53,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": false,
+      "RequiredArg": false,
       "IsGlobal": true,
       "ParserFunc": null,
       "Generator": {
@@ -73,7 +73,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": true,
+      "RequiredArg": true,
       "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
@@ -93,7 +93,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": true,
+      "RequiredArg": true,
       "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
@@ -110,7 +110,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": false,
+      "RequiredArg": false,
       "IsGlobal": true,
       "ParserFunc": null,
       "Generator": null
@@ -127,7 +127,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": false,
+      "RequiredArg": false,
       "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
@@ -149,7 +149,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "IsRequired": false,
+      "RequiredArg": false,
       "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "",
