@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/tools/txtar"
 )
 
@@ -35,6 +36,10 @@ func TestParserRegression(t *testing.T) {
 			}
 
 			archive := txtar.Parse(content)
+			if !parsers.ShouldRunTest(archive, "commentv1 regression tests") {
+				t.Skip("skipping test based on tests.txt")
+			}
+
 			var inputSrc []byte
 			var expectedJSON []byte
 

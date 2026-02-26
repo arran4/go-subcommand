@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/tools/txtar"
 )
 
@@ -27,6 +28,10 @@ func TestParseSubCommandComments(t *testing.T) {
 				t.Fatalf("failed to read file: %v", err)
 			}
 			archive := txtar.Parse(data)
+
+			if !parsers.ShouldRunTest(archive, "commentv1 parsing tests") {
+				t.Skip("skipping test based on tests.txt")
+			}
 
 			var inputComment string
 			var expectedOutput []byte

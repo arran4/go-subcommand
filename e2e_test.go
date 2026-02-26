@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/arran4/go-subcommand/parsers"
 	"golang.org/x/tools/txtar"
 )
 
@@ -33,6 +34,10 @@ func TestE2E_Generation(t *testing.T) {
 			}
 
 			archive := txtar.Parse(content)
+
+			if !parsers.ShouldRunTest(archive, "e2e generation tests") {
+				t.Skip("skipping test based on tests.txt")
+			}
 
 			// Build input FS from txtar
 			inputFS := make(fstest.MapFS)
