@@ -93,6 +93,151 @@ func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
 	return (&CommentParser{}).Parse(fsys, root, nil)
 }
 
+func (p *CommentParser) Format(node interface{}, options ...parsers.FormatOption) (string, error) {
+	config := parsers.FormatConfig{}
+	for _, opt := range options {
+		opt(&config)
+	}
+
+	switch n := node.(type) {
+	case *model.SubCommand:
+		return formatSubCommand(n, config), nil
+	case *model.FunctionParameter:
+		return formatParameter(n), nil
+	default:
+		return "", fmt.Errorf("unsupported node type: %T", node)
+	}
+}
+
+func formatSubCommand(sc *model.SubCommand, config parsers.FormatConfig) string {
+	var sb strings.Builder
+	sb.WriteString("// ")
+	sb.WriteString(sc.SubCommandFunctionName)
+	sb.WriteString(" is a subcommand `")
+
+	// Full command sequence
+	fullSequence := sc.MainCmdName
+	if seq := sc.SubCommandSequence(); seq != "" {
+		fullSequence += " " + seq
+	}
+	sb.WriteString(fullSequence)
+	sb.WriteString("`")
+
+	if sc.SubCommandDescription != "" {
+		sb.WriteString(" that ")
+		sb.WriteString(sc.SubCommandDescription)
+	}
+	sb.WriteString("\n//")
+
+	if sc.SubCommandExtendedHelp != "" {
+		sb.WriteString("\n// ")
+		sb.WriteString(strings.ReplaceAll(sc.SubCommandExtendedHelp, "\n", "\n// "))
+		sb.WriteString("\n//")
+	}
+
+	if len(sc.Aliases) > 0 {
+		sb.WriteString("\n// aliases: ")
+		// Copy aliases to avoid modifying original struct
+		aliases := make([]string, len(sc.Aliases))
+		copy(aliases, sc.Aliases)
+		sort.Strings(aliases)
+		sb.WriteString(strings.Join(aliases, ", "))
+	}
+
+	if len(sc.Parameters) > 0 {
+		var relevantParams []*model.FunctionParameter
+		for _, p := range sc.Parameters {
+			// If inherited, only include if config.IncludeInherited is true
+			if !config.IncludeInherited && p.DeclaredIn != "" && p.DeclaredIn != sc.SubCommandName {
+				continue
+			}
+			relevantParams = append(relevantParams, p)
+		}
+
+		if len(relevantParams) > 0 {
+			// Sort parameters by name for deterministic output
+			sort.Slice(relevantParams, func(i, j int) bool {
+				return relevantParams[i].Name < relevantParams[j].Name
+			})
+
+			sb.WriteString("\n//\n// Flags:\n//")
+			for _, p := range relevantParams {
+				sb.WriteString("\n//\t")
+				sb.WriteString(p.Name)
+				sb.WriteString(": ")
+				sb.WriteString(formatParameter(p))
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+func formatParameter(p *model.FunctionParameter) string {
+	var parts []string
+
+	if p.Description != "" {
+		parts = append(parts, p.Description)
+	}
+
+	if p.IsRequired {
+		parts = append(parts, "(required)")
+	}
+
+	if p.Default != "" {
+		def := p.Default
+		if p.Type == "string" && !strings.HasPrefix(def, "\"") {
+			def = fmt.Sprintf("%q", def)
+		}
+		parts = append(parts, fmt.Sprintf("(default: %s)", def))
+	}
+
+	var explicitAliases []string
+	for _, a := range p.FlagAliases {
+		prefix := "-"
+		if len(a) > 1 {
+			prefix = "--"
+		}
+		explicitAliases = append(explicitAliases, prefix+a)
+	}
+	// Sort for stability
+	sort.Strings(explicitAliases)
+
+	if len(explicitAliases) > 0 {
+		parts = append(parts, strings.Join(explicitAliases, ", "))
+	}
+
+	if p.IsPositional {
+		parts = append(parts, fmt.Sprintf("@%d", p.PositionalArgIndex))
+	}
+
+	if p.IsVarArg {
+		if p.VarArgMin != 0 || p.VarArgMax != 0 {
+			parts = append(parts, fmt.Sprintf("%d...%d", p.VarArgMin, p.VarArgMax))
+		} else {
+			parts = append(parts, "...")
+		}
+	}
+
+	if p.Parser.Type == model.ParserTypeCustom && p.Parser.Func != nil {
+		fn := p.Parser.Func.FunctionName
+		if p.Parser.Func.ImportPath != "" {
+			fn = fmt.Sprintf("%q.%s", p.Parser.Func.ImportPath, fn)
+		}
+		parts = append(parts, fmt.Sprintf("(parser: %s)", fn))
+	}
+
+	if p.Generator.Type == model.SourceTypeGenerator && p.Generator.Func != nil {
+		fn := p.Generator.Func.FunctionName
+		if p.Generator.Func.ImportPath != "" {
+			fn = fmt.Sprintf("%q.%s", p.Generator.Func.ImportPath, fn)
+		}
+		parts = append(parts, fmt.Sprintf("(generator: %s)", fn))
+	}
+
+	return strings.Join(parts, " ")
+}
+
 func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOptions) (*model.DataModel, error) {
 	fset := token.NewFileSet()
 
