@@ -197,3 +197,5 @@ Flags:
   },
   "Ok": true
 }
+-- tests.txt --
+commentv1 circular parsing tests

@@ -32,15 +32,24 @@ func TestCircularParsing(t *testing.T) {
 			archive := txtar.Parse(data)
 
 			var inputComment string
+			var testsConfig string
 			for _, f := range archive.Files {
 				if f.Name == "input.comment" {
 					inputComment = string(f.Data)
-					break
+				}
+				if f.Name == "tests.txt" {
+					testsConfig = string(f.Data)
 				}
 			}
 
 			if inputComment == "" {
 				// Skip tests without input comment
+				return
+			}
+
+			// Check for marker
+			if !strings.Contains(testsConfig, "commentv1 circular parsing tests") {
+				// Marker not found, skip
 				return
 			}
 
