@@ -111,7 +111,11 @@ func TestCircularParsing(t *testing.T) {
 			sc.Parameters = funcParams
 
 			// 3. Generate Comment
-			generatedComment := sc.Comment()
+			parser := &CommentParser{}
+			generatedComment, err := parser.Format(sc)
+			if err != nil {
+				t.Fatalf("failed to format subcommand: %v", err)
+			}
 
 			// 4. Parse Generated Comment
 			// ParseSubCommandComments expects text content (like s.Doc.Text()), not raw comment with //
