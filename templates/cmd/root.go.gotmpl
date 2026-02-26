@@ -120,6 +120,21 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 {{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
+		{{- range .Parameters }}
+		{{- if and .Generator (not .IsGlobal) }}
+		{
+			var err error
+			{{- if .Generator.CommandPackageName }}
+			c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+			{{- else }}
+			c.{{.Name}}, err = {{.Generator.FunctionName}}()
+			{{- end }}
+			if err != nil {
+				return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+			}
+		}
+		{{- end }}
+		{{- end }}
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
 		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
@@ -244,7 +259,7 @@ func (c *RootCmd) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if and (not .IsPositional) (eq .Generator.Type "flag") }}
+			{{- if and (not .IsPositional) (not .Generator) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -260,7 +275,7 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if $hasRequired }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
-				{{- if eq $param.Parser.Type "custom" }}
+				{{- if $param.ParserFunc }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
 					return fmt.Errorf("invalid value for flag %s: %w", name, err)
@@ -678,7 +693,7 @@ func (c *RootCmd) Execute(args []string) error {
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if and (not .IsPositional) (eq .Generator.Type "flag") }}
+				{{- if and (not .IsPositional) (not .Generator) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -695,7 +710,7 @@ func (c *RootCmd) Execute(args []string) error {
 					{{- if $hasRequired }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
-				{{- if eq $param.Parser.Type "custom" }}
+				{{- if $param.ParserFunc }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
 						return fmt.Errorf("invalid value for flag -%s: %w", char, err)
@@ -1105,28 +1120,17 @@ func (c *RootCmd) Execute(args []string) error {
 	}
 
 	{{- range .Parameters }}
-	{{- if eq .Generator.Type "generator" }}
+	{{- if and .IsGlobal .Generator }}
 	{
 		var err error
-		{{- if eq .Parser.Type "custom" }}
-		genVal, err := {{if .Generator.Func.CommandPackageName}}{{.Generator.Func.CommandPackageName}}.{{end}}{{.Generator.Func.FunctionName}}()
-		if err != nil {
-			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
-		}
-		c.{{.Name}}, err = {{if .Parser.Func.CommandPackageName}}{{.Parser.Func.CommandPackageName}}.{{end}}{{.Parser.Func.FunctionName}}(genVal)
-		if err != nil {
-			return fmt.Errorf("failed to parse generated value for {{.Name}}: %w", err)
-		}
+		{{- if .Generator.CommandPackageName }}
+		c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
 		{{- else }}
-		{{- if .Generator.Func.CommandPackageName }}
-		c.{{.Name}}, err = {{.Generator.Func.CommandPackageName}}.{{.Generator.Func.FunctionName}}()
-		{{- else }}
-		c.{{.Name}}, err = {{.Generator.Func.FunctionName}}()
+		c.{{.Name}}, err = {{.Generator.FunctionName}}()
 		{{- end }}
 		if err != nil {
 			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
 		}
-		{{- end }}
 	}
 	{{- end }}
 	{{- end }}
@@ -1143,7 +1147,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		{{- range .Parameters }}
-		{{- if and .IsRequired (not .IsPositional) (eq .Generator.Type "flag") }}
+		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
 		if !seenFlags["{{.Name}}"] {
 			{{- if gt (len .FlagAliases) 0 }}
 			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")

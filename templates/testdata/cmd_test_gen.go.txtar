@@ -1,48 +1,21 @@
 -- input.json --
 {
-  "Parent": null,
-  "SubCommands": null,
+  "PackageName": "main",
   "SubCommandName": "mycmd",
-  "Aliases": null,
   "SubCommandStructName": "MyCmd",
   "SubCommandFunctionName": "MyCmdFunc",
   "SubCommandDescription": "My command description",
-  "SubCommandExtendedHelp": "",
-  "ImportPath": "example.com/mypkg",
   "SubCommandPackageName": "mypkg",
+  "ImportPath": "example.com/mypkg",
   "UsageFileName": "mycmd_usage.txt",
-  "DefinitionFile": "",
-  "DocStart": 0,
-  "DocEnd": 0,
   "Parameters": [
     {
       "Name": "verbose",
       "Type": "bool",
-      "FlagAliases": [
-        "v"
-      ],
-      "Default": "",
-      "Description": "Enable verbose output",
-      "IsPositional": false,
-      "PositionalArgIndex": 0,
-      "IsVarArg": false,
-      "VarArgMin": 0,
-      "VarArgMax": 0,
-      "DeclaredIn": "",
-      "IsRequired": false,
-      "Parser": {
-        "Type": "implicit",
-        "Func": null
-      },
-      "Generator": {
-        "Type": "flag",
-        "Func": null
-      }
+      "FlagAliases": ["v"],
+      "Description": "Enable verbose output"
     }
-  ],
-  "ReturnsError": false,
-  "ReturnCount": 0,
-  "Recursive": false
+  ]
 }
 -- template_name --
 cmd_test.go.gotmpl

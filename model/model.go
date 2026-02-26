@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// ReservedKeywords is a list of Go keywords and other reserved words that cannot be used as package names or identifiers
-// without collision issues in the generated code.
 var ReservedKeywords = []string{
 	"error", "string", "int", "bool", "byte", "rune", "float32", "float64",
 	"complex64", "complex128", "uint", "uint8", "uint16", "uint32", "uint64",
@@ -23,15 +21,10 @@ var ReservedKeywords = []string{
 	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
 }
 
-// DataModel represents the parsed data model of the Go files, containing commands and package information.
 type DataModel struct {
-	// FileSet is the token.FileSet used for parsing.
 	FileSet     *token.FileSet
-	// PackageName is the name of the package where the main command is defined.
 	PackageName string
-	// Commands is the list of top-level commands found.
 	Commands    []*Command
-	// GoVersion is the Go version from go.mod.
 	GoVersion   string
 }
 
@@ -42,38 +35,23 @@ type FuncRef struct {
 	FunctionName       string
 }
 
-// Command represents a top-level command.
 type Command struct {
 	*DataModel
-	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName        string
-	// SubCommands is the list of direct subcommands for this command.
 	SubCommands        []*SubCommand
-	// PackagePath is the full package path (module path + relative path).
 	PackagePath        string
-	// ImportPath is the import path for the package containing the command.
 	ImportPath         string
-	// CommandPackageName is the package name where the command function is defined.
 	CommandPackageName string
-	// Description is a short description of the command.
 	Description        string
-	// ExtendedHelp is the long description/help text for the command.
 	ExtendedHelp       string
-	// FunctionName is the name of the function definition.
 	FunctionName       string
+	DefinitionFile     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
 	UsageFileName      string
-	// DefinitionFile is the path to the file where the command is defined.
-	DefinitionFile string
-	// DocStart is the starting position of the documentation comment.
-	DocStart       token.Pos
-	// DocEnd is the ending position of the documentation comment.
-	DocEnd         token.Pos
-	// Parameters is the list of parameters (flags and arguments) for the command.
-	Parameters     []*FunctionParameter
-	// ReturnsError indicates if the command function returns an error.
-	ReturnsError   bool
-	// ReturnCount is the number of return values.
-	ReturnCount    int
 }
 
 func (c *Command) ImportAlias() string {
@@ -90,86 +68,22 @@ func (c *Command) ImportAlias() string {
 	return ""
 }
 
-// SourceType defines how a parameter's value is populated.
-type SourceType string
-
-const (
-	// SourceTypeFlag indicates that the parameter value is derived from a command-line flag.
-	// This is the default source type.
-	SourceTypeFlag SourceType = "flag"
-	// SourceTypeGenerator indicates that the parameter value is produced by a generator function.
-	// Parameters with this source type are not exposed as command-line flags.
-	// Limitations: The generator function must be defined in the project or imported, and it is executed before the command's action.
-	SourceTypeGenerator SourceType = "generator"
-)
-
-// ParserType defines how a string value (typically from a flag) is converted to the target type.
-type ParserType string
-
-const (
-	// ParserTypeImplicit uses the default parsing logic based on the parameter's type (e.g., strconv for integers).
-	// It is used when no custom parser is specified.
-	ParserTypeImplicit ParserType = "implicit"
-	// ParserTypeCustom uses a user-provided function to parse the string value.
-	// The function must accept a string and return the target type (and optionally an error).
-	ParserTypeCustom ParserType = "custom"
-	// ParserTypeIdentity indicates that no parsing is performed.
-	// This is typically used when the value is not a string flag, such as when it comes from a generator or is already in the correct format.
-	ParserTypeIdentity ParserType = "identity"
-)
-
-// GeneratorConfig holds configuration for value generation.
-type GeneratorConfig struct {
-	// Type specifies the source of the parameter value.
-	Type SourceType
-	// Func refers to the generator function. It is only required/used when Type is SourceTypeGenerator.
-	Func *FuncRef // Non-nil if Type == SourceTypeGenerator
-}
-
-// ParserConfig holds configuration for value parsing.
-type ParserConfig struct {
-	// Type specifies how the parameter value is parsed.
-	Type ParserType
-	// Func refers to the custom parser function. It is only required/used when Type is ParserTypeCustom.
-	Func *FuncRef // Non-nil if Type == ParserTypeCustom
-}
-
-// FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
 type FunctionParameter struct {
-	// Name is the name of the parameter in the function signature.
 	Name               string
-	// Type is the Go type of the parameter (e.g., "string", "int", "[]string").
 	Type               string
-	// FlagAliases is a list of alternative names for the flag (e.g., "v" for "verbose").
 	FlagAliases        []string
-	// Default is the default value for the parameter if not provided.
 	Default            string
-	// Description is the help text for the parameter.
 	Description        string
-	// IsPositional indicates if the parameter is a positional argument (not a flag).
 	IsPositional       bool
-	// PositionalArgIndex is the index of the positional argument (0-based).
 	PositionalArgIndex int
-	// IsVarArg indicates if the parameter captures remaining arguments (variadic).
 	IsVarArg           bool
-	// VarArgMin is the minimum number of arguments required for a variadic parameter.
 	VarArgMin          int
-	// VarArgMax is the maximum number of arguments allowed for a variadic parameter.
 	VarArgMax          int
-	// DeclaredIn specifies the name of the command where this parameter was originally declared.
-	// This is used for parameter inheritance and grouping in help output.
-	// DeclaredIn is the name of the command where this parameter was originally declared (used for inheritance).
 	DeclaredIn         string
-	// IsRequired indicates that the parameter is mandatory.
-	// If a required flag is missing, execution will fail.
-	// Required indicates if the parameter is mandatory.
-	Required           bool
-	// Parser holds the configuration for parsing the parameter value.
-	Parser ParserConfig
-	// Generator holds the configuration for generating the parameter value.
-	// Generator is the name of a function that generates the value for this parameter.
-	// If set, the parameter is not parsed from the command line but generated.
-	Generator GeneratorConfig
+	IsRequired         bool // IsRequired indicates if the flag must be provided
+	IsGlobal           bool
+	ParserFunc         *FuncRef
+	Generator          *FuncRef
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -245,11 +159,11 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
-	if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil {
-		if p.Parser.Func.CommandPackageName != "" {
-			return fmt.Sprintf("%s.%s(%s)", p.Parser.Func.CommandPackageName, p.Parser.Func.FunctionName, valName)
+	if p.ParserFunc != nil {
+		if p.ParserFunc.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.ParserFunc.CommandPackageName, p.ParserFunc.FunctionName, valName)
 		}
-		return fmt.Sprintf("%s(%s)", p.Parser.Func.FunctionName, valName)
+		return fmt.Sprintf("%s(%s)", p.ParserFunc.FunctionName, valName)
 	}
 	t := p.BaseType()
 	if t == "int" {
@@ -308,42 +222,24 @@ func (p *FunctionParameter) TypeDescription() string {
 	}
 }
 
-// SubCommand represents a subcommand within a command tree.
 type SubCommand struct {
 	*Command
-	// Parent points to the parent command.
 	Parent                 *SubCommand
-	// SubCommands is the list of children subcommands.
 	SubCommands            []*SubCommand
-	// SubCommandName is the name of this subcommand (the word used in the CLI).
 	SubCommandName         string
-	// Aliases is a list of alternative names for this subcommand.
 	Aliases                []string
-	// SubCommandStructName is the name of the generated struct for this subcommand.
 	SubCommandStructName   string
-	// SubCommandFunctionName is the name of the function that implements this subcommand.
 	SubCommandFunctionName string
-	// SubCommandDescription is a short description.
 	SubCommandDescription  string
-	// SubCommandExtendedHelp is the long help text.
 	SubCommandExtendedHelp string
-	// ImportPath is the import path where the subcommand is defined.
 	ImportPath             string
-	// SubCommandPackageName is the package name where the subcommand is defined.
 	SubCommandPackageName  string
-	// UsageFileName is the name of the file containing usage documentation.
 	UsageFileName          string
-	// DefinitionFile is the path to the source file.
 	DefinitionFile         string
-	// DocStart is the starting position of the docs.
 	DocStart               token.Pos
-	// DocEnd is the ending position of the docs.
 	DocEnd                 token.Pos
-	// Parameters is the list of parameters for this subcommand.
 	Parameters             []*FunctionParameter
-	// ReturnsError indicates if the function returns an error.
 	ReturnsError           bool
-	// ReturnCount is the number of return values.
 	ReturnCount            int
 }
 
@@ -399,16 +295,16 @@ func (sc *SubCommand) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
 	for _, p := range sc.AllParameters() {
-		if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.ImportPath != "" {
-			if !seen[p.Parser.Func.ImportPath] {
-				imports = append(imports, p.Parser.Func.ImportPath)
-				seen[p.Parser.Func.ImportPath] = true
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
 			}
 		}
-		if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.ImportPath != "" {
-			if !seen[p.Generator.Func.ImportPath] {
-				imports = append(imports, p.Generator.Func.ImportPath)
-				seen[p.Generator.Func.ImportPath] = true
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
 			}
 		}
 	}
@@ -440,12 +336,11 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
-					// IsGlobal removed
-					if p.Generator.Type == "" && parentParam.Generator.Type != "" {
-						p.Generator = parentParam.Generator
+					if !p.IsGlobal && parentParam.IsGlobal {
+						p.IsGlobal = parentParam.IsGlobal
 					}
-					if p.Parser.Type == "" && parentParam.Parser.Type != "" {
-						p.Parser = parentParam.Parser
+					if p.Generator == nil && parentParam.Generator != nil {
+						p.Generator = parentParam.Generator
 					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
@@ -461,12 +356,11 @@ func (sc *SubCommand) ResolveInheritance() {
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
 						}
-						// IsGlobal removed
-						if p.Generator.Type == "" && pp.Generator.Type != "" {
-							p.Generator = pp.Generator
+						if !p.IsGlobal && pp.IsGlobal {
+							p.IsGlobal = pp.IsGlobal
 						}
-						if p.Parser.Type == "" && pp.Parser.Type != "" {
-							p.Parser = pp.Parser
+						if p.Generator == nil && pp.Generator != nil {
+							p.Generator = pp.Generator
 						}
 						break
 					}
@@ -501,16 +395,16 @@ func (cmd *Command) RequiredImports() []string {
 	var imports []string
 	seen := make(map[string]bool)
 	for _, p := range cmd.Parameters {
-		if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.ImportPath != "" {
-			if !seen[p.Parser.Func.ImportPath] {
-				imports = append(imports, p.Parser.Func.ImportPath)
-				seen[p.Parser.Func.ImportPath] = true
+		if p.ParserFunc != nil && p.ParserFunc.ImportPath != "" {
+			if !seen[p.ParserFunc.ImportPath] {
+				imports = append(imports, p.ParserFunc.ImportPath)
+				seen[p.ParserFunc.ImportPath] = true
 			}
 		}
-		if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.ImportPath != "" {
-			if !seen[p.Generator.Func.ImportPath] {
-				imports = append(imports, p.Generator.Func.ImportPath)
-				seen[p.Generator.Func.ImportPath] = true
+		if p.Generator != nil && p.Generator.ImportPath != "" {
+			if !seen[p.Generator.ImportPath] {
+				imports = append(imports, p.Generator.ImportPath)
+				seen[p.Generator.ImportPath] = true
 			}
 		}
 	}
@@ -543,12 +437,8 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 	return params
 }
 
-// ParameterGroup represents a group of parameters belonging to a specific command level.
-// Used for displaying flags grouped by where they are defined (e.g. Global Flags vs Local Flags).
 type ParameterGroup struct {
-	// CommandName is the name of the command that defines these parameters.
 	CommandName string
-	// Parameters is the list of parameters in this group.
 	Parameters  []*FunctionParameter
 }
 

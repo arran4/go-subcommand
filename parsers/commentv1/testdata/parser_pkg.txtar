@@ -28,18 +28,13 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
+      "IsGlobal": false,
+      "ParserFunc": null,
       "Generator": {
-        "Type": "generator",
-        "Func": {
-          "PackagePath": "",
-          "ImportPath": "",
-          "CommandPackageName": "",
-          "FunctionName": "Gen"
-        }
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "Gen"
       }
     },
     "gen_pkg": {
@@ -53,18 +48,13 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
+      "IsGlobal": false,
+      "ParserFunc": null,
       "Generator": {
-        "Type": "generator",
-        "Func": {
-          "PackagePath": "example.com/pkg",
-          "ImportPath": "example.com/pkg",
-          "CommandPackageName": "pkg",
-          "FunctionName": "Gen"
-        }
+        "PackagePath": "example.com/pkg",
+        "ImportPath": "example.com/pkg",
+        "CommandPackageName": "pkg",
+        "FunctionName": "Gen"
       }
     },
     "local_parser": {
@@ -78,19 +68,14 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "custom",
-        "Func": {
-          "PackagePath": "",
-          "ImportPath": "",
-          "CommandPackageName": "",
-          "FunctionName": "LocalFunc"
-        }
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "LocalFunc"
       },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "Generator": null
     },
     "myflag": {
       "Flags": [
@@ -105,22 +90,15 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "custom",
-        "Func": {
-          "PackagePath": "encoding/json",
-          "ImportPath": "encoding/json",
-          "CommandPackageName": "json",
-          "FunctionName": "Unmarshal"
-        }
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "encoding/json",
+        "ImportPath": "encoding/json",
+        "CommandPackageName": "json",
+        "FunctionName": "Unmarshal"
       },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "Generator": null
     }
   },
   "Ok": true
 }
--- tests.txt --
-commentv1 circular parsing tests

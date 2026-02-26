@@ -39,14 +39,9 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
     },
     "config": {
       "Flags": null,
@@ -59,18 +54,13 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
+      "IsGlobal": true,
+      "ParserFunc": null,
       "Generator": {
-        "Type": "generator",
-        "Func": {
-          "PackagePath": "rootPkg",
-          "ImportPath": "rootPkg",
-          "CommandPackageName": "rootPkg",
-          "FunctionName": "LoadConfig"
-        }
+        "PackagePath": "rootPkg",
+        "ImportPath": "rootPkg",
+        "CommandPackageName": "rootPkg",
+        "FunctionName": "LoadConfig"
       }
     },
     "gen_flag": {
@@ -84,18 +74,13 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": true,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
+      "IsGlobal": false,
+      "ParserFunc": null,
       "Generator": {
-        "Type": "generator",
-        "Func": {
-          "PackagePath": "",
-          "ImportPath": "",
-          "CommandPackageName": "",
-          "FunctionName": "myfunc"
-        }
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "myfunc"
       }
     },
     "global_flag": {
@@ -109,14 +94,9 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": true,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
     },
     "mixed_flag": {
       "Flags": [
@@ -131,14 +111,9 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
     },
     "mixed_gen": {
       "Flags": [
@@ -153,18 +128,13 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "",
-        "Func": null
-      },
+      "IsGlobal": false,
+      "ParserFunc": null,
       "Generator": {
-        "Type": "generator",
-        "Func": {
-          "PackagePath": "",
-          "ImportPath": "",
-          "CommandPackageName": "",
-          "FunctionName": "myfunc"
-        }
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "myfunc"
       }
     },
     "myflag": {
@@ -180,22 +150,15 @@ Flags:
       "VarArgMax": 0,
       "Inherited": false,
       "IsRequired": false,
-      "Parser": {
-        "Type": "custom",
-        "Func": {
-          "PackagePath": "",
-          "ImportPath": "",
-          "CommandPackageName": "",
-          "FunctionName": "ParseFunc"
-        }
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "ParseFunc"
       },
-      "Generator": {
-        "Type": "",
-        "Func": null
-      }
+      "Generator": null
     }
   },
   "Ok": true
 }
--- tests.txt --
-commentv1 circular parsing tests

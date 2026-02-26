@@ -1,62 +1,18 @@
 -- input.json --
 {
+  "PackageName": "main",
   "MainCmdName": "mycmd",
+  "Version": "1.0.0",
   "SubCommands": [
     {
-      "Parent": null,
-      "SubCommands": null,
       "SubCommandName": "sub1",
-      "Aliases": null,
-      "SubCommandStructName": "Sub1",
-      "SubCommandFunctionName": "",
-      "SubCommandDescription": "",
-      "SubCommandExtendedHelp": "",
-      "ImportPath": "",
-      "SubCommandPackageName": "",
-      "UsageFileName": "",
-      "DefinitionFile": "",
-      "DocStart": 0,
-      "DocEnd": 0,
-      "Parameters": null,
-      "ReturnsError": false,
-      "ReturnCount": 0,
-      "Recursive": false
+      "SubCommandStructName": "Sub1"
     },
     {
-      "Parent": null,
-      "SubCommands": null,
       "SubCommandName": "sub2",
-      "Aliases": null,
-      "SubCommandStructName": "Sub2",
-      "SubCommandFunctionName": "",
-      "SubCommandDescription": "",
-      "SubCommandExtendedHelp": "",
-      "ImportPath": "",
-      "SubCommandPackageName": "",
-      "UsageFileName": "",
-      "DefinitionFile": "",
-      "DocStart": 0,
-      "DocEnd": 0,
-      "Parameters": null,
-      "ReturnsError": false,
-      "ReturnCount": 0,
-      "Recursive": false
+      "SubCommandStructName": "Sub2"
     }
-  ],
-  "PackagePath": "",
-  "ImportPath": "",
-  "CommandPackageName": "",
-  "Description": "",
-  "ExtendedHelp": "",
-  "FunctionName": "",
-  "DefinitionFile": "",
-  "DocStart": 0,
-  "DocEnd": 0,
-  "Parameters": null,
-  "ReturnsError": false,
-  "ReturnCount": 0,
-  "UsageFileName": "",
-  "DataModel": null
+  ]
 }
 -- template_name --
 root.go.gotmpl
@@ -70,7 +26,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 
@@ -122,7 +77,7 @@ func NewUserError(err error, msg string) *UserError {
 	return &UserError{Err: err, Msg: msg}
 }
 
-func executeUsage(out io.Writer, templateName string, data any) error {
+func executeUsage(out io.Writer, templateName string, data interface{}) error {
 	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
 }
 
@@ -178,9 +133,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					c.UsageRecursive()
-					return nil
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
 				c.Usage()
 				return nil
@@ -191,9 +148,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					c.UsageRecursive()
-					return nil
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
 				c.Usage()
 				return nil

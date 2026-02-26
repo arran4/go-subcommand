@@ -1,46 +1,21 @@
 -- input.json --
 {
-  "MainCmdName": "",
-  "SubCommands": null,
-  "PackagePath": "",
-  "ImportPath": "example.com/mypkg",
-  "CommandPackageName": "",
-  "Description": "",
-  "ExtendedHelp": "",
+  "PackageName": "main",
+  "SubCommandName": "",
+  "SubCommandStructName": "RootCmd",
   "FunctionName": "RootFunc",
-  "DefinitionFile": "",
-  "DocStart": 0,
-  "DocEnd": 0,
+  "SubCommandDescription": "Root command description",
+  "SubCommandPackageName": "main",
+  "ImportPath": "example.com/mypkg",
+  "UsageFileName": "usage.txt",
   "Parameters": [
     {
       "Name": "verbose",
       "Type": "bool",
-      "FlagAliases": [
-        "v"
-      ],
-      "Default": "",
-      "Description": "Enable verbose output",
-      "IsPositional": false,
-      "PositionalArgIndex": 0,
-      "IsVarArg": false,
-      "VarArgMin": 0,
-      "VarArgMax": 0,
-      "DeclaredIn": "",
-      "IsRequired": false,
-      "Parser": {
-        "Type": "implicit",
-        "Func": null
-      },
-      "Generator": {
-        "Type": "flag",
-        "Func": null
-      }
+      "FlagAliases": ["v"],
+      "Description": "Enable verbose output"
     }
-  ],
-  "ReturnsError": false,
-  "ReturnCount": 0,
-  "UsageFileName": "usage.txt",
-  "DataModel": null
+  ]
 }
 -- template_name --
 root_test.go.gotmpl

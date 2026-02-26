@@ -1,21 +1,14 @@
 -- input.json --
 {
+  "PackageName": "main",
   "MainCmdName": "mycmd",
-  "SubCommands": null,
-  "PackagePath": "example.com/myproject",
-  "ImportPath": "example.com/myproject/rootpkg",
-  "CommandPackageName": "",
-  "Description": "",
-  "ExtendedHelp": "",
-  "FunctionName": "MyRootFunc",
-  "DefinitionFile": "",
-  "DocStart": 0,
-  "DocEnd": 0,
-  "Parameters": null,
+  "Version": "1.0.0",
   "ReturnsError": true,
   "ReturnCount": 1,
-  "UsageFileName": "",
-  "DataModel": null
+  "FunctionName": "MyRootFunc",
+  "Parameters": [],
+  "PackagePath": "example.com/myproject",
+  "ImportPath": "example.com/myproject/rootpkg"
 }
 -- template_name --
 root.go.gotmpl
@@ -29,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 
 	"errors"
@@ -83,7 +75,7 @@ func NewUserError(err error, msg string) *UserError {
 	return &UserError{Err: err, Msg: msg}
 }
 
-func executeUsage(out io.Writer, templateName string, data any) error {
+func executeUsage(out io.Writer, templateName string, data interface{}) error {
 	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
 }
 
@@ -148,9 +140,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					c.UsageRecursive()
-					return nil
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
 				c.Usage()
 				return nil
@@ -161,9 +155,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					c.UsageRecursive()
-					return nil
+				for _, arg := range args {
+					if arg == "-deep" {
+						c.UsageRecursive()
+						return nil
+					}
 				}
 				c.Usage()
 				return nil

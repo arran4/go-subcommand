@@ -1,2 +1,0 @@
-Cmd is a subcommand `app cmd` -- runs cmd
-param force (-f, default: false) Force it

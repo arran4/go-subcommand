@@ -2,7 +2,6 @@ package commentv1
 
 import (
 	"encoding/json"
-	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +9,6 @@ import (
 
 	"golang.org/x/tools/txtar"
 )
-
-var update = flag.Bool("update", false, "update golden files")
 
 func TestParseSubCommandComments(t *testing.T) {
 	// Find all .txtar files in testdata
@@ -25,8 +22,7 @@ func TestParseSubCommandComments(t *testing.T) {
 			continue
 		}
 		t.Run(entry.Name(), func(t *testing.T) {
-			path := filepath.Join("testdata", entry.Name())
-			data, err := os.ReadFile(path)
+			data, err := os.ReadFile(filepath.Join("testdata", entry.Name()))
 			if err != nil {
 				t.Fatalf("failed to read file: %v", err)
 			}
@@ -47,7 +43,7 @@ func TestParseSubCommandComments(t *testing.T) {
 			if inputComment == "" {
 				t.Fatal("input.comment not found")
 			}
-			if expectedOutput == nil && !*update {
+			if expectedOutput == nil {
 				t.Fatal("expected.json not found")
 			}
 
@@ -74,27 +70,6 @@ func TestParseSubCommandComments(t *testing.T) {
 			actualJson, err := json.MarshalIndent(result, "", "  ")
 			if err != nil {
 				t.Fatalf("failed to marshal result: %v", err)
-			}
-
-			if *update {
-				found := false
-				for i := range archive.Files {
-					if archive.Files[i].Name == "expected.json" {
-						archive.Files[i].Data = actualJson
-						found = true
-						break
-					}
-				}
-				if !found {
-					archive.Files = append(archive.Files, txtar.File{
-						Name: "expected.json",
-						Data: actualJson,
-					})
-				}
-				if err := os.WriteFile(path, txtar.Format(archive), 0644); err != nil {
-					t.Fatalf("failed to update golden file: %v", err)
-				}
-				return
 			}
 
 			// Normalize newlines for comparison

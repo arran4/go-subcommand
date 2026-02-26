@@ -9,7 +9,6 @@ import (
 
 type Parser interface {
 	Parse(fsys fs.FS, root string, options *ParseOptions) (*model.DataModel, error)
-	Format(node interface{}, options ...FormatOption) (string, error)
 }
 
 var parsers = make(map[string]Parser)
