@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// ReservedKeywords is a list of Go keywords and other reserved words that cannot be used as package names or identifiers
+// without collision issues in the generated code.
 var ReservedKeywords = []string{
 	"error", "string", "int", "bool", "byte", "rune", "float32", "float64",
 	"complex64", "complex128", "uint", "uint8", "uint16", "uint32", "uint64",
@@ -21,10 +23,15 @@ var ReservedKeywords = []string{
 	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
 }
 
+// DataModel represents the parsed data model of the Go files, containing commands and package information.
 type DataModel struct {
+	// FileSet is the token.FileSet used for parsing.
 	FileSet     *token.FileSet
+	// PackageName is the name of the package where the main command is defined.
 	PackageName string
+	// Commands is the list of top-level commands found.
 	Commands    []*Command
+	// GoVersion is the Go version from go.mod.
 	GoVersion   string
 }
 
@@ -35,23 +42,38 @@ type FuncRef struct {
 	FunctionName       string
 }
 
+// Command represents a top-level command.
 type Command struct {
 	*DataModel
+	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName        string
+	// SubCommands is the list of direct subcommands for this command.
 	SubCommands        []*SubCommand
+	// PackagePath is the full package path (module path + relative path).
 	PackagePath        string
+	// ImportPath is the import path for the package containing the command.
 	ImportPath         string
+	// CommandPackageName is the package name where the command function is defined.
 	CommandPackageName string
+	// Description is a short description of the command.
 	Description        string
+	// ExtendedHelp is the long description/help text for the command.
 	ExtendedHelp       string
+	// FunctionName is the name of the function definition.
 	FunctionName       string
-	DefinitionFile     string
-	DocStart           token.Pos
-	DocEnd             token.Pos
-	Parameters         []*FunctionParameter
-	ReturnsError       bool
-	ReturnCount        int
 	UsageFileName      string
+	// DefinitionFile is the path to the file where the command is defined.
+	DefinitionFile string
+	// DocStart is the starting position of the documentation comment.
+	DocStart       token.Pos
+	// DocEnd is the ending position of the documentation comment.
+	DocEnd         token.Pos
+	// Parameters is the list of parameters (flags and arguments) for the command.
+	Parameters     []*FunctionParameter
+	// ReturnsError indicates if the command function returns an error.
+	ReturnsError   bool
+	// ReturnCount is the number of return values.
+	ReturnCount    int
 }
 
 func (c *Command) ImportAlias() string {
@@ -112,26 +134,41 @@ type ParserConfig struct {
 	Func *FuncRef // Non-nil if Type == ParserTypeCustom
 }
 
+// FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
 type FunctionParameter struct {
+	// Name is the name of the parameter in the function signature.
 	Name               string
+	// Type is the Go type of the parameter (e.g., "string", "int", "[]string").
 	Type               string
+	// FlagAliases is a list of alternative names for the flag (e.g., "v" for "verbose").
 	FlagAliases        []string
+	// Default is the default value for the parameter if not provided.
 	Default            string
+	// Description is the help text for the parameter.
 	Description        string
+	// IsPositional indicates if the parameter is a positional argument (not a flag).
 	IsPositional       bool
+	// PositionalArgIndex is the index of the positional argument (0-based).
 	PositionalArgIndex int
+	// IsVarArg indicates if the parameter captures remaining arguments (variadic).
 	IsVarArg           bool
+	// VarArgMin is the minimum number of arguments required for a variadic parameter.
 	VarArgMin          int
+	// VarArgMax is the maximum number of arguments allowed for a variadic parameter.
 	VarArgMax          int
 	// DeclaredIn specifies the name of the command where this parameter was originally declared.
 	// This is used for parameter inheritance and grouping in help output.
-	DeclaredIn string
+	// DeclaredIn is the name of the command where this parameter was originally declared (used for inheritance).
+	DeclaredIn         string
 	// IsRequired indicates that the parameter is mandatory.
 	// If a required flag is missing, execution will fail.
-	IsRequired bool
+	// Required indicates if the parameter is mandatory.
+	Required           bool
 	// Parser holds the configuration for parsing the parameter value.
 	Parser ParserConfig
 	// Generator holds the configuration for generating the parameter value.
+	// Generator is the name of a function that generates the value for this parameter.
+	// If set, the parameter is not parsed from the command line but generated.
 	Generator GeneratorConfig
 }
 
@@ -271,24 +308,42 @@ func (p *FunctionParameter) TypeDescription() string {
 	}
 }
 
+// SubCommand represents a subcommand within a command tree.
 type SubCommand struct {
 	*Command
+	// Parent points to the parent command.
 	Parent                 *SubCommand
+	// SubCommands is the list of children subcommands.
 	SubCommands            []*SubCommand
+	// SubCommandName is the name of this subcommand (the word used in the CLI).
 	SubCommandName         string
+	// Aliases is a list of alternative names for this subcommand.
 	Aliases                []string
+	// SubCommandStructName is the name of the generated struct for this subcommand.
 	SubCommandStructName   string
+	// SubCommandFunctionName is the name of the function that implements this subcommand.
 	SubCommandFunctionName string
+	// SubCommandDescription is a short description.
 	SubCommandDescription  string
+	// SubCommandExtendedHelp is the long help text.
 	SubCommandExtendedHelp string
+	// ImportPath is the import path where the subcommand is defined.
 	ImportPath             string
+	// SubCommandPackageName is the package name where the subcommand is defined.
 	SubCommandPackageName  string
+	// UsageFileName is the name of the file containing usage documentation.
 	UsageFileName          string
+	// DefinitionFile is the path to the source file.
 	DefinitionFile         string
+	// DocStart is the starting position of the docs.
 	DocStart               token.Pos
+	// DocEnd is the ending position of the docs.
 	DocEnd                 token.Pos
+	// Parameters is the list of parameters for this subcommand.
 	Parameters             []*FunctionParameter
+	// ReturnsError indicates if the function returns an error.
 	ReturnsError           bool
+	// ReturnCount is the number of return values.
 	ReturnCount            int
 }
 
@@ -488,8 +543,12 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 	return params
 }
 
+// ParameterGroup represents a group of parameters belonging to a specific command level.
+// Used for displaying flags grouped by where they are defined (e.g. Global Flags vs Local Flags).
 type ParameterGroup struct {
+	// CommandName is the name of the command that defines these parameters.
 	CommandName string
+	// Parameters is the list of parameters in this group.
 	Parameters  []*FunctionParameter
 }
 
