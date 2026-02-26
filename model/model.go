@@ -68,28 +68,47 @@ func (c *Command) ImportAlias() string {
 	return ""
 }
 
+// SourceType defines how a parameter's value is populated.
 type SourceType string
 
 const (
-	SourceTypeFlag      SourceType = "flag"
+	// SourceTypeFlag indicates that the parameter value is derived from a command-line flag.
+	// This is the default source type.
+	SourceTypeFlag SourceType = "flag"
+	// SourceTypeGenerator indicates that the parameter value is produced by a generator function.
+	// Parameters with this source type are not exposed as command-line flags.
+	// Limitations: The generator function must be defined in the project or imported, and it is executed before the command's action.
 	SourceTypeGenerator SourceType = "generator"
 )
 
+// ParserType defines how a string value (typically from a flag) is converted to the target type.
 type ParserType string
 
 const (
+	// ParserTypeImplicit uses the default parsing logic based on the parameter's type (e.g., strconv for integers).
+	// It is used when no custom parser is specified.
 	ParserTypeImplicit ParserType = "implicit"
-	ParserTypeCustom   ParserType = "custom"
+	// ParserTypeCustom uses a user-provided function to parse the string value.
+	// The function must accept a string and return the target type (and optionally an error).
+	ParserTypeCustom ParserType = "custom"
+	// ParserTypeIdentity indicates that no parsing is performed.
+	// This is typically used when the value is not a string flag, such as when it comes from a generator or is already in the correct format.
 	ParserTypeIdentity ParserType = "identity"
 )
 
+// GeneratorConfig holds configuration for value generation.
 type GeneratorConfig struct {
+	// Type specifies the source of the parameter value.
 	Type SourceType
+	// Func refers to the generator function. It is only required/used when Type is SourceTypeGenerator.
 	Func *FuncRef // Non-nil if Type == SourceTypeGenerator
 }
 
+// ParserConfig holds configuration for value parsing.
 type ParserConfig struct {
+	// Type specifies how the parameter value is parsed.
 	Type ParserType
+	// Func refers to the custom parser function. It is only required/used when Type is ParserTypeCustom.
 	Func *FuncRef // Non-nil if Type == ParserTypeCustom
 }
 
@@ -104,10 +123,15 @@ type FunctionParameter struct {
 	IsVarArg           bool
 	VarArgMin          int
 	VarArgMax          int
-	DeclaredIn         string
-	IsRequired         bool
-	// IsGlobal removed
-	Parser    ParserConfig
+	// DeclaredIn specifies the name of the command where this parameter was originally declared.
+	// This is used for parameter inheritance and grouping in help output.
+	DeclaredIn string
+	// IsRequired indicates that the parameter is mandatory.
+	// If a required flag is missing, execution will fail.
+	IsRequired bool
+	// Parser holds the configuration for parsing the parameter value.
+	Parser ParserConfig
+	// Generator holds the configuration for generating the parameter value.
 	Generator GeneratorConfig
 }
 
