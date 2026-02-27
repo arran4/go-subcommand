@@ -73,26 +73,22 @@ type RootCmd struct {
 }
 
 func (c *RootCmd) Usage() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	for name := range c.Commands {
-		fmt.Fprintf(os.Stderr, "    %s\n", name)
+	err := executeUsage(os.Stderr, "gosubc_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	fmt.Fprintf(os.Stderr, "    %s\n", "format")
-	fmt.Fprintf(os.Stderr, "    %s\n", "format-source-comments")
-	fmt.Fprintf(os.Stderr, "    %s\n", "generate")
-	fmt.Fprintf(os.Stderr, "    %s\n", "goreleaser")
-	fmt.Fprintf(os.Stderr, "    %s\n", "list")
-	fmt.Fprintf(os.Stderr, "    %s\n", "scan")
-	fmt.Fprintf(os.Stderr, "    %s\n", "syntax")
-	fmt.Fprintf(os.Stderr, "    %s\n", "validate")
+	err := executeUsage(os.Stderr, "gosubc_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
@@ -110,45 +106,36 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		c.Commands["format"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewFormatSourceComments() })
 		c.Commands["format-source-comments"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewGenerate() })
 		c.Commands["generate"] = subCmd
 
-		c.Commands["gen"] = subCmd
-
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewGoreleaser() })
 		c.Commands["goreleaser"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewList() })
 		c.Commands["list"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewScan() })
 		c.Commands["scan"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewSyntax() })
 		c.Commands["syntax"] = subCmd
 
 	}
-
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewValidate() })
 		c.Commands["validate"] = subCmd
@@ -196,6 +183,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -247,6 +235,7 @@ func (c *RootCmd) Execute(args []string) error {
 			return cmd().Execute(remainingArgs[1:])
 		}
 	}
+
 	c.Usage()
 	if len(remainingArgs) > 0 {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])
