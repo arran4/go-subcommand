@@ -1,0 +1,37 @@
+-- go.mod --
+module example.com/test
+
+go 1.22
+-- main.go --
+package main
+
+import (
+    "example.com/test/pkg"
+)
+
+type Config struct{}
+
+// MyCmd is a subcommand `app mycmd`
+// (aliases: a, b; c)
+//
+// Flags:
+//
+//	myflag: --flag (parser: ParseFunc)
+//	config: (global; generator: pkg.LoadConfig)
+//	global_flag: (global; required)
+//	gen_flag: (generator: myfunc; required)
+//	mixed_flag: --foo (global)
+//	mixed_gen: --bar (generator: myfunc)
+//	alias_global: -g (global)
+func MyCmd(
+	myflag string,
+	config Config,
+	global_flag string,
+	gen_flag string,
+	mixed_flag string,
+	mixed_gen string,
+	alias_global string,
+) {}
+
+func ParseFunc(s string) (string, error) { return s, nil }
+func myfunc() (string, error) { return "", nil }

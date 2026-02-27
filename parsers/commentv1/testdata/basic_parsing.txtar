@@ -1,0 +1,164 @@
+-- input.comment --
+MyCmd is a subcommand `app mycmd`
+(aliases: a, b; c)
+
+Flags:
+
+	myflag: --flag (parser: ParseFunc)
+	config: (global; generator: rootPkg.LoadConfig)
+	global_flag: (global; required)
+	gen_flag: (generator: myfunc; required)
+	mixed_flag: --foo (global)
+	mixed_gen: --bar (generator: myfunc)
+	alias_global: -g (global)
+
+-- expected.json --
+{
+  "CmdName": "app",
+  "SubCommandSequence": [
+    "mycmd"
+  ],
+  "Description": "",
+  "ExtendedHelp": "",
+  "Aliases": [
+    "a",
+    "b",
+    "c"
+  ],
+  "Params": {
+    "alias_global": {
+      "Flags": [
+        "g"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "config": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "rootPkg",
+        "ImportPath": "rootPkg",
+        "CommandPackageName": "rootPkg",
+        "FunctionName": "LoadConfig"
+      }
+    },
+    "gen_flag": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": true,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "myfunc"
+      }
+    },
+    "global_flag": {
+      "Flags": null,
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": true,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "mixed_flag": {
+      "Flags": [
+        "foo"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": true,
+      "ParserFunc": null,
+      "Generator": null
+    },
+    "mixed_gen": {
+      "Flags": [
+        "bar"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": null,
+      "Generator": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "myfunc"
+      }
+    },
+    "myflag": {
+      "Flags": [
+        "flag"
+      ],
+      "Default": "",
+      "Description": "",
+      "IsPositional": false,
+      "PositionalArgIndex": 0,
+      "IsVarArg": false,
+      "VarArgMin": 0,
+      "VarArgMax": 0,
+      "Inherited": false,
+      "IsRequired": false,
+      "IsGlobal": false,
+      "ParserFunc": {
+        "PackagePath": "",
+        "ImportPath": "",
+        "CommandPackageName": "",
+        "FunctionName": "ParseFunc"
+      },
+      "Generator": null
+    }
+  },
+  "Ok": true
+}

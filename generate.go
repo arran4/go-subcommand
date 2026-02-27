@@ -278,6 +278,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	collector := NewCollectingFileWriter()
 
 	for _, cmd := range dataModel.Commands {
+		cmd.UsageFileName = fmt.Sprintf("%s_usage.txt", strings.ToLower(cmd.MainCmdName))
 		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
 		if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
@@ -301,6 +302,12 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+
+		// Generate root usage file
+		if err := generateFile(collector, cmdTemplatesDir, cmd.UsageFileName, "usage.txt.gotmpl", &model.SubCommand{Command: cmd}, false); err != nil {
+			return err
+		}
+
 		for _, subCmd := range cmd.SubCommands {
 			assignUsageFileNames(cmd.SubCommands)
 			if err := generateSubCommandFiles(collector, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
@@ -402,7 +409,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 			}
 			return res
 		},
-		"slice": func(args ...interface{}) []interface{} {
+		"list": func(args ...interface{}) []interface{} {
 			return args
 		},
 		"append": func(list []interface{}, args ...interface{}) []interface{} {
