@@ -51,6 +51,7 @@ func (c *Generate) UsageRecursive() {
 
 func (c *Generate) Execute(args []string) error {
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
