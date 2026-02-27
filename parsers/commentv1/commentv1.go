@@ -398,8 +398,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						inherited := false
 
 						// Start with Preceding (3rd)
-						for i := len(candidates) - 1; i >= 0; i-- {
-							c := candidates[i]
+						if len(candidates) > 2 {
+							c := candidates[2]
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
@@ -421,8 +421,84 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Inherited {
 								inherited = true
 							}
-							if c.RequiredArg {
-								fp.RequiredArg = true
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.IsGlobal {
+								fp.IsGlobal = true
+							}
+							if c.ParserFunc != nil {
+								fp.ParserFunc = c.ParserFunc
+							}
+							if c.Generator != nil {
+								fp.Generator = c.Generator
+							}
+						}
+
+						// Merge Inline (2nd)
+						if len(candidates) > 1 {
+							c := candidates[1]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
+							}
+							if c.IsRequired {
+								fp.IsRequired = true
+							}
+							if c.IsGlobal {
+								fp.IsGlobal = true
+							}
+							if c.ParserFunc != nil {
+								fp.ParserFunc = c.ParserFunc
+							}
+							if c.Generator != nil {
+								fp.Generator = c.Generator
+							}
+						}
+
+						// Merge Flags Block (Top)
+						if len(candidates) > 0 {
+							c := candidates[0]
+							if len(c.Flags) > 0 {
+								fp.FlagAliases = c.Flags
+							}
+							if c.Default != "" {
+								fp.Default = c.Default
+							}
+							if c.Description != "" {
+								fp.Description = c.Description
+							}
+							if c.IsPositional {
+								fp.IsPositional = true
+								fp.PositionalArgIndex = c.PositionalArgIndex
+							}
+							if c.IsVarArg {
+								fp.IsVarArg = true
+								fp.VarArgMin = c.VarArgMin
+								fp.VarArgMax = c.VarArgMax
+							}
+							if c.Inherited {
+								inherited = true
+							}
+							if c.IsRequired {
+								fp.IsRequired = true
 							}
 							if c.IsGlobal {
 								fp.IsGlobal = true
@@ -551,7 +627,6 @@ var (
 	reGlobal          = regexp.MustCompile(`\(global\)`)
 	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
 	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
-	reImplicitParam   = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 )
 
 type ParsedParam struct {
@@ -564,11 +639,13 @@ type ParsedParam struct {
 	VarArgMin          int
 	VarArgMax          int
 	Inherited          bool
-	RequiredArg         bool
+	IsRequired         bool
 	IsGlobal           bool
 	ParserFunc         *model.FuncRef
 	Generator          *model.FuncRef
 }
+
+var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -732,7 +809,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// that strongly suggests it is a parameter definition.
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.RequiredArg || details.IsGlobal || details.Generator != nil {
+				if details.IsPositional || details.IsVarArg || len(details.Flags) > 0 || details.ParserFunc != nil || details.IsRequired || details.IsGlobal || details.Generator != nil {
 					params[name] = details
 					continue
 				}
@@ -763,7 +840,7 @@ func parseParamDetails(text string) ParsedParam {
 	})
 
 	if reRequired.MatchString(text) {
-		p.RequiredArg = true
+		p.IsRequired = true
 		text = reRequired.ReplaceAllString(text, "")
 	}
 

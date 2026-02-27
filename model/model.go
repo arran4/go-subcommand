@@ -80,7 +80,7 @@ type FunctionParameter struct {
 	VarArgMin          int
 	VarArgMax          int
 	DeclaredIn         string
-	RequiredArg        bool // RequiredArg indicates if the flag must be provided
+	IsRequired        bool // IsRequired indicates if the flag must be provided
 	IsGlobal           bool
 	ParserFunc         *FuncRef
 	Generator          *FuncRef
@@ -113,7 +113,7 @@ func (p *FunctionParameter) FlagString() string {
 }
 
 func (p *FunctionParameter) DefaultString() string {
-	if p.RequiredArg {
+	if p.IsRequired {
 		return "(required)"
 	}
 	if p.Default == "" {
@@ -535,7 +535,7 @@ func (sc *SubCommand) FullUsageString() string {
 	// We only show positionals for the command we are running.
 	for _, p := range sc.Parameters {
 		if p.IsPositional {
-			if p.RequiredArg {
+			if p.IsRequired {
 				if p.IsVarArg {
 					parts = append(parts, fmt.Sprintf("<%s...>", p.Name))
 				} else {

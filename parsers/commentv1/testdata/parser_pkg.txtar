@@ -27,7 +27,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "RequiredArg": false,
+      "IsRequired": false,
       "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
@@ -47,7 +47,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "RequiredArg": false,
+      "IsRequired": false,
       "IsGlobal": false,
       "ParserFunc": null,
       "Generator": {
@@ -67,7 +67,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "RequiredArg": false,
+      "IsRequired": false,
       "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "",
@@ -89,7 +89,7 @@ Flags:
       "VarArgMin": 0,
       "VarArgMax": 0,
       "Inherited": false,
-      "RequiredArg": false,
+      "IsRequired": false,
       "IsGlobal": false,
       "ParserFunc": {
         "PackagePath": "encoding/json",

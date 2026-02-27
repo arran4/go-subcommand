@@ -308,8 +308,8 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 			return err
 		}
 
-		assignUsageFileNames(cmd.SubCommands)
 		for _, subCmd := range cmd.SubCommands {
+			assignUsageFileNames(cmd.SubCommands)
 			if err := generateSubCommandFiles(collector, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
