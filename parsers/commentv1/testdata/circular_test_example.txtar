@@ -1,0 +1,16 @@
+-- tests.txt --
+commentv1 circular parsing tests
+-- options.json --
+{ "Recursive": true }
+-- go.mod --
+module example.com/pkg
+
+go 1.16
+-- main.go --
+package main
+
+// MyCmd is a command `app`
+// (aliases: a; b)
+//
+// Flags:
+func MyCmd() {}
