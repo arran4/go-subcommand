@@ -13,11 +13,7 @@ Subcommands:
 
 
 Flags:
-
     --dir string      (default: ".")    The project root directory
-
     --inplace                           Modify files in place
-
-    --path []string   (default: nil)    Paths to search for subcommands relative to dir
-
+    --path []string   (default: nil)    Paths to search for subcommands
     --recursive       (default: true)   Search recursively
