@@ -1,0 +1,28 @@
+-- go.mod --
+module example.com/test
+
+go 1.22
+-- main.go --
+package main
+
+import (
+	"example.com/pkg"
+	"encoding/json"
+)
+
+// MyCmd is a subcommand `app mycmd`
+//
+// Flags:
+//	myflag: --json-data (parser: "encoding/json".Unmarshal)
+//	local_parser: (parser: LocalFunc)
+//	gen_pkg: (generator: "example.com/pkg".Gen)
+//	gen_local: (generator: Gen)
+func MyCmd(
+	myflag string,
+	local_parser string,
+	gen_pkg string,
+	gen_local string,
+) {}
+
+func LocalFunc(s string) (string, error) { return s, nil }
+func Gen() (string, error) { return "", nil }

@@ -14,7 +14,7 @@ import (
 	{{- if .SubCommands }}
 	"sync"
 	{{- end }}
-{{- template "common_imports" (slice .Parameters true) }}
+{{- template "common_imports" (list .Parameters true) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
 	{{- if .FunctionName}}
@@ -89,28 +89,23 @@ type RootCmd struct {
 	CommandAction func(c *RootCmd) error
 }
 
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
 func (c *RootCmd) Usage() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	for name := range c.Commands {
-		fmt.Fprintf(os.Stderr, "    %s\n", name)
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-{{- define "root_subcommands" -}}
-{{- range .SubCommands}}
-	fmt.Fprintf(os.Stderr, "    %s\n", "{{.SubCommandSequence}}")
-{{- if .SubCommands}}
-{{- template "root_subcommands" . }}
-{{- end}}
-{{- end}}
-{{- end}}
-{{- template "root_subcommands" . }}
+	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
@@ -122,9 +117,24 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Date:     date,
 	}
 	c.FlagSet.Usage = c.Usage
-{{- template "flag_definitions" (slice "c" "c" .Parameters) }}
+{{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
 	c.CommandAction = func(c *RootCmd) error {
+		{{- range .Parameters }}
+		{{- if and .Generator (not .IsGlobal) }}
+		{
+			var err error
+			{{- if .Generator.CommandPackageName }}
+			c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+			{{- else }}
+			c.{{.Name}}, err = {{.Generator.FunctionName}}()
+			{{- end }}
+			if err != nil {
+				return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+			}
+		}
+		{{- end }}
+		{{- end }}
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
 		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
@@ -220,6 +230,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
+	{{- $hasRequired := false }}
+	{{- range .Parameters }}{{ if .IsRequired }}{{ $hasRequired = true }}{{ end }}{{ end }}
+	{{- if $hasRequired }}
+	seenFlags := make(map[string]bool)
+	{{- end }}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -244,12 +259,12 @@ func (c *RootCmd) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if not .IsPositional }}
+			{{- if and (not .IsPositional) (not .Generator) }}
 			{{$param := .}}
-			{{- $longs := slice }}
+			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
 			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
-			{{- $uniqueLongs := slice }}
+			{{- $uniqueLongs := list }}
 			{{- range $l := $longs }}
 				{{- $exists := false }}
 				{{- range $u := $uniqueLongs }}{{ if eq $u $l }}{{ $exists = true }}{{ end }}{{ end }}
@@ -257,6 +272,30 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $hasRequired }}
+				seenFlags["{{$param.Name}}"] = true
+				{{- end }}
+				{{- if $param.ParserFunc }}
+				v, err := {{$param.ParserCall "value"}}
+				if err != nil {
+					return fmt.Errorf("invalid value for flag %s: %w", name, err)
+				}
+				{{- if $param.IsSlice }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+				{{- else }}
+				c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+				{{- end }}
+				{{- else }}
+				{{- if $param.HasPointer }}
+				val := v
+				c.{{$param.Name}} = &val
+				{{- else }}
+				c.{{$param.Name}} = v
+				{{- end }}
+				{{- end }}
+				{{- else }}
 				{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
@@ -636,6 +675,7 @@ func (c *RootCmd) Execute(args []string) error {
 				// TODO: Implement parsing for flag type {{$param.Type}}
 				{{- end }}
 				{{- end }}
+				{{- end }}
 			{{- end }}
 			{{- end }}
 			{{- end }}
@@ -653,12 +693,12 @@ func (c *RootCmd) Execute(args []string) error {
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if not .IsPositional }}
+				{{- if and (not .IsPositional) (not .Generator) }}
 				{{$param := .}}
-				{{- $shorts := slice }}
+				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
 				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
-				{{- $uniqueShorts := slice }}
+				{{- $uniqueShorts := list }}
 				{{- range $s := $shorts }}
 					{{- $exists := false }}
 					{{- range $u := $uniqueShorts }}{{ if eq $u $s }}{{ $exists = true }}{{ end }}{{ end }}
@@ -667,6 +707,30 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $hasRequired }}
+					seenFlags["{{$param.Name}}"] = true
+					{{- end }}
+				{{- if $param.ParserFunc }}
+					v, err := {{$param.ParserCall "value"}}
+					if err != nil {
+						return fmt.Errorf("invalid value for flag -%s: %w", char, err)
+					}
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, v)
+					{{- end }}
+					{{- else }}
+					{{- if $param.HasPointer }}
+					val := v
+					c.{{$param.Name}} = &val
+					{{- else }}
+					c.{{$param.Name}} = v
+					{{- end }}
+					{{- end }}
+					{{- else }}
 					{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
 					{{- if eq $param.Type "bool" }}
 					c.{{$param.Name}} = true
@@ -685,6 +749,9 @@ func (c *RootCmd) Execute(args []string) error {
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -1037,6 +1104,7 @@ func (c *RootCmd) Execute(args []string) error {
 					// TODO: Implement parsing for flag type {{$param.Type}}
 					{{- end }}
 					{{- end }}
+					{{- end }}
 				}
 				{{- end }}
 				{{- end }}
@@ -1051,6 +1119,22 @@ func (c *RootCmd) Execute(args []string) error {
 		}
 	}
 
+	{{- range .Parameters }}
+	{{- if and .IsGlobal .Generator }}
+	{
+		var err error
+		{{- if .Generator.CommandPackageName }}
+		c.{{.Name}}, err = {{.Generator.CommandPackageName}}.{{.Generator.FunctionName}}()
+		{{- else }}
+		c.{{.Name}}, err = {{.Generator.FunctionName}}()
+		{{- end }}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+	}
+	{{- end }}
+	{{- end }}
+
 	if len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
@@ -1062,6 +1146,17 @@ func (c *RootCmd) Execute(args []string) error {
 {{- template "positional_args_parsing" .Parameters }}
 
 	if c.CommandAction != nil {
+		{{- range .Parameters }}
+		{{- if and .IsRequired (not .IsPositional) (not .Generator) }}
+		if !seenFlags["{{.Name}}"] {
+			{{- if gt (len .FlagAliases) 0 }}
+			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
+			{{- else }}
+			return fmt.Errorf("required flag -{{.Name}} not provided")
+			{{- end }}
+		}
+		{{- end }}
+		{{- end }}
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
 		}

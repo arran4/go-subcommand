@@ -37,6 +37,35 @@
 	{{- if $hasDuration }}
 	"time"
 	{{- end }}
+	{{- $imports := list }}
+	{{- range $params }}
+		{{$param := .}}
+		{{- if and .ParserFunc .ParserFunc.ImportPath }}
+			{{- $exists := false }}
+			{{- range $i := $imports }}
+				{{- if eq $i $param.ParserFunc.ImportPath }}
+					{{- $exists = true }}
+				{{- end }}
+			{{- end }}
+			{{- if not $exists }}
+				{{- $imports = append $imports .ParserFunc.ImportPath }}
+			{{- end }}
+		{{- end }}
+		{{- if and .Generator .Generator.ImportPath }}
+			{{- $exists := false }}
+			{{- range $i := $imports }}
+				{{- if eq $i $param.Generator.ImportPath }}
+					{{- $exists = true }}
+				{{- end }}
+			{{- end }}
+			{{- if not $exists }}
+				{{- $imports = append $imports .Generator.ImportPath }}
+			{{- end }}
+		{{- end }}
+	{{- end }}
+	{{- range $imports }}
+	"{{.}}"
+	{{- end }}
 {{- end -}}
 
 {{- define "flag_definitions" -}}
@@ -44,7 +73,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if not .IsPositional }}
+		{{- if and (not .IsPositional) (not .Generator) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -67,7 +96,7 @@
 		{{- end -}}
 
 		{{- $aliases := .FlagAliases }}
-		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
+		{{- if not $aliases }}{{ $aliases = list .Name }}{{ end }}
 
 		{{- range $aliases }}
 			{{- if $param.IsSlice }}
@@ -77,7 +106,21 @@
 				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
 	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else }}
-				{{- if $param.HasPointer }}
+				{{- if $param.ParserFunc }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		v, err := {{$param.ParserCall "s"}}
+		if err != nil {
+			return err
+		}
+		val := {{$param.CastCode "v"}}
+		{{- if $param.HasPointer }}
+		{{$struct}}.{{$param.Name}} = &val
+		{{- else }}
+		{{$struct}}.{{$param.Name}} = val
+		{{- end }}
+		return nil
+	})
+				{{- else if $param.HasPointer }}
 					{{- if $param.IsString }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
 		{{$struct}}.{{$param.Name}} = &s
