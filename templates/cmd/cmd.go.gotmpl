@@ -56,6 +56,41 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 }
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
+	{{- $subCommandName := .SubCommandName }}
+	{{- $parentStructName := "" }}
+	{{- if .Parent }}
+	{{- $parentStructName = .Parent.SubCommandStructName }}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if ne .DeclaredIn $subCommandName }}
+	c.{{.Name}} = c.{{$parentStructName}}.{{.Name}}
+	{{- else }}
+	{{- if eq .Generator.Type "generator" }}
+	{
+		var err error
+		{{- if eq .Parser.Type "custom" }}
+		genVal, err := {{if .Generator.Func.CommandPackageName}}{{.Generator.Func.CommandPackageName}}.{{end}}{{.Generator.Func.FunctionName}}()
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+		c.{{.Name}}, err = {{if .Parser.Func.CommandPackageName}}{{.Parser.Func.CommandPackageName}}.{{end}}{{.Parser.Func.FunctionName}}(genVal)
+		if err != nil {
+			return fmt.Errorf("failed to parse generated value for {{.Name}}: %w", err)
+		}
+		{{- else }}
+		{{- if .Generator.Func.CommandPackageName }}
+		c.{{.Name}}, err = {{.Generator.Func.CommandPackageName}}.{{.Generator.Func.FunctionName}}()
+		{{- else }}
+		c.{{.Name}}, err = {{.Generator.Func.FunctionName}}()
+		{{- end }}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+		{{- end }}
+	}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .AllParameters }}
 	{{- if or .IsPositional .IsVarArg }}
@@ -63,6 +98,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{- end }}
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -87,7 +123,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 			{{- range .AllParameters }}
-			{{- if not .IsPositional }}
+			{{- if and (not .IsPositional) (eq .Generator.Type "flag") }}
 			{{$param := .}}
 			{{- $longs := slice }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -100,6 +136,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $param.IsRequired }}
+				seenFlags["{{$param.Name}}"] = true
+				{{- end }}
 				{{- if $param.IsBool }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
@@ -162,10 +201,17 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- end }}
 				{{- end }}
 				{{- else }}
+				{{- if eq $param.Parser.Type "custom" }}
+				v, err := {{$param.ParserCall "value"}}
+				if err != nil {
+					return fmt.Errorf("invalid value for flag %s: %w", name, err)
+				}
+				{{- else }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
 					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
 				}
+				{{- end }}
 				{{- if $param.IsSlice }}
 				{{- if $param.HasPointer }}
 				val := {{$param.CastCode "v"}}
@@ -200,7 +246,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				}
 				found := false
 				{{- range .AllParameters }}
-				{{- if not .IsPositional }}
+				{{- if and (not .IsPositional) (eq .Generator.Type "flag") }}
 				{{$param := .}}
 				{{- $shorts := slice }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -214,6 +260,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $param.IsRequired }}
+					seenFlags["{{$param.Name}}"] = true
+					{{- end }}
 					{{- if $param.IsBool }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -236,6 +285,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -263,10 +315,17 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					{{- end }}
 					{{- end }}
 					{{- else }}
+					{{- if eq $param.Parser.Type "custom" }}
+					v, err := {{$param.ParserCall "value"}}
+					if err != nil {
+						return fmt.Errorf("invalid value for flag -%s: %w", char, err)
+					}
+					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
 						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
 					}
+					{{- end }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
 					val := {{$param.CastCode "v"}}
@@ -304,10 +363,21 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		}
 	}
 
-{{- template "positional_args_parsing" .Parameters }}
+{{- template "positional_args_parsing" .AllParameters }}
 
 	{{if .SubCommandFunctionName}}
 	if c.CommandAction != nil {
+		{{- range .AllParameters }}
+		{{- if and .IsRequired (not .IsPositional) (eq .Generator.Type "flag") }}
+		if !seenFlags["{{.Name}}"] {
+			{{- if gt (len .FlagAliases) 0 }}
+			return fmt.Errorf("required flag -{{index .FlagAliases 0}} not provided")
+			{{- else }}
+			return fmt.Errorf("required flag -{{.Name}} not provided")
+			{{- end }}
+		}
+		{{- end }}
+		{{- end }}
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
@@ -361,9 +431,9 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{
 		subCmd := NewLazyCommand(func() Cmd { return v.New{{.SubCommandStructName}}() })
 		v.SubCommands["{{.SubCommandName | lower}}"] = subCmd
-		{{range .Aliases}}
+		{{- range .Aliases}}
 		v.SubCommands["{{. | lower}}"] = subCmd
-		{{end}}
+		{{- end}}
 	}
 	{{end}}
 	v.SubCommands["help"] = func() Cmd {

@@ -47,14 +47,14 @@ type CommandTree struct {
 	FunctionName       string
 	CommandPackageName string
 	DefinitionFile     string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*model.FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
-	Description    string
-	ExtendedHelp   string
-	ImportPath     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*model.FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
+	Description        string
+	ExtendedHelp       string
+	ImportPath         string
 }
 
 type CommandsTree struct {
@@ -91,6 +91,151 @@ type CommentParser struct{}
 // It expects a go.mod file at the root of the filesystem (or root directory).
 func ParseGoFiles(fsys fs.FS, root string) (*model.DataModel, error) {
 	return (&CommentParser{}).Parse(fsys, root, nil)
+}
+
+func (p *CommentParser) Format(node interface{}, options ...parsers.FormatOption) (string, error) {
+	config := parsers.FormatConfig{}
+	for _, opt := range options {
+		opt(&config)
+	}
+
+	switch n := node.(type) {
+	case *model.SubCommand:
+		return formatSubCommand(n, config), nil
+	case *model.FunctionParameter:
+		return formatParameter(n), nil
+	default:
+		return "", fmt.Errorf("unsupported node type: %T", node)
+	}
+}
+
+func formatSubCommand(sc *model.SubCommand, config parsers.FormatConfig) string {
+	var sb strings.Builder
+	sb.WriteString("// ")
+	sb.WriteString(sc.SubCommandFunctionName)
+	sb.WriteString(" is a subcommand `")
+
+	// Full command sequence
+	fullSequence := sc.MainCmdName
+	if seq := sc.SubCommandSequence(); seq != "" {
+		fullSequence += " " + seq
+	}
+	sb.WriteString(fullSequence)
+	sb.WriteString("`")
+
+	if sc.SubCommandDescription != "" {
+		sb.WriteString(" that ")
+		sb.WriteString(sc.SubCommandDescription)
+	}
+	sb.WriteString("\n//")
+
+	if sc.SubCommandExtendedHelp != "" {
+		sb.WriteString("\n// ")
+		sb.WriteString(strings.ReplaceAll(sc.SubCommandExtendedHelp, "\n", "\n// "))
+		sb.WriteString("\n//")
+	}
+
+	if len(sc.Aliases) > 0 {
+		sb.WriteString("\n// aliases: ")
+		// Copy aliases to avoid modifying original struct
+		aliases := make([]string, len(sc.Aliases))
+		copy(aliases, sc.Aliases)
+		sort.Strings(aliases)
+		sb.WriteString(strings.Join(aliases, ", "))
+	}
+
+	if len(sc.Parameters) > 0 {
+		var relevantParams []*model.FunctionParameter
+		for _, p := range sc.Parameters {
+			// If inherited, only include if config.IncludeInherited is true
+			if !config.IncludeInherited && p.DeclaredIn != "" && p.DeclaredIn != sc.SubCommandName {
+				continue
+			}
+			relevantParams = append(relevantParams, p)
+		}
+
+		if len(relevantParams) > 0 {
+			// Sort parameters by name for deterministic output
+			sort.Slice(relevantParams, func(i, j int) bool {
+				return relevantParams[i].Name < relevantParams[j].Name
+			})
+
+			sb.WriteString("\n//\n// Flags:\n//")
+			for _, p := range relevantParams {
+				sb.WriteString("\n//\t")
+				sb.WriteString(p.Name)
+				sb.WriteString(": ")
+				sb.WriteString(formatParameter(p))
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+func formatParameter(p *model.FunctionParameter) string {
+	var parts []string
+
+	if p.Description != "" {
+		parts = append(parts, p.Description)
+	}
+
+	if p.IsRequired {
+		parts = append(parts, "(required)")
+	}
+
+	if p.Default != "" {
+		def := p.Default
+		if p.Type == "string" && !strings.HasPrefix(def, "\"") {
+			def = fmt.Sprintf("%q", def)
+		}
+		parts = append(parts, fmt.Sprintf("(default: %s)", def))
+	}
+
+	var explicitAliases []string
+	for _, a := range p.FlagAliases {
+		prefix := "-"
+		if len(a) > 1 {
+			prefix = "--"
+		}
+		explicitAliases = append(explicitAliases, prefix+a)
+	}
+	// Sort for stability
+	sort.Strings(explicitAliases)
+
+	if len(explicitAliases) > 0 {
+		parts = append(parts, strings.Join(explicitAliases, ", "))
+	}
+
+	if p.IsPositional {
+		parts = append(parts, fmt.Sprintf("@%d", p.PositionalArgIndex))
+	}
+
+	if p.IsVarArg {
+		if p.VarArgMin != 0 || p.VarArgMax != 0 {
+			parts = append(parts, fmt.Sprintf("%d...%d", p.VarArgMin, p.VarArgMax))
+		} else {
+			parts = append(parts, "...")
+		}
+	}
+
+	if p.Parser.Type == model.ParserTypeCustom && p.Parser.Func != nil {
+		fn := p.Parser.Func.FunctionName
+		if p.Parser.Func.ImportPath != "" {
+			fn = fmt.Sprintf("%q.%s", p.Parser.Func.ImportPath, fn)
+		}
+		parts = append(parts, fmt.Sprintf("(parser: %s)", fn))
+	}
+
+	if p.Generator.Type == model.SourceTypeGenerator && p.Generator.Func != nil {
+		fn := p.Generator.Func.FunctionName
+		if p.Generator.Func.ImportPath != "" {
+			fn = fmt.Sprintf("%q.%s", p.Generator.Func.ImportPath, fn)
+		}
+		parts = append(parts, fmt.Sprintf("(generator: %s)", fn))
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOptions) (*model.DataModel, error) {
@@ -397,9 +542,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 
 						inherited := false
 
-						// Start with Preceding (3rd)
-						if len(candidates) > 2 {
-							c := candidates[2]
+						// Loop through candidates in reverse order (Preceding -> Inline -> Flags)
+						for i := len(candidates) - 1; i >= 0; i-- {
+							c := candidates[i]
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
@@ -422,86 +567,25 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								inherited = true
 							}
 							if c.Required {
-								fp.Required = true
+								fp.IsRequired = true
 							}
-							if c.Generator != "" {
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
+							}
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
-							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
 							}
 						}
 
-						// Merge Inline (2nd)
-						if len(candidates) > 1 {
-							c := candidates[1]
-							if len(c.Flags) > 0 {
-								fp.FlagAliases = c.Flags
-							}
-							if c.Default != "" {
-								fp.Default = c.Default
-							}
-							if c.Description != "" {
-								fp.Description = c.Description
-							}
-							if c.IsPositional {
-								fp.IsPositional = true
-								fp.PositionalArgIndex = c.PositionalArgIndex
-							}
-							if c.IsVarArg {
-								fp.IsVarArg = true
-								fp.VarArgMin = c.VarArgMin
-								fp.VarArgMax = c.VarArgMax
-							}
-							if c.Inherited {
-								inherited = true
-							}
-							if c.Required {
-								fp.Required = true
-							}
-							if c.Generator != "" {
-								fp.Generator = c.Generator
-							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
-							}
+						// Apply defaults if not set
+						if fp.Generator.Type == "" {
+							fp.Generator.Type = model.SourceTypeFlag
 						}
-
-						// Merge Flags Block (Top)
-						if len(candidates) > 0 {
-							c := candidates[0]
-							if len(c.Flags) > 0 {
-								fp.FlagAliases = c.Flags
-							}
-							if c.Default != "" {
-								fp.Default = c.Default
-							}
-							if c.Description != "" {
-								fp.Description = c.Description
-							}
-							if c.IsPositional {
-								fp.IsPositional = true
-								fp.PositionalArgIndex = c.PositionalArgIndex
-							}
-							if c.IsVarArg {
-								fp.IsVarArg = true
-								fp.VarArgMin = c.VarArgMin
-								fp.VarArgMax = c.VarArgMax
-							}
-							if c.Inherited {
-								inherited = true
-							}
-							if c.Required {
-								fp.Required = true
-							}
-							if c.Generator != "" {
-								fp.Generator = c.Generator
-							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+						if fp.Parser.Type == "" {
+							if fp.Generator.Type == model.SourceTypeFlag {
+								fp.Parser.Type = model.ParserTypeImplicit
+							} else {
+								fp.Parser.Type = model.ParserTypeIdentity
 							}
 						}
 
@@ -621,6 +705,10 @@ var (
 	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	reFlag            = regexp.MustCompile(`-[\w-]+`)
+	reGlobal          = regexp.MustCompile(`\(global\)`)
+	reParser          = regexp.MustCompile(`\(parser:\s*([^)]+)\)`)
+	reGenerator       = regexp.MustCompile(`\(generator:\s*([^)]+)\)`)
+	reImplicitParam   = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 )
 
 type ParsedParam struct {
@@ -634,12 +722,9 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
-	Generator          string
-	ParserFunc         string
-	ParserPkg          string
+	Generator          model.GeneratorConfig
+	Parser             model.ParserConfig
 }
-
-var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
@@ -776,22 +861,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
 		} else {
-			// Attempt to parse as parameter if it looks like one, even without prefix/block
-			matches := reImplicitParam.FindStringSubmatch(trimmedLine)
-			if matches != nil {
-				name := matches[1]
-				rest := matches[2]
-				details := parseParamDetails(rest)
-
-				// We only accept it as a parameter if it has explicit configuration
-				// that strongly suggests it is a parameter definition.
-				// e.g. @N for positional, or defined flags, or default value.
-				// This prevents false positives from general description text.
-				if details.IsPositional || details.IsVarArg {
-					params[name] = details
-					continue
-				}
-			}
 			extendedHelpLines = append(extendedHelpLines, trimmedLine)
 		}
 	}
@@ -799,174 +868,151 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 	return
 }
 
-func extractParamAttributes(text string) (string, string) {
-	// Check Start
-	if strings.HasPrefix(text, "(") {
-		open := 0
-		for i, r := range text {
-			switch r {
-			case '(':
-				open++
-			case ')':
-				open--
+func replaceParenthesizedBlocks(text string, handler func(content string) string) string {
+	var sb strings.Builder
+
+	i := 0
+	for i < len(text) {
+		if text[i] == '(' {
+			// Find end of this block
+			count := 1
+			start := i
+			end := -1
+			for j := i + 1; j < len(text); j++ {
+				if text[j] == '(' {
+					count++
+				} else if text[j] == ')' {
+					count--
+					if count == 0 {
+						end = j
+						break
+					}
+				}
 			}
-			if open == 0 {
-				// Matched
-				return text[1:i], strings.TrimSpace(text[i+1:])
+
+			if end != -1 {
+				// Found block
+				content := text[start+1 : end]
+				replacement := handler(content)
+				sb.WriteString(replacement)
+				i = end + 1
+				continue
 			}
 		}
+		sb.WriteByte(text[i])
+		i++
 	}
-	// Check End
-	if strings.HasSuffix(text, ")") {
-		open := 0
-		for i := len(text) - 1; i >= 0; i-- {
-			switch text[i] {
-			case ')':
-				open++
-			case '(':
-				open--
-			}
-			if open == 0 {
-				// Matched
-				return text[i+1 : len(text)-1], strings.TrimSpace(text[:i])
-			}
-		}
-	}
-	return "", text
+	return sb.String()
 }
 
-func splitSafe(s string, sep rune) []string {
+func splitBySemicolonSafe(text string) []string {
 	var parts []string
-	var current strings.Builder
-	depth := 0
-	inQuote := false
-
-	for _, r := range s {
-		if r == '"' {
-			inQuote = !inQuote
-		}
-		if !inQuote {
-			switch r {
-			case '(':
-				depth++
-			case ')':
-				depth--
-			}
-		}
-
-		if depth == 0 && !inQuote && r == sep {
-			parts = append(parts, current.String())
-			current.Reset()
-		} else {
-			current.WriteRune(r)
+	start := 0
+	count := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] == '(' {
+			count++
+		} else if text[i] == ')' {
+			count--
+		} else if text[i] == ';' && count == 0 {
+			parts = append(parts, text[start:i])
+			start = i + 1
 		}
 	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
+	parts = append(parts, text[start:])
 	return parts
-}
-
-func parseAttributes(attrs string, p *ParsedParam) {
-	parts := splitSafe(attrs, ';')
-	// Check if semicolon split looks valid (keys shouldn't contain commas)
-	// If invalid, try comma split (legacy support)
-	useComma := false
-	for _, part := range parts {
-		kv := strings.SplitN(part, ":", 2)
-		key := strings.TrimSpace(kv[0])
-		if strings.Contains(key, ",") {
-			useComma = true
-			break
-		}
-	}
-
-	if useComma {
-		parts = splitSafe(attrs, ',')
-	}
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		kv := strings.SplitN(part, ":", 2)
-		key := strings.ToLower(strings.TrimSpace(kv[0]))
-		val := ""
-		if len(kv) > 1 {
-			val = strings.TrimSpace(kv[1])
-		}
-
-		if strings.HasPrefix(key, "-") {
-			p.Flags = append(p.Flags, strings.TrimLeft(key, "-"))
-			continue
-		}
-
-		switch key {
-		case AttributeRequired:
-			p.Required = true
-		case AttributeGlobal:
-			p.Inherited = true
-		case AttributeGenerator:
-			p.Generator = val
-		case AttributeParser:
-			if strings.Contains(val, "\"") {
-				// parser: "pkg/path".Func
-				// parser: "pkg".Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.ParserPkg = strings.Trim(val[:lastDot], "\"")
-					p.ParserFunc = val[lastDot+1:]
-				} else {
-					p.ParserFunc = val
-				}
-			} else {
-				// parser: Func
-				// parser: pkg.Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.ParserPkg = val[:lastDot]
-					p.ParserFunc = val[lastDot+1:]
-				} else {
-					p.ParserFunc = val
-				}
-			}
-		case AttributeAka, AttributeAlias, AttributeAliases:
-			vals := strings.Split(val, ",")
-			for _, v := range vals {
-				v = strings.TrimSpace(v)
-				if v != "" {
-					p.Flags = append(p.Flags, strings.TrimLeft(v, "-"))
-				}
-			}
-		case AttributeDefault:
-			p.Default = val
-			if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
-				p.Default = strings.Trim(p.Default, "\"")
-			}
-		case AttributeFromParent, AttributeInherited:
-			p.Inherited = true
-		}
-	}
 }
 
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
 
-	if attrs, clean := extractParamAttributes(text); attrs != "" {
-		parseAttributes(attrs, &p)
-		text = clean
-	}
+	text = replaceParenthesizedBlocks(text, func(content string) string {
+		parts := splitBySemicolonSafe(content)
+		var remainingParts []string
 
-	if strings.Contains(text, "(from parent)") {
-		p.Inherited = true
-		text = strings.ReplaceAll(text, "(from parent)", "")
-	}
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			lowerPart := strings.ToLower(part)
+			consumed := false
 
-	loc := reDefaultValue.FindStringSubmatchIndex(text)
-	if loc != nil {
-		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
-		text = text[:loc[0]] + text[loc[1]:]
+			if part == "required" {
+				p.Required = true
+				consumed = true
+			} else if part == "global" {
+				// p.IsGlobal = true // Removed from model
+				consumed = true
+			} else if part == "from parent" {
+				p.Inherited = true
+				consumed = true
+			} else if strings.HasPrefix(part, "parser:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "parser:"))
+				p.Parser.Type = model.ParserTypeCustom
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.Parser.Func = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+					p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
+				} else {
+					p.Parser.Func = &model.FuncRef{FunctionName: val}
+				}
+				consumed = true
+			} else if strings.HasPrefix(part, "generator:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "generator:"))
+				p.Generator.Type = model.SourceTypeGenerator
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.Generator.Func = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
+					p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
+				} else {
+					p.Generator.Func = &model.FuncRef{FunctionName: val}
+				}
+				consumed = true
+			} else if strings.HasPrefix(part, "default:") {
+				val := strings.TrimSpace(strings.TrimPrefix(part, "default:"))
+				if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") {
+					val = strings.Trim(val, "\"")
+				}
+				p.Default = val
+				consumed = true
+			} else if strings.HasPrefix(lowerPart, "aliases:") || strings.HasPrefix(lowerPart, "alias:") || strings.HasPrefix(lowerPart, "aka:") {
+				idx := strings.Index(part, ":")
+				val := strings.TrimSpace(part[idx+1:])
+				subParts := strings.FieldsFunc(val, func(r rune) bool { return r == ',' || r == ';' })
+				for _, sp := range subParts {
+					sp = strings.TrimSpace(sp)
+					if strings.HasPrefix(sp, "-") {
+						p.Flags = append(p.Flags, strings.TrimLeft(sp, "-"))
+					}
+				}
+				consumed = true
+			}
+
+			if !consumed {
+				remainingParts = append(remainingParts, part)
+			}
+		}
+
+		if len(remainingParts) == 0 {
+			return ""
+		}
+		return "(" + strings.Join(remainingParts, "; ") + ")"
+	})
+
+	// Legacy default handling (unparenthesized)
+	if p.Default == "" {
+		loc := reDefaultValue.FindStringSubmatchIndex(text)
+		if loc != nil {
+			p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
+			if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
+				p.Default = strings.Trim(p.Default, "\"")
+			}
+			text = text[:loc[0]] + text[loc[1]:]
+		}
 	}
 
 	// Positional arguments: @1, @2, etc.
@@ -1000,6 +1046,11 @@ func parseParamDetails(text string) ParsedParam {
 	flagMatches := reFlag.FindAllString(text, -1)
 
 	seenFlags := make(map[string]bool)
+	// Add flags from aliases if any
+	for _, f := range p.Flags {
+		seenFlags[f] = true
+	}
+
 	for _, f := range flagMatches {
 		stripped := strings.TrimLeft(f, "-")
 		if !seenFlags[stripped] {
@@ -1021,20 +1072,10 @@ func parseParamDetails(text string) ParsedParam {
 	clean = strings.TrimSpace(clean)
 	clean = strings.TrimPrefix(clean, ":")
 	clean = strings.TrimPrefix(clean, ",")
-	clean = strings.TrimPrefix(clean, "(")
-	clean = strings.TrimPrefix(clean, ":") // Also remove leading colon if not handled
-	clean = strings.TrimSuffix(clean, ")")
 
-	clean = strings.ReplaceAll(clean, ",", " ")
-	clean = strings.ReplaceAll(clean, "(", " ")
-	clean = strings.ReplaceAll(clean, ")", " ")
 	clean = strings.Join(strings.Fields(clean), " ")
 
 	p.Description = clean
-
-	if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
-		p.Default = strings.Trim(p.Default, "\"")
-	}
 
 	return p
 }
