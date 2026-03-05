@@ -169,7 +169,7 @@ func (c *RootCmd) NewFormat() *Format {
 
 	set.BoolVar(&v.inplace, "inplace", false, "Modify files in place")
 
-	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands relative to dir")
+	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands")
 
 	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
 	set.Usage = v.Usage
