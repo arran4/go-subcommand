@@ -10,7 +10,11 @@ Subcommands:
 
 
 Flags:
+
     --dir string                    (default: ".")     The project root directory
+
     --go-releaser-github-workflow   (default: false)   Generate GitHub Actions release workflow
+
     --verification-workflow         (default: false)   Generate verification workflow
+
     --pr-creation-workflow          (default: false)   Generate PR creation workflow
