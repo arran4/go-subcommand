@@ -84,3 +84,16 @@ docker_manifests:
     image_templates:
       - ghcr.io/arran4/go-subcommand:latest-amd64
       - ghcr.io/arran4/go-subcommand:latest-arm64
+
+homebrew_casks:
+  - name: gosubc
+    repository:
+      owner: arran4
+      name: homebrew-tap
+      branch: "{{.ProjectName}}-{{.Version}}"
+      pull_request:
+        enabled: true
+        base:
+          owner: arran4
+          name: homebrew-tap
+          branch: main
