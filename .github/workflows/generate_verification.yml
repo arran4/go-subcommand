@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      create_pr:
+        description: 'Create PR if changes are detected'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -84,13 +91,21 @@ jobs:
           if [[ -n $(git status --porcelain) ]]; then
             echo "Changes detected"
             git status
+            git diff
             echo "changes_detected=true" >> $GITHUB_OUTPUT
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.create_pr }}" == "true" ]]; then
+              echo "Will create PR."
+            else
+              echo "Changes found but PR creation is not enabled. Failing workflow."
+              exit 1
+            fi
           else
             echo "No changes detected"
             echo "changes_detected=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Determine PR attributes
+        if: steps.check_changes.outputs.changes_detected == 'true'
         id: pr_attributes
         env:
           HEAD_REF: ${{ github.head_ref }}
@@ -108,6 +123,7 @@ jobs:
           fi
 
       - name: Create Pull Request
+        if: steps.check_changes.outputs.changes_detected == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
