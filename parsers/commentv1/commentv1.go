@@ -47,14 +47,14 @@ type CommandTree struct {
 	FunctionName       string
 	CommandPackageName string
 	DefinitionFile     string
-	DocStart       token.Pos
-	DocEnd         token.Pos
-	Parameters     []*model.FunctionParameter
-	ReturnsError   bool
-	ReturnCount    int
-	Description    string
-	ExtendedHelp   string
-	ImportPath     string
+	DocStart           token.Pos
+	DocEnd             token.Pos
+	Parameters         []*model.FunctionParameter
+	ReturnsError       bool
+	ReturnCount        int
+	Description        string
+	ExtendedHelp       string
+	ImportPath         string
 }
 
 type CommandsTree struct {

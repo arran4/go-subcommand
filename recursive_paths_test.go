@@ -9,8 +9,8 @@ import (
 
 func TestGenerate_Recursive(t *testing.T) {
 	fs := fstest.MapFS{
-		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
-		"main.go":     &fstest.MapFile{Data: []byte(`package main
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`package main
 // Root is a subcommand ` + "`app`" + `
 func Root() {}
 `)},
@@ -43,8 +43,8 @@ func Sub() {}
 
 func TestGenerate_Paths(t *testing.T) {
 	fs := fstest.MapFS{
-		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
-		"main.go":     &fstest.MapFile{Data: []byte(`package main
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`package main
 // Root is a subcommand ` + "`app`" + `
 func Root() {}
 `)},

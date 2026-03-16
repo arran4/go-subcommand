@@ -55,17 +55,17 @@ type Command struct {
 	// FunctionName is the name of the function definition.
 	FunctionName       string
 	// DefinitionFile is the path to the file where the command is defined.
-	DefinitionFile string
+	DefinitionFile     string
 	// DocStart is the starting position of the documentation comment.
-	DocStart       token.Pos
+	DocStart           token.Pos
 	// DocEnd is the ending position of the documentation comment.
-	DocEnd         token.Pos
+	DocEnd             token.Pos
 	// Parameters is the list of parameters (flags and arguments) for the command.
-	Parameters     []*FunctionParameter
+	Parameters         []*FunctionParameter
 	// ReturnsError indicates if the command function returns an error.
-	ReturnsError   bool
+	ReturnsError       bool
 	// ReturnCount is the number of return values.
-	ReturnCount    int
+	ReturnCount        int
 }
 
 func (c *Command) ImportAlias() string {
