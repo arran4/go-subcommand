@@ -1,0 +1,28 @@
+-- input.go --
+package test
+
+// MyCommand is a subcommand `test mycmd`
+// Flags:
+//
+//	path: --path (default: ".") Paths to search for subcommands (relative to dir)
+func MyCommand(path string) {}
+-- expected.json --
+{
+  "path": {
+    "Flags": [
+      "path"
+    ],
+    "Default": ".",
+    "Description": "Paths to search for subcommands (relative to dir)",
+    "IsPositional": false,
+    "PositionalArgIndex": 0,
+    "IsVarArg": false,
+    "VarArgMin": 0,
+    "VarArgMax": 0,
+    "Inherited": false,
+    "Required": false,
+    "Generator": "",
+    "ParserFunc": "",
+    "ParserPkg": ""
+  }
+}
