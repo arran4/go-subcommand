@@ -44,8 +44,8 @@ func TestExtractParamAttributes(t *testing.T) {
 		},
 		{
 			name:      "Start Priority",
-			text:      "(A) Description (B)",
-			wantAttrs: "A",
+			text:      "(required) Description (B)",
+			wantAttrs: "required",
 			wantClean: "Description (B)",
 		},
 		{

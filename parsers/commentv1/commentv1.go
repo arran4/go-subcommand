@@ -799,6 +799,41 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 	return
 }
 
+func isLikelyAttribute(attrStr string) bool {
+	lower := strings.ToLower(attrStr)
+	knownKVs := []string{"generator:", "parser:", "default:", "alias:", "aliases:", "aka:"}
+	for _, k := range knownKVs {
+		if strings.Contains(lower, k) {
+			return true
+		}
+	}
+
+	knownSingles := []string{"required", "global", "inherited", "from parent"}
+	parts := splitSafe(lower, ';')
+	useComma := false
+	for _, part := range parts {
+		if strings.Contains(part, ",") {
+			useComma = true
+			break
+		}
+	}
+	if useComma {
+		parts = splitSafe(lower, ',')
+	}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		for _, k := range knownSingles {
+			if part == k {
+				return true
+			}
+		}
+		if strings.HasPrefix(part, "-") {
+			return true
+		}
+	}
+	return false
+}
+
 func extractParamAttributes(text string) (string, string) {
 	// Check Start
 	if strings.HasPrefix(text, "(") {
@@ -812,7 +847,11 @@ func extractParamAttributes(text string) (string, string) {
 			}
 			if open == 0 {
 				// Matched
-				return text[1:i], strings.TrimSpace(text[i+1:])
+				attr := text[1:i]
+				if isLikelyAttribute(attr) {
+					return attr, strings.TrimSpace(text[i+1:])
+				}
+				break
 			}
 		}
 	}
@@ -828,7 +867,11 @@ func extractParamAttributes(text string) (string, string) {
 			}
 			if open == 0 {
 				// Matched
-				return text[i+1 : len(text)-1], strings.TrimSpace(text[:i])
+				attr := text[i+1 : len(text)-1]
+				if isLikelyAttribute(attr) {
+					return attr, strings.TrimSpace(text[:i])
+				}
+				break
 			}
 		}
 	}
@@ -1021,13 +1064,8 @@ func parseParamDetails(text string) ParsedParam {
 	clean = strings.TrimSpace(clean)
 	clean = strings.TrimPrefix(clean, ":")
 	clean = strings.TrimPrefix(clean, ",")
-	clean = strings.TrimPrefix(clean, "(")
 	clean = strings.TrimPrefix(clean, ":") // Also remove leading colon if not handled
-	clean = strings.TrimSuffix(clean, ")")
 
-	clean = strings.ReplaceAll(clean, ",", " ")
-	clean = strings.ReplaceAll(clean, "(", " ")
-	clean = strings.ReplaceAll(clean, ")", " ")
 	clean = strings.Join(strings.Fields(clean), " ")
 
 	p.Description = clean
