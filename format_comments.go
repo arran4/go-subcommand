@@ -24,7 +24,7 @@ import (
 // Flags:
 //
 //	dir:		--dir		(default: ".")		The project root directory containing go.mod
-//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	paths:		--path		(default: nil)		Paths to search for subcommands
 //	recursive:	--recursive	(default: true)		Search recursively
 func FormatSourceComments(dir string, paths []string, recursive bool) error {
 	fset := token.NewFileSet()

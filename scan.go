@@ -16,7 +16,7 @@ import (
 //
 //	dir:		--dir		(default: ".")		The project root directory
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
-//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	paths:		--path		(default: nil)		Paths to search for subcommands
 //	recursive:	--recursive	(default: true)		Search recursively
 func Scan(dir string, parserName string, paths []string, recursive bool) error {
 	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
