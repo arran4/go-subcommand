@@ -35,6 +35,39 @@ type DataModel struct {
 	GoVersion   string
 }
 
+type SourceType string
+
+const (
+	SourceTypeFlag      SourceType = "flag"
+	SourceTypeGenerator SourceType = "generator"
+)
+
+type ParserType string
+
+const (
+	ParserTypeImplicit ParserType = "implicit"
+	ParserTypeCustom   ParserType = "custom"
+	ParserTypeIdentity ParserType = "identity"
+)
+
+type FuncRef struct {
+	PackagePath        string
+	ImportPath         string
+	CommandPackageName string
+	FunctionName       string
+}
+
+type GeneratorConfig struct {
+	Type SourceType
+	Func *FuncRef
+}
+
+type ParserConfig struct {
+	Type ParserType
+	Func *FuncRef
+}
+
+
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
@@ -104,17 +137,16 @@ type FunctionParameter struct {
 	VarArgMin          int
 	// VarArgMax is the maximum number of arguments allowed for a variadic parameter.
 	VarArgMax          int
-	// DeclaredIn is the name of the command where this parameter was originally declared (used for inheritance).
+// DeclaredIn is the name of the command where this parameter was originally declared (used for inheritance).
 	DeclaredIn         string
 	// Required indicates if the parameter is mandatory.
 	Required           bool
-	// Generator is the name of a function that generates the value for this parameter.
-	// If set, the parameter is not parsed from the command line but generated.
-	Generator          string
-	// ParserFunc is the name of a custom parser function to use for this parameter.
-	ParserFunc         string
-	// ParserPkg is the package path where the custom parser function is defined.
-	ParserPkg          string
+	// Generator specifies the source of the parameter value.
+	Generator          GeneratorConfig
+	// Parser holds configuration for value parsing.
+	Parser             ParserConfig
+	// Inherited indicates if the parameter was inherited from a parent command.
+	Inherited          bool
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -187,6 +219,13 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
+	if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil {
+		if p.Parser.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Parser.Func.CommandPackageName, p.Parser.Func.FunctionName, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.Parser.Func.FunctionName, valName)
+	}
+
 	t := p.BaseType()
 	if t == "int" {
 		return fmt.Sprintf("strconv.Atoi(%s)", valName)
@@ -353,6 +392,12 @@ func (sc *SubCommand) ResolveInheritance() {
 					}
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
+					}
+					if p.Generator.Type == "" && parentParam.Generator.Type != "" {
+						p.Generator = parentParam.Generator
+					}
+					if p.Parser.Type == "" && parentParam.Parser.Type != "" {
+						p.Parser = parentParam.Parser
 					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
@@ -571,4 +616,19 @@ func (sc *SubCommand) MaxDefaultLength() int {
 		}
 	}
 	return max
+}
+
+
+func (p *FunctionParameter) HasGenerator() bool {
+	return p.Generator.Type == SourceTypeGenerator
+}
+
+func (p *FunctionParameter) GeneratorCall() string {
+	if p.Generator.Func != nil {
+		if p.Generator.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
+		}
+		return fmt.Sprintf("%s()", p.Generator.Func.FunctionName)
+	}
+	return ""
 }

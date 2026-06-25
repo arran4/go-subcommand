@@ -3,6 +3,7 @@ package commentv1
 import (
 	"reflect"
 	"testing"
+	"github.com/arran4/go-subcommand/model"
 )
 
 func TestExtractParamAttributes(t *testing.T) {
@@ -93,30 +94,28 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Parser Simple",
 			attrs: "parser: MyFunc",
 			wantParam: ParsedParam{
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Parser Package",
 			attrs: "parser: pkg.MyFunc",
 			wantParam: ParsedParam{
-				ParserPkg:  "pkg",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{ImportPath: "pkg", PackagePath: "pkg", CommandPackageName: "pkg", FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Parser String Import",
 			attrs: `parser: "github.com/foo/bar".MyFunc`,
 			wantParam: ParsedParam{
-				ParserPkg:  "github.com/foo/bar",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{ImportPath: "github.com/foo/bar", PackagePath: "github.com/foo/bar", CommandPackageName: "bar", FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Generator",
 			attrs: "generator: MyGen",
 			wantParam: ParsedParam{
-				Generator: "MyGen",
+				Generator: model.GeneratorConfig{Type: model.SourceTypeGenerator, Func: &model.FuncRef{FunctionName: "MyGen"}},
 			},
 		},
 		{
@@ -132,7 +131,7 @@ func TestParseAttributes(t *testing.T) {
 			wantParam: ParsedParam{
 				Required:   true,
 				Inherited:  true,
-				ParserFunc: "func",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func"}},
 				Flags:      []string{"f"},
 			},
 		},
@@ -169,7 +168,7 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Mixed Parser with Comma",
 			attrs: `parser: func(a,b); required`,
 			wantParam: ParsedParam{
-				ParserFunc: "func(a,b)",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func(a,b)"}},
 				Required:   true,
 			},
 		},

@@ -17,33 +17,102 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
 {
   "req": {
     "Required": true,
-    "Description": "Required param"
+    "Description": "Required param",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "glob": {
     "Inherited": true,
-    "Description": "Global param"
+    "Description": "Global param",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "custom": {
-    "ParserFunc": "MyParser",
-    "Description": "Custom parser"
+    "Description": "Custom parser",
+    "Parser": {
+      "Type": "custom",
+      "Func": {
+        "FunctionName": "MyParser",
+        "ImportPath": "",
+        "PackagePath": "",
+        "CommandPackageName": ""
+      }
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "pkg": {
-    "ParserPkg": "pkg",
-    "ParserFunc": "Func",
-    "Description": "Pkg parser"
+    "Description": "Pkg parser",
+    "Parser": {
+      "Type": "custom",
+      "Func": {
+        "FunctionName": "Func",
+        "ImportPath": "pkg",
+        "PackagePath": "pkg",
+        "CommandPackageName": "pkg"
+      }
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "gen": {
-    "Generator": "MyGen",
-    "Description": "Generator"
+    "Generator": {
+      "Type": "generator",
+      "Func": {
+        "FunctionName": "MyGen",
+        "ImportPath": "",
+        "PackagePath": "",
+        "CommandPackageName": ""
+      }
+    },
+    "Description": "Generator",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    }
   },
   "mix": {
     "Required": true,
     "Inherited": true,
-    "Description": "Mixed"
+    "Description": "Mixed",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "legacy": {
-    "Flags": ["f"],
+    "Flags": [
+      "f"
+    ],
     "Default": "false",
-    "Description": "Legacy"
+    "Description": "Legacy",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   }
 }

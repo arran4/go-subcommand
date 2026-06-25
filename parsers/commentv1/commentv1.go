@@ -424,12 +424,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -460,12 +459,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -496,12 +494,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -634,9 +631,8 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
-	Generator          string
-	ParserFunc         string
-	ParserPkg          string
+	Generator          model.GeneratorConfig
+	Parser             model.ParserConfig
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -951,27 +947,46 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		case AttributeGlobal:
 			p.Inherited = true
 		case AttributeGenerator:
-			p.Generator = val
+			p.Generator.Type = model.SourceTypeGenerator
+			if idx := strings.LastIndex(val, "."); idx != -1 {
+				p.Generator.Func = &model.FuncRef{
+					ImportPath:   strings.Trim(val[:idx], "\""),
+					FunctionName: val[idx+1:],
+				}
+				p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
+				p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
+			} else {
+				p.Generator.Func = &model.FuncRef{FunctionName: val}
+			}
 		case AttributeParser:
+			p.Parser.Type = model.ParserTypeCustom
 			if strings.Contains(val, "\"") {
 				// parser: "pkg/path".Func
 				// parser: "pkg".Func
 				lastDot := strings.LastIndex(val, ".")
 				if lastDot != -1 {
-					p.ParserPkg = strings.Trim(val[:lastDot], "\"")
-					p.ParserFunc = val[lastDot+1:]
+					p.Parser.Func = &model.FuncRef{
+						ImportPath: strings.Trim(val[:lastDot], "\""),
+						FunctionName: val[lastDot+1:],
+					}
+					p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+					p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
 				} else {
-					p.ParserFunc = val
+					p.Parser.Func = &model.FuncRef{FunctionName: val}
 				}
 			} else {
 				// parser: Func
 				// parser: pkg.Func
 				lastDot := strings.LastIndex(val, ".")
 				if lastDot != -1 {
-					p.ParserPkg = val[:lastDot]
-					p.ParserFunc = val[lastDot+1:]
+					p.Parser.Func = &model.FuncRef{
+						ImportPath: val[:lastDot],
+						FunctionName: val[lastDot+1:],
+					}
+					p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+					p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
 				} else {
-					p.ParserFunc = val
+					p.Parser.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
 		case AttributeAka, AttributeAlias, AttributeAliases:
