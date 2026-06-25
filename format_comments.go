@@ -337,7 +337,7 @@ func stripPositions(node ast.Node) {
 			return false
 		}
 		val := reflect.ValueOf(n)
-		if val.Kind() == reflect.Ptr {
+		if val.Kind() == reflect.Pointer {
 			val = val.Elem()
 		}
 		if val.Kind() != reflect.Struct {
