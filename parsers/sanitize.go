@@ -23,6 +23,8 @@ func ToKebabCase(s string) string {
 // It handles hyphens, underscores, and other non-alphanumeric characters by
 // acting as delimiters for CamelCasing.
 func SanitizeToIdentifier(name string) string {
+	// TODO: Feature request for arran4/strings2: Add an option to strip non-alphanumeric characters natively
+	// during parsing/formatting, so we don't need this manual pre-processing loop.
 	var builder strings.Builder
 	for _, r := range name {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
