@@ -1,3 +1,5 @@
+github.com/arran4/strings2 v0.0.6 h1:u05UbB7il0FZr1Cc7irUjnVl/F5e6Cy4uV+y5pf+zkM=
+github.com/arran4/strings2 v0.0.6/go.mod h1:QS/Pha/uvk0ppqysoLHsr9wCky5ZMQPr1VglCBrTSGw=
 golang.org/x/mod v0.31.0 h1:HaW9xtz0+kOcWKwli0ZXy79Ix+UW/vOfmWI5QVd2tgI=
 golang.org/x/mod v0.31.0/go.mod h1:43JraMp9cGx1Rx3AqioxrbrhNsLl2l/iNAvuBkrezpg=
 golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
