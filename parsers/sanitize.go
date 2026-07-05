@@ -2,6 +2,7 @@ package parsers
 
 import (
 	"fmt"
+	"github.com/arran4/strings2"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -10,30 +11,12 @@ import (
 // ToKebabCase converts a CamelCase string to kebab-case.
 // It handles acronyms (e.g. JSONData -> json-data) and simple cases (CamelCase -> camel-case).
 func ToKebabCase(s string) string {
-	var builder strings.Builder
-	runes := []rune(s)
-	length := len(runes)
-
-	for i := 0; i < length; i++ {
-		r := runes[i]
-		if i > 0 {
-			prev := runes[i-1]
-			if unicode.IsUpper(r) {
-				// Case 1: camelCase -> camel-case
-				// If previous is lower or digit, insert hyphen
-				if unicode.IsLower(prev) || unicode.IsDigit(prev) {
-					builder.WriteRune('-')
-				} else if unicode.IsUpper(prev) && i+1 < length && unicode.IsLower(runes[i+1]) {
-					// Case 2: Acronyms. JSONData -> JSON-Data.
-					// Current is Upper (D). Prev is Upper (N). Next is Lower (a).
-					// Insert hyphen before D.
-					builder.WriteRune('-')
-				}
-			}
-		}
-		builder.WriteRune(unicode.ToLower(r))
+	words, err := strings2.Parse(s, strings2.WithNumberMode(strings2.NumberModeMergeWithWord))
+	if err != nil {
+		return s
 	}
-	return builder.String()
+	res, _ := strings2.ToKebabCase(words, strings2.OptionCaseMode(strings2.CMWhispering))
+	return res
 }
 
 // SanitizeToIdentifier converts a string into a valid Go identifier (CamelCase).
@@ -41,37 +24,33 @@ func ToKebabCase(s string) string {
 // acting as delimiters for CamelCasing.
 func SanitizeToIdentifier(name string) string {
 	var builder strings.Builder
-	nextUpper := true // First character should always be upper (Exported)
-
 	for _, r := range name {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if nextUpper {
-				builder.WriteRune(unicode.ToUpper(r))
-				nextUpper = false
-			} else {
-				builder.WriteRune(r)
-			}
+			builder.WriteRune(r)
 		} else {
-			// Treat any non-alphanumeric char as a delimiter
-			nextUpper = true
+			builder.WriteRune(' ')
 		}
 	}
 
-	res := builder.String()
-	// Ensure it doesn't start with a digit
-	if len(res) > 0 {
-		r, _ := utf8.DecodeRuneInString(res)
-		if unicode.IsDigit(r) {
-			res = "Cmd" + res
-		}
+	words, err := strings2.Parse(builder.String())
+	if err != nil || len(words) == 0 {
+		return "Cmd"
 	}
+	res, _ := strings2.ToPascalCase(words)
+
 	// Fallback for empty result
 	if len(res) == 0 {
 		return "Cmd"
 	}
+	// Ensure it doesn't start with a digit
+	r, _ := utf8.DecodeRuneInString(res)
+	if unicode.IsDigit(r) {
+		res = "Cmd" + res
+	}
 
 	return res
 }
+
 
 // NameAllocator manages the assignment of unique identifier names.
 type NameAllocator struct {
