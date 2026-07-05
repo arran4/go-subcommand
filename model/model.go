@@ -219,7 +219,7 @@ func (p *FunctionParameter) IsDuration() bool {
 }
 
 func (p *FunctionParameter) ParserCall(valName string) string {
-	if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil {
+	if p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.FunctionName != "" {
 		if p.Parser.Func.CommandPackageName != "" {
 			return fmt.Sprintf("%s.%s(%s)", p.Parser.Func.CommandPackageName, p.Parser.Func.FunctionName, valName)
 		}
@@ -624,7 +624,7 @@ func (p *FunctionParameter) HasGenerator() bool {
 }
 
 func (p *FunctionParameter) GeneratorCall() string {
-	if p.Generator.Func != nil {
+	if p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
 		if p.Generator.Func.CommandPackageName != "" {
 			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
 		}

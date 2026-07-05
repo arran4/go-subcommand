@@ -948,45 +948,49 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Inherited = true
 		case AttributeGenerator:
 			p.Generator.Type = model.SourceTypeGenerator
-			if idx := strings.LastIndex(val, "."); idx != -1 {
-				p.Generator.Func = &model.FuncRef{
-					ImportPath:   strings.Trim(val[:idx], "\""),
-					FunctionName: val[idx+1:],
+			if val != "" {
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.Generator.Func = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
+					p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
+				} else {
+					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
-				p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
-				p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
-			} else {
-				p.Generator.Func = &model.FuncRef{FunctionName: val}
 			}
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
-			if strings.Contains(val, "\"") {
-				// parser: "pkg/path".Func
-				// parser: "pkg".Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.Parser.Func = &model.FuncRef{
-						ImportPath: strings.Trim(val[:lastDot], "\""),
-						FunctionName: val[lastDot+1:],
+			if val != "" {
+				if strings.Contains(val, "\"") {
+					// parser: "pkg/path".Func
+					// parser: "pkg".Func
+					lastDot := strings.LastIndex(val, ".")
+					if lastDot != -1 {
+						p.Parser.Func = &model.FuncRef{
+							ImportPath:   strings.Trim(val[:lastDot], "\""),
+							FunctionName: val[lastDot+1:],
+						}
+						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+						p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
+					} else {
+						p.Parser.Func = &model.FuncRef{FunctionName: val}
 					}
-					p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-					p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
 				} else {
-					p.Parser.Func = &model.FuncRef{FunctionName: val}
-				}
-			} else {
-				// parser: Func
-				// parser: pkg.Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.Parser.Func = &model.FuncRef{
-						ImportPath: val[:lastDot],
-						FunctionName: val[lastDot+1:],
+					// parser: Func
+					// parser: pkg.Func
+					lastDot := strings.LastIndex(val, ".")
+					if lastDot != -1 {
+						p.Parser.Func = &model.FuncRef{
+							ImportPath:   val[:lastDot],
+							FunctionName: val[lastDot+1:],
+						}
+						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+						p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
+					} else {
+						p.Parser.Func = &model.FuncRef{FunctionName: val}
 					}
-					p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-					p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
-				} else {
-					p.Parser.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
 		case AttributeAka, AttributeAlias, AttributeAliases:
