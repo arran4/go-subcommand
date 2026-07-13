@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"errors"
 	"github.com/arran4/go-subcommand/examples/issue50"
