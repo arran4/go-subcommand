@@ -7,21 +7,19 @@ import (
 	"testing"
 )
 
-func TestExample1_Execute(t *testing.T) {
+func TestParentChild_Execute(t *testing.T) {
 
-	parent := &RootCmd{
-		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
-		Commands: make(map[string]func() Cmd),
-	}
-	cmd := parent.NewExample1()
+	parent := &Parent{}
+	cmd := parent.NewParentChild()
 
 	called := false
-	cmd.CommandAction = func(c *Example1) error {
+	cmd.CommandAction = func(c *ParentChild) error {
 		called = true
 		return nil
 	}
 
 	args := []string{}
+	args = append(args, "--verbose")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -31,4 +29,7 @@ func TestExample1_Execute(t *testing.T) {
 		t.Error("CommandAction was not called")
 	}
 
+	if cmd.verbose != true {
+		t.Errorf("Expected verbose to be true, got '%v'", cmd.verbose)
+	}
 }

@@ -7,21 +7,23 @@ import (
 	"testing"
 )
 
-func TestExample1_Execute(t *testing.T) {
+func TestToplevel_Execute(t *testing.T) {
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.NewExample1()
+	cmd := parent.NewToplevel()
 
 	called := false
-	cmd.CommandAction = func(c *Example1) error {
+	cmd.CommandAction = func(c *Toplevel) error {
 		called = true
 		return nil
 	}
 
 	args := []string{}
+	args = append(args, "--name")
+	args = append(args, "test")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -31,4 +33,7 @@ func TestExample1_Execute(t *testing.T) {
 		t.Error("CommandAction was not called")
 	}
 
+	if cmd.name != "test" {
+		t.Errorf("Expected name to be 'test', got '%v'", cmd.name)
+	}
 }

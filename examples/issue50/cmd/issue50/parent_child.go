@@ -7,42 +7,44 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
-	"time"
 
-	"github.com/arran4/go-subcommand/examples/complex"
+	"errors"
+	"github.com/arran4/go-subcommand/examples/issue50"
+	"github.com/arran4/go-subcommand/examples/issue50/cmd"
 )
 
-var _ Cmd = (*Another)(nil)
+var _ Cmd = (*ParentChild)(nil)
 
-type Another struct {
-	*RootCmd
+type ParentChild struct {
+	*Parent
 	Flags         *flag.FlagSet
-	wait          time.Duration
+	verbose       bool
 	SubCommands   map[string]func() Cmd
-	CommandAction func(c *Another) error
+	CommandAction func(c *ParentChild) error
 }
 
-type UsageDataAnother struct {
-	*Another
+type UsageDataParentChild struct {
+	*ParentChild
 	Recursive bool
 }
 
-func (c *Another) Usage() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, false})
+func (c *ParentChild) Usage() {
+	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataParentChild{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) UsageRecursive() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, true})
+func (c *ParentChild) UsageRecursive() {
+	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataParentChild{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) Execute(args []string) error {
+func (c *ParentChild) Execute(args []string) error {
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -68,20 +70,16 @@ func (c *Another) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 
-			case "wait":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+			case "verbose":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
 					}
+					c.verbose = b
+				} else {
+					c.verbose = true
 				}
-				v, err := time.ParseDuration(value)
-				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
-				}
-				c.wait = v
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -96,29 +94,6 @@ func (c *Another) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "w" || char == "[w]" || char == "1" {
-					found = true
-					// Value flag
-					value := ""
-					if j+1 < len(shorts) {
-						// Value is the rest of the short flag
-						value = shorts[j+1:]
-						j = len(shorts) // break inner loop
-					} else {
-						// Value is the next arg
-						if i+1 < len(args) {
-							value = args[i+1]
-							i++
-						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
-						}
-					}
-					v, err := time.ParseDuration(value)
-					if err != nil {
-						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
-					}
-					c.wait = v
-				}
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)
 				}
@@ -137,7 +112,7 @@ func (c *Another) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("another failed: %w", err)
+			return fmt.Errorf("child failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -146,29 +121,34 @@ func (c *Another) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewAnother() *Another {
-	set := flag.NewFlagSet("another", flag.ContinueOnError)
-	v := &Another{
-		RootCmd:     c,
+func (c *Parent) NewParentChild() *ParentChild {
+	set := flag.NewFlagSet("child", flag.ContinueOnError)
+	v := &ParentChild{
+		Parent:      c,
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
 
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "wait", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "wait", 0, "How long to wait")
-	}
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "w", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "w", 0, "How long to wait")
-	}
+	set.BoolVar(&v.verbose, "verbose", false, "TODO: Add usage text")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Another) error {
+	v.CommandAction = func(c *ParentChild) error {
 
-		complex.Another(c.wait)
+		err := issue50.Child(c.verbose)
+		if err != nil {
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if e, ok := err.(*cmd.ErrExitCode); ok {
+				return e
+			}
+			return fmt.Errorf("child failed: %w", err)
+		}
 		return nil
 	}
 
