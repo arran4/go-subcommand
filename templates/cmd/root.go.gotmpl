@@ -634,7 +634,7 @@ func (c *RootCmd) Execute(args []string) error {
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 				{{- else }}
 				// TODO: Implement parsing for flag type {{$param.Type}}
-				_ = value
+				return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented (value: %s)", value)
 				{{- end }}
 				{{- end }}
 			{{- end }}
@@ -1036,7 +1036,7 @@ func (c *RootCmd) Execute(args []string) error {
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 					{{- else }}
 					// TODO: Implement parsing for flag type {{$param.Type}}
-					_ = value
+					return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented (value: %s)", value)
 					{{- end }}
 					{{- end }}
 				}
