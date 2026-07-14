@@ -3,27 +3,24 @@
 package main
 
 import (
-	"flag"
 	"testing"
 )
 
-func TestExample1_Execute(t *testing.T) {
-
-	parent := &RootCmd{
-		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
-		Commands: make(map[string]func() Cmd),
+func TestRoot_Execute(t *testing.T) {
+	cmd, err := NewRoot("test", "", "", "")
+	if err != nil {
+		t.Fatalf("Failed to create root command: %v", err)
 	}
-	cmd := parent.NewExample1()
 
 	called := false
-	cmd.CommandAction = func(c *Example1) error {
+	cmd.CommandAction = func(c *RootCmd) error {
 		called = true
 		return nil
 	}
 
 	args := []string{}
 
-	err := cmd.Execute(args)
+	err = cmd.Execute(args)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}

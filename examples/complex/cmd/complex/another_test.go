@@ -5,23 +5,26 @@ package main
 import (
 	"flag"
 	"testing"
+	"time"
 )
 
-func TestExample1_Execute(t *testing.T) {
+func TestAnother_Execute(t *testing.T) {
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.NewExample1()
+	cmd := parent.NewAnother()
 
 	called := false
-	cmd.CommandAction = func(c *Example1) error {
+	cmd.CommandAction = func(c *Another) error {
 		called = true
 		return nil
 	}
 
 	args := []string{}
+	args = append(args, "--wait")
+	args = append(args, "1s")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -31,4 +34,7 @@ func TestExample1_Execute(t *testing.T) {
 		t.Error("CommandAction was not called")
 	}
 
+	if cmd.wait != 1*time.Second {
+		t.Errorf("Expected wait to be 1s, got '%v'", cmd.wait)
+	}
 }

@@ -10,9 +10,6 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
-	{{- if .SubCommands }}
-	"sync"
-	{{- end }}
 {{- template "common_imports" (slice .AllParameters true) }}
 {{- if .ImportPath}}
 

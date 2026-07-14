@@ -7,42 +7,43 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/arran4/go-subcommand/examples/complex"
 )
 
-var _ Cmd = (*Another)(nil)
+var _ Cmd = (*ToplevelNested)(nil)
 
-type Another struct {
-	*RootCmd
+type ToplevelNested struct {
+	*Toplevel
 	Flags         *flag.FlagSet
-	wait          time.Duration
+	count         int
+	verbose       bool
 	SubCommands   map[string]func() Cmd
-	CommandAction func(c *Another) error
+	CommandAction func(c *ToplevelNested) error
 }
 
-type UsageDataAnother struct {
-	*Another
+type UsageDataToplevelNested struct {
+	*ToplevelNested
 	Recursive bool
 }
 
-func (c *Another) Usage() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, false})
+func (c *ToplevelNested) Usage() {
+	err := executeUsage(os.Stderr, "nested_usage.txt", UsageDataToplevelNested{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) UsageRecursive() {
-	err := executeUsage(os.Stderr, "another_usage.txt", UsageDataAnother{c, true})
+func (c *ToplevelNested) UsageRecursive() {
+	err := executeUsage(os.Stderr, "nested_usage.txt", UsageDataToplevelNested{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Another) Execute(args []string) error {
+func (c *ToplevelNested) Execute(args []string) error {
 	var remainingArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -68,7 +69,7 @@ func (c *Another) Execute(args []string) error {
 			_ = hasValue
 			switch name {
 
-			case "wait":
+			case "count":
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -77,11 +78,33 @@ func (c *Another) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				v, err := time.ParseDuration(value)
+				v, err := strconv.Atoi(value)
 				if err != nil {
-					return fmt.Errorf("invalid duration value for flag %s: %s", name, value)
+					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
 				}
-				c.wait = v
+				c.count = v
+
+			case "verbose":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.verbose = b
+				} else {
+					c.verbose = true
+				}
+
+			case "name":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.name = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -96,7 +119,7 @@ func (c *Another) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "w" || char == "[w]" || char == "1" {
+				if char == "c" || char == "[c]" || char == "1" {
 					found = true
 					// Value flag
 					value := ""
@@ -113,11 +136,36 @@ func (c *Another) Execute(args []string) error {
 							return fmt.Errorf("flag -%s requires a value", char)
 						}
 					}
-					v, err := time.ParseDuration(value)
+					v, err := strconv.Atoi(value)
 					if err != nil {
-						return fmt.Errorf("invalid duration value for flag -%s: %s", char, value)
+						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
 					}
-					c.wait = v
+					c.count = v
+				}
+
+				if char == "v" || char == "[v]" || char == "1" {
+					found = true
+					c.verbose = true
+				}
+
+				if char == "n" || char == "[n]" || char == "1" {
+					found = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return fmt.Errorf("flag -%s requires a value", char)
+						}
+					}
+					c.name = value
 				}
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)
@@ -137,7 +185,7 @@ func (c *Another) Execute(args []string) error {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("another failed: %w", err)
+			return fmt.Errorf("nested failed: %w", err)
 		}
 	} else {
 		c.Usage()
@@ -146,29 +194,24 @@ func (c *Another) Execute(args []string) error {
 	return nil
 }
 
-func (c *RootCmd) NewAnother() *Another {
-	set := flag.NewFlagSet("another", flag.ContinueOnError)
-	v := &Another{
-		RootCmd:     c,
+func (c *Toplevel) NewToplevelNested() *ToplevelNested {
+	set := flag.NewFlagSet("nested", flag.ContinueOnError)
+	v := &ToplevelNested{
+		Toplevel:    c,
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
 
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "wait", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "wait", 0, "How long to wait")
-	}
-	if d, err := time.ParseDuration("1s"); err == nil {
-		set.DurationVar(&v.wait, "w", d, "How long to wait")
-	} else {
-		set.DurationVar(&v.wait, "w", 0, "How long to wait")
-	}
+	set.IntVar(&v.count, "count", 1, "Number of times to repeat")
+	set.IntVar(&v.count, "c", 1, "Number of times to repeat")
+
+	set.BoolVar(&v.verbose, "verbose", false, "Enable verbose output")
+	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Another) error {
+	v.CommandAction = func(c *ToplevelNested) error {
 
-		complex.Another(c.wait)
+		complex.Nested(c.count, c.verbose)
 		return nil
 	}
 
