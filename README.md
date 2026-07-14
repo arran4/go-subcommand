@@ -1,289 +1,148 @@
-# Go Subcommand
+actionlint
+==========
+[![CI Status][ci-badge]][ci]
+[![API Document][apidoc-badge]][apidoc]
 
-**Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
+[actionlint][repo] is a static checker for GitHub Actions workflow files. [Try it online!][playground]
 
-**Status:** Pre-v1. The API and generated code structure may change.
+Features:
 
-## Key Features
+- **Syntax check for workflow files** to check unexpected or missing keys following [workflow syntax][syntax-doc]
+- **Strong type check for `${{ }}` expressions** to catch several semantic errors like access to not existing property,
+  type mismatches, ...
+- **Actions usage check** to check that inputs at `with:` and outputs in `steps.{id}.outputs` are correct
+- **Reusable workflow check** to check inputs/outputs/secrets of reusable workflows and workflow calls
+- **[shellcheck][] and [pyflakes][] integrations** for scripts at `run:`
+- **Security checks**; [script injection][script-injection-doc] by untrusted inputs, hard-coded credentials
+- **Other several useful checks**; [glob syntax][filter-pattern-doc] validation, dependencies check for `needs:`,
+  runner label validation, cron syntax validation, ...
 
-- **Convention over Configuration:** Define your CLI structure with simple, intuitive code comments.
-- **Zero Dependencies:** The generated code is self-contained and doesn't require any external libraries.
-- **Automatic Code Generation:** `gosubc` parses your Go files and generates a complete, ready-to-use CLI.
-- **Parameter Auto-Mapping:** Automatically maps CLI flags, positional arguments, and variadic arguments to function parameters.
-- **Rich Syntax Support:** Supports custom flag names, default values, and description overrides via comments.
-- **Man Page Generation:** Automatically generate Unix man pages for your CLI.
+See the [full list][checks] of checks done by actionlint.
 
-## Installation
+<img src="https://github.com/rhysd/ss/blob/master/actionlint/main.gif?raw=true" alt="actionlint reports 7 errors" width="806" height="492"/>
 
-To install `gosubc`, use `go install`:
+**Example of broken workflow:**
 
-```bash
-go install github.com/arran4/go-subcommand/cmd/gosubc@latest
+```yaml
+on:
+  push:
+    branch: main
+    tags:
+      - 'v\d+'
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, linux-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node_version: 18.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ matrix.platform }}-node-${{ hashFiles('**/package-lock.json') }}
+        if: ${{ github.repository.permissions.admin == true }}
+      - run: npm install && npm test
 ```
 
-## Getting Started
+**actionlint reports 7 errors:**
 
-### 1. Define Your Commands
-
-Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// FunctionName is a subcommand 'root-command sub-command...'`.
-
-Example `main.go`:
-
-```go
-package main
-
-import "fmt"
-
-// PrintHelloWorld is a subcommand `my-app hello`
-// This command prints "Hello, World!" to the console.
-func PrintHelloWorld() {
-    fmt.Println("Hello, World!")
-}
+```
+test.yaml:3:5: unexpected key "branch" for "push" section. expected one of "branches", "branches-ignore", "paths", "paths-ignore", "tags", "tags-ignore", "types", "workflows" [syntax-check]
+  |
+3 |     branch: main
+  |     ^~~~~~~
+test.yaml:5:11: character '\' is invalid for branch and tag names. only special characters [, ?, +, *, \, ! can be escaped with \. see `man git-check-ref-format` for more details. note that regular expression is unavailable. note: filter pattern syntax is explained at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet [glob]
+  |
+5 |       - 'v\d+'
+  |           ^~~~
+test.yaml:10:28: label "linux-latest" is unknown. available labels are "windows-latest", "windows-latest-8-cores", "windows-2025", "windows-2022", "windows-2019", "ubuntu-latest", "ubuntu-latest-4-cores", "ubuntu-latest-8-cores", "ubuntu-latest-16-cores", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-20.04", "macos-latest", "macos-latest-xl", "macos-latest-xlarge", "macos-latest-large", "macos-15-xlarge", "macos-15-large", "macos-15", "macos-14-xl", "macos-14-xlarge", "macos-14-large", "macos-14", "macos-13-xl", "macos-13-xlarge", "macos-13-large", "macos-13", "self-hosted", "x64", "arm", "arm64", "linux", "macos", "windows". if it is a custom label for self-hosted runner, set list of labels in actionlint.yaml config file [runner-label]
+   |
+10 |         os: [macos-latest, linux-latest]
+   |                            ^~~~~~~~~~~~~
+test.yaml:13:41: "github.event.head_commit.message" is potentially untrusted. avoid using it directly in inline scripts. instead, pass it through an environment variable. see https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions for more details [expression]
+   |
+13 |       - run: echo "Checking commit '${{ github.event.head_commit.message }}'"
+   |                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test.yaml:17:11: input "node_version" is not defined in action "actions/setup-node@v4". available inputs are "always-auth", "architecture", "cache", "cache-dependency-path", "check-latest", "node-version", "node-version-file", "registry-url", "scope", "token" [action]
+   |
+17 |           node_version: 18.x
+   |           ^~~~~~~~~~~~~
+test.yaml:21:20: property "platform" is not defined in object type {os: string} [expression]
+   |
+21 |           key: ${{ matrix.platform }}-node-${{ hashFiles('**/package-lock.json') }}
+   |                    ^~~~~~~~~~~~~~~
+test.yaml:22:17: receiver of object dereference "permissions" must be type of object but got "string" [expression]
+   |
+22 |         if: ${{ github.repository.permissions.admin == true }}
+   |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
-### 2. Add a `generate.go` File
+## Quick start
 
-Create a file named `generate.go` in the same directory (package `main`). This robust version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
+Install `actionlint` command by downloading [the released binary][releases] or by Homebrew or by `go install`. See
+[the installation document][install] for more details like how to manage the command with several package managers
+or run via Docker container.
 
-```go
-package main
-
-//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
+```sh
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
 ```
 
-### 3. Generate the CLI
+Basically all you need to do is run the `actionlint` command in your repository. actionlint automatically detects workflows and
+checks errors. actionlint focuses on finding out mistakes. It tries to catch errors as much as possible and make false positives
+as minimal as possible.
 
-Run `go generate` in your terminal:
-
-```bash
-go generate
+```sh
+actionlint
 ```
 
-This will create a `cmd/my-app` directory containing the generated CLI code.
+Another option to try actionlint is [the online playground][playground]. Your browser can run actionlint through WebAssembly.
 
-### 4. Run Your New CLI
+See [the usage document][usage] for more details.
 
-You can now run your newly generated CLI:
+## Documents
 
-```bash
-go run ./cmd/my-app hello
-```
+- [Checks][checks]: Full list of all checks done by actionlint with example inputs, outputs, and playground links.
+- [Installation][install]: Installation instructions. Prebuilt binaries, a Docker image, building from source, a download script
+  (for CI), supports by several package managers are available.
+- [Usage][usage]: How to use `actionlint` command locally or on GitHub Actions, the online playground, an official Docker image,
+  and integrations with reviewdog, Problem Matchers, super-linter, pre-commit, VS Code.
+- [Configuration][config]: How to configure actionlint behavior. Currently, the labels of self-hosted runners, the configuration
+  variables, and ignore patterns of errors for each file paths can be set.
+- [Go API][api]: How to use actionlint as Go library.
+- [References][refs]: Links to resources.
 
-Output:
-```
-Hello, World!
-```
+## Bug reporting
 
-## Comment Syntax Guide
+When you see some bugs or false positives, it is helpful to [file a new issue][issue-form] with a minimal example
+of input. Giving me some feedbacks like feature requests or ideas of additional checks is also welcome.
 
-`go-subcommand` uses a specific comment syntax to configure your CLI.
-
-### Subcommand Definition
-
-The primary directive defines where the command lives in the CLI hierarchy:
-
-```go
-// FuncName is a subcommand `root-cmd parent child`
-```
-
-### Subcommand Aliases
-
-You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive.
-
-```go
-// MyFunc is a subcommand `app cmd`
-// Aliases: c, command
-func MyFunc() { ... }
-```
-
-You can also use an inline syntax:
-
-```go
-// MyFunc is a subcommand `app cmd` (aka: c)
-func MyFunc() { ... }
-```
-
-### Description & Extended Help
-
-*   **Short Description:** The text immediately following the subcommand definition (or prefixed with `that ` or `-- `) becomes the short description used in usage lists.
-*   **Extended Help:** Any subsequent lines that do not look like parameter definitions are treated as extended help text, displayed when the user requests help for that specific command.
-
-```go
-// MyFunc is a subcommand `app cmd` -- Does something cool
-//
-// This is the extended help text. It can span multiple lines
-// and provide detailed usage examples or explanations.
-```
-
-### Parameter Configuration
-
-Function parameters are automatically mapped to CLI flags. You can customize them using comments. `go-subcommand` looks for configuration in three places, in this priority order (highest to lowest):
-
-1.  **`Flags:` Block:** A dedicated block in the main function documentation.
-2.  **Inline Comments:** Comments on the same line as the parameter definition.
-3.  **Preceding Comments:** Comments on the line immediately before the parameter.
-
-#### The `Flags:` Block
-
-This is the cleanest way to define multiple parameters. It must be an indented block following a line containing just `Flags:`.
-
-```go
-// MyFunc is a subcommand `app cmd`
-//
-// Flags:
-//
-//   username: --username -u (default: "guest") The user to greet
-//   count:    --count -c    (default: 1)       Number of times
-func MyFunc(username string, count int) { ... }
-```
-
-#### Syntax Reference
-
-Inside a `Flags:` block or inline/preceding comments, you can use the following syntax tokens to configure a parameter:
-
-*   **Flags:** `-f`, `--flag`. One or more flag aliases.
-*   **Default Value:** `default: value` or `default: "value"`.
-*   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
-*   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
-*   **Description:** Any remaining text is treated as the parameter description.
-
-### Supported Types
-
-The following Go types are supported for function parameters:
-
-*   `string`: (Default)
-*   `int`: Parsed as an integer.
-*   `bool`: Parsed as a boolean flag (no value required, e.g., `--verbose`).
-*   `time.Duration`: Parsed using `time.ParseDuration` (e.g., `10s`, `1h`).
-*   `error`: (Return value only) Your function can return an `error`, which will be propagated to the CLI exit code.
-
-## Advanced Usage
-
-### Positional Arguments
-
-To accept positional arguments instead of flags, use the `@N` syntax.
-
-```go
-// Greet is a subcommand `app greet`
-//
-// Flags:
-//
-//   name: @1 The name to greet
-func Greet(name string) {
-    fmt.Printf("Hello, %s!\n", name)
-}
-```
-Usage: `app greet John`
-
-### Variadic Arguments
-
-To accept a variable number of arguments, use a slice parameter and mark it with `...`.
-
-```go
-// ProcessFiles is a subcommand `app process`
-//
-// Flags:
-//
-//   files: ... List of files to process
-func ProcessFiles(files ...string) {
-    for _, file := range files {
-        fmt.Println("Processing", file)
-    }
-}
-```
-Usage: `app process file1.txt file2.txt file3.txt`
-
-### Custom Flags
-
-You can define custom short and long flags.
-
-```go
-// Serve is a subcommand `app serve`
-//
-// Flags:
-//
-//   port: -p --port (default: 8080) Port to listen on
-func Serve(port int) { ... }
-```
-
-### Nesting Commands
-
-Nesting is implicit based on the command path string.
-
-```go
-// Root command: `app`
-// Child: `app users`
-// Grandchild: `app users create`
-
-// CreateUser is a subcommand `app users create`
-func CreateUser(...) { ... }
-
-// ListUsers is a subcommand `app users list`
-func ListUsers(...) { ... }
-```
-
-### Parent Flags (Inheritance)
-
-Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to update the parent's state (like global verbosity or configuration).
-
-Use the `parent-flag: <param_name>` directive.
-
-```go
-// Parent is a subcommand `app parent`
-// Flags:
-//
-//   verbose: -v --verbose
-func Parent(verbose bool) { ... }
-
-// Child is a subcommand `app parent child`
-// parent-flag: verbose
-func Child(verbose bool) {
-    // verbose parameter here maps to Parent's verbose variable
-}
-```
-
-### Man Page Generation
-
-To generate man pages, pass the `--man-dir` flag to `gosubc`.
-
-```bash
-gosubc generate --man-dir ./man
-```
-
-This will generate standard Unix man pages in the specified directory, using the descriptions and extended help text from your comments.
-
-## CLI Reference
-
-### `gosubc generate`
-
-Generates the Go code for your CLI.
-
-*   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
-*   `--man-dir <path>`: Directory to write man pages to.
-
-### `gosubc list`
-
-Lists all detected subcommands.
-
-*   `--dir <path>`: Root directory.
-
-### `gosubc validate`
-
-Validates subcommand definitions for errors or conflicts.
-
-*   `--dir <path>`: Root directory.
-
-### `gosubc goreleaser`
-
-Generates release configuration.
-
-*   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
-*   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
-
-## Contributing
-
-Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
+See the [contribution guide](./CONTRIBUTING.md) for more details.
 
 ## License
 
-This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
+actionlint is distributed under [the MIT license](./LICENSE.txt).
+
+[ci-badge]: https://github.com/rhysd/actionlint/actions/workflows/ci.yaml/badge.svg
+[ci]: https://github.com/rhysd/actionlint/actions/workflows/ci.yaml
+[apidoc-badge]: https://pkg.go.dev/badge/github.com/rhysd/actionlint.svg
+[apidoc]: https://pkg.go.dev/github.com/rhysd/actionlint
+[repo]: https://github.com/rhysd/actionlint
+[playground]: https://rhysd.github.io/actionlint/
+[shellcheck]: https://github.com/koalaman/shellcheck
+[pyflakes]: https://github.com/PyCQA/pyflakes
+[syntax-doc]: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
+[filter-pattern-doc]: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
+[script-injection-doc]: https://docs.github.com/en/actions/learn-github-actions/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
+[releases]: https://github.com/rhysd/actionlint/releases
+[checks]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/checks.md
+[install]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/install.md
+[usage]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/usage.md
+[config]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/config.md
+[api]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/api.md
+[refs]: https://github.com/rhysd/actionlint/blob/v1.7.7/docs/reference.md
+[issue-form]: https://github.com/rhysd/actionlint/issues/new
