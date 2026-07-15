@@ -53,6 +53,7 @@ func SanitizeToIdentifier(name string) string {
 	return res
 }
 
+
 // NameAllocator manages the assignment of unique identifier names.
 type NameAllocator struct {
 	used map[string]bool
