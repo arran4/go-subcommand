@@ -34,7 +34,7 @@ func SkillInstall(source string, name string, scope string, agent string) error 
 	if err != nil {
 		return fmt.Errorf("failed to fetch skill: %w", err)
 	}
-	defer os.RemoveAll(tempDir) // Ensure cleanup
+	defer func() { _ = os.RemoveAll(tempDir) }() // Ensure cleanup
 
 	skillMdPath := filepath.Join(tempDir, "SKILL.md")
 	if _, err := os.Stat(skillMdPath); os.IsNotExist(err) {
@@ -72,7 +72,7 @@ func SkillInstall(source string, name string, scope string, agent string) error 
 		IsLocal:     isLocal,
 	}
 	if err := writeSkillMetadata(destPath, meta); err != nil {
-		os.RemoveAll(destPath) // Rollback
+		_ = os.RemoveAll(destPath) // Rollback
 		return fmt.Errorf("failed to write skill metadata: %w", err)
 	}
 
@@ -142,7 +142,7 @@ func SkillUpdate(name string, all bool, scope string, agent string, force bool) 
 
 		if meta.Revision == newRevision && !force {
 			fmt.Printf("Skill '%s' is already up to date (revision: %s).\n", sName, newRevision)
-			os.RemoveAll(tempDir)
+			_ = os.RemoveAll(tempDir)
 			continue
 		}
 
@@ -151,14 +151,14 @@ func SkillUpdate(name string, all bool, scope string, agent string, force bool) 
 		// Remove old directory
 		if err := os.RemoveAll(destPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to remove old skill directory for '%s': %v\n", sName, err)
-			os.RemoveAll(tempDir)
+			_ = os.RemoveAll(tempDir)
 			continue
 		}
 
 		// Copy new directory
 		if err := copyDir(tempDir, destPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to copy updated skill '%s' to %s: %v\n", sName, destPath, err)
-			os.RemoveAll(tempDir)
+			_ = os.RemoveAll(tempDir)
 			continue
 		}
 
@@ -171,7 +171,7 @@ func SkillUpdate(name string, all bool, scope string, agent string, force bool) 
 			fmt.Printf("Successfully updated skill '%s'\n", sName)
 		}
 
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 	}
 
 	return nil
