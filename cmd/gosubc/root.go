@@ -91,6 +91,12 @@ func (c *RootCmd) UsageRecursive() {
 	fmt.Fprintf(os.Stderr, "    %s\n", "goreleaser")
 	fmt.Fprintf(os.Stderr, "    %s\n", "list")
 	fmt.Fprintf(os.Stderr, "    %s\n", "scan")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill inspect")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill install")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill list")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill remove")
+	fmt.Fprintf(os.Stderr, "    %s\n", "skill update")
 	fmt.Fprintf(os.Stderr, "    %s\n", "syntax")
 	fmt.Fprintf(os.Stderr, "    %s\n", "validate")
 }
@@ -140,6 +146,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewScan() })
 		c.Commands["scan"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSkill() })
+		c.Commands["skill"] = subCmd
 
 	}
 
