@@ -150,14 +150,24 @@ func SkillUpdate(name string, all bool, scope string, agent string, force bool) 
 
 		// Remove old directory
 		if err := os.RemoveAll(destPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to remove old skill directory for '%s': %v\n", sName, err)
+			err = fmt.Errorf("failed to remove old skill directory for '%s': %w", sName, err)
+			if !all {
+				_ = os.RemoveAll(tempDir)
+				return err
+			}
+			fmt.Fprintln(os.Stderr, err)
 			_ = os.RemoveAll(tempDir)
 			continue
 		}
 
 		// Copy new directory
 		if err := copyDir(tempDir, destPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to copy updated skill '%s' to %s: %v\n", sName, destPath, err)
+			err = fmt.Errorf("failed to copy updated skill '%s' to %s: %w", sName, destPath, err)
+			if !all {
+				_ = os.RemoveAll(tempDir)
+				return err
+			}
+			fmt.Fprintln(os.Stderr, err)
 			_ = os.RemoveAll(tempDir)
 			continue
 		}
@@ -166,7 +176,12 @@ func SkillUpdate(name string, all bool, scope string, agent string, force bool) 
 		meta.Revision = newRevision
 		meta.InstalledAt = time.Now()
 		if err := writeSkillMetadata(destPath, meta); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write updated skill metadata for '%s': %v\n", sName, err)
+			err = fmt.Errorf("failed to write updated skill metadata for '%s': %w", sName, err)
+			if !all {
+				_ = os.RemoveAll(tempDir)
+				return err
+			}
+			fmt.Fprintln(os.Stderr, err)
 		} else {
 			fmt.Printf("Successfully updated skill '%s'\n", sName)
 		}
