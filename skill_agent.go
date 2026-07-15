@@ -12,13 +12,14 @@ import (
 func resolveSkillPath(agentName, scope, skillName string) (string, error) {
 	var baseDir string
 
-	if scope == "project" {
+	switch scope {
+	case "project":
 		wd, err := os.Getwd()
 		if err != nil {
 			return "", fmt.Errorf("failed to get working directory: %w", err)
 		}
 		baseDir = filepath.Join(wd, ".agents")
-	} else if scope == "user" {
+	case "user":
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("failed to get user home directory: %w", err)
@@ -34,7 +35,7 @@ func resolveSkillPath(agentName, scope, skillName string) (string, error) {
 		case "copilot":
 			baseDir = filepath.Join(home, ".github", "copilot", "skills")
 		}
-	} else {
+	default:
 		return "", fmt.Errorf("invalid scope: %s (must be 'user' or 'project')", scope)
 	}
 

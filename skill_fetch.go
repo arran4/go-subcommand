@@ -28,7 +28,7 @@ func fetchLocal(source string) (string, string, error) {
 
 	err = copyDir(source, tempDir)
 	if err != nil {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 		return "", "", fmt.Errorf("failed to copy local skill: %w", err)
 	}
 
@@ -59,7 +59,7 @@ func fetchRemote(source string) (string, string, error) {
 
 	cmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 		return "", "", fmt.Errorf("failed to clone remote repository %s: %s", repoURL, string(output))
 	}
 
@@ -68,13 +68,13 @@ func fetchRemote(source string) (string, string, error) {
 	cmd.Dir = tempDir
 	output, err := cmd.Output()
 	if err != nil {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 		return "", "", fmt.Errorf("failed to get commit hash: %w", err)
 	}
 	revision := strings.TrimSpace(string(output))
 
 	// Remove .git directory so it's not considered part of the skill payload
-	os.RemoveAll(filepath.Join(tempDir, ".git"))
+	_ = os.RemoveAll(filepath.Join(tempDir, ".git"))
 
 	return tempDir, revision, nil
 }
@@ -143,13 +143,13 @@ func copyFile(srcFile, dstFile string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.Create(dstFile)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, in)
 	if err != nil {

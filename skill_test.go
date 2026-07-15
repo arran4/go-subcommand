@@ -10,7 +10,7 @@ func TestSkillInstall(t *testing.T) {
 	// Create a dummy skill
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
-	os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
 
 	// Override standard directories for testing using env var or similar?
 	// We can't easily mock user home or wd in the current implementation without refactoring.
@@ -19,8 +19,8 @@ func TestSkillInstall(t *testing.T) {
 
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
-	os.Chdir(tempDest)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	err := SkillInstall(tempSource, "test_skill", "project", "")
 	if err != nil {
@@ -57,13 +57,13 @@ func TestSkillInstall_PathTraversal(t *testing.T) {
 	// Let's create a local skill with a symlink to test it if we can.
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
-	os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
 
 	// Attempt to install to an unsafe name (path traversal)
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
-	os.Chdir(tempDest)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	err := SkillInstall(tempSource, "../malicious_skill", "project", "")
 
@@ -107,13 +107,13 @@ func TestValidateSafePath(t *testing.T) {
 func TestSkillUpdate_Success(t *testing.T) {
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
-	os.Chdir(tempDest)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	// Setup initial skill
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
-	os.WriteFile(skillMd, []byte("# Version 1"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# Version 1"), 0644)
 
 	err := SkillInstall(tempSource, "update_skill", "project", "")
 	if err != nil {
@@ -124,7 +124,7 @@ func TestSkillUpdate_Success(t *testing.T) {
 	// Alternatively, we can just modify the file to trigger a different timestamp
 	// Local fetch revision is determined by `SKILL.md` mtime. Since filesystems sometimes have low resolution,
 	// we use force=true for this test, or we can spoof the mtime. Let's use --force.
-	os.WriteFile(skillMd, []byte("# Version 2"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# Version 2"), 0644)
 
 	// Run update
 	err = SkillUpdate("update_skill", false, "project", "", true)
@@ -142,14 +142,14 @@ func TestSkillUpdate_Success(t *testing.T) {
 func TestSkillUpdate_NoOp(t *testing.T) {
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
-	os.Chdir(tempDest)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
-	os.WriteFile(skillMd, []byte("# Version 1"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# Version 1"), 0644)
 
-	SkillInstall(tempSource, "noop_skill", "project", "")
+	_ = SkillInstall(tempSource, "noop_skill", "project", "")
 
 	// Run update without modifying source
 	err := SkillUpdate("noop_skill", false, "project", "", false)
@@ -167,14 +167,14 @@ func TestSkillUpdate_NoOp(t *testing.T) {
 func TestSkillRemove(t *testing.T) {
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
-	os.Chdir(tempDest)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
-	os.WriteFile(skillMd, []byte("# To be removed"), 0644)
+	_ = os.WriteFile(skillMd, []byte("# To be removed"), 0644)
 
-	SkillInstall(tempSource, "remove_skill", "project", "")
+	_ = SkillInstall(tempSource, "remove_skill", "project", "")
 
 	expectedPath := filepath.Join(tempDest, ".agents", "skills", "remove_skill")
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
