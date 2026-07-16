@@ -955,7 +955,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 						FunctionName: val[idx+1:],
 					}
 					p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
-					p.Generator.Func.CommandPackageName = filepath.Base(p.Generator.Func.ImportPath)
+					p.Generator.Func.CommandPackageName = path.Base(p.Generator.Func.ImportPath)
 				} else {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
@@ -973,7 +973,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 							FunctionName: val[lastDot+1:],
 						}
 						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-						p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
+						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
 					} else {
 						p.Parser.Func = &model.FuncRef{FunctionName: val}
 					}
@@ -987,7 +987,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 							FunctionName: val[lastDot+1:],
 						}
 						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-						p.Parser.Func.CommandPackageName = filepath.Base(p.Parser.Func.ImportPath)
+						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
 					} else {
 						p.Parser.Func = &model.FuncRef{FunctionName: val}
 					}
