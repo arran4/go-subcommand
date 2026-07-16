@@ -19,6 +19,10 @@ import (
 func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	{{if .Parent}}
 	parent := &{{.Parent.SubCommandStructName}}{}
+	parent.RootCmd = &RootCmd{
+		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
+		Commands: make(map[string]func() Cmd),
+	}
 	cmd := parent.New{{.SubCommandStructName}}()
 	{{else}}
 	parent := &RootCmd{
@@ -35,8 +39,9 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	}
 
 	args := []string{}
-	{{- range .Parameters}}
+	{{- range .AllParameters}}
 	{{- $param := . }}
+	{{- if not .HasGenerator }}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
@@ -64,7 +69,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 			{{- end}}
 		{{- end}}
 	{{- else}}
-		args = append(args, "--{{.Name}}")
+		args = append(args, "{{.PrimaryFlagName}}")
 		{{- if ne .Type "bool"}}
 			{{- if eq .Type "string"}}
 			args = append(args, "test")
@@ -76,6 +81,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 		{{- end}}
 	{{- end}}
 	{{- end}}
+	{{- end}}
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -85,8 +91,9 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 		t.Error("CommandAction was not called")
 	}
 
-	{{range .Parameters}}
+	{{range .AllParameters}}
 	{{- $param := . }}
+	{{- if and (not .HasGenerator) (not .HasCustomParser) }}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
@@ -142,6 +149,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 			t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
 		}
 		{{- end}}
+	{{- end}}
 	{{- end}}
 	{{- end}}
 }

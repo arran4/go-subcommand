@@ -1,9 +1,9 @@
 package commentv1
 
 import (
+	"github.com/arran4/go-subcommand/model"
 	"reflect"
 	"testing"
-	"github.com/arran4/go-subcommand/model"
 )
 
 func TestExtractParamAttributes(t *testing.T) {
@@ -51,8 +51,8 @@ func TestExtractParamAttributes(t *testing.T) {
 		},
 		{
 			name:      "Complex Attributes",
-			text:      "(parser: NewThing;required;global;aka nt) Description",
-			wantAttrs: "parser: NewThing;required;global;aka nt",
+			text:      "(parser: NewThing;required;inherited;aka nt) Description",
+			wantAttrs: "parser: NewThing;required;inherited;aka nt",
 			wantClean: "Description",
 		},
 	}
@@ -81,13 +81,6 @@ func TestParseAttributes(t *testing.T) {
 			attrs: "required",
 			wantParam: ParsedParam{
 				Required: true,
-			},
-		},
-		{
-			name:  "Global",
-			attrs: "global",
-			wantParam: ParsedParam{
-				Inherited: true,
 			},
 		},
 		{
@@ -127,12 +120,12 @@ func TestParseAttributes(t *testing.T) {
 		},
 		{
 			name:  "Multiple",
-			attrs: "required; global; parser: func; aka: f",
+			attrs: "required; inherited; parser: func; aka: f",
 			wantParam: ParsedParam{
-				Required:   true,
-				Inherited:  true,
-				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func"}},
-				Flags:      []string{"f"},
+				Required:  true,
+				Inherited: true,
+				Parser:    model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func"}},
+				Flags:     []string{"f"},
 			},
 		},
 		{
@@ -168,8 +161,8 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Mixed Parser with Comma",
 			attrs: `parser: func(a,b); required`,
 			wantParam: ParsedParam{
-				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func(a,b)"}},
-				Required:   true,
+				Parser:   model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func(a,b)"}},
+				Required: true,
 			},
 		},
 	}
@@ -201,7 +194,7 @@ func TestParseParamDetails_Integration(t *testing.T) {
 		},
 		{
 			name: "End Block",
-			text: "Description (global)",
+			text: "Description (from parent)",
 			want: ParsedParam{
 				Inherited:   true,
 				Description: "Description",

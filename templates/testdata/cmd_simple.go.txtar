@@ -113,7 +113,7 @@ func (c *MyCmd) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "v" || char == "[v]" || char == "1" {
+				if char == "v" {
 					found = true
 					c.verbose = true
 				}

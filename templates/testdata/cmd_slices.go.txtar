@@ -178,7 +178,7 @@ func (c *MySliceCmd) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "f" || char == "[f]" || char == "1" {
+				if char == "f" {
 					found = true
 					// Value flag
 					value := ""

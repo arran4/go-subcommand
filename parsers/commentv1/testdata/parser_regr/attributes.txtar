@@ -5,13 +5,13 @@ package main
 // Flags:
 //
 //	req: (required) Required param
-//	glob: (global) Global param
+//	inherit: (from parent) Inherited param
 //	custom: (parser: MyParser) Custom parser
 //	pkg: (parser: "pkg".Func) Pkg parser
 //	gen: (generator: MyGen) Generator
-//	mix: (required; global) Mixed
+//	mix: (required; inherited) Mixed
 //	legacy: -f (default: false) Legacy
-func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, legacy bool) {}
+func MyCmd(req string, inherit bool, custom string, pkg int, gen string, mix int, legacy bool) {}
 
 -- expected.json --
 {
@@ -27,9 +27,9 @@ func MyCmd(req string, glob bool, custom string, pkg int, gen string, mix int, l
       "Func": null
     }
   },
-  "glob": {
+  "inherit": {
     "Inherited": true,
-    "Description": "Global param",
+    "Description": "Inherited param",
     "Parser": {
       "Type": "",
       "Func": null

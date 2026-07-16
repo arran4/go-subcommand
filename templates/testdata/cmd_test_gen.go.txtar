@@ -44,7 +44,7 @@ func TestMyCmd_Execute(t *testing.T) {
 	}
 
 	args := []string{}
-	args = append(args, "--verbose")
+	args = append(args, "-v")
 
 	err := cmd.Execute(args)
 	if err != nil {

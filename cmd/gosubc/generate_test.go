@@ -24,11 +24,11 @@ func TestGenerate_Execute(t *testing.T) {
 	args := []string{}
 	args = append(args, "--dir")
 	args = append(args, "test")
-	args = append(args, "--manDir")
+	args = append(args, "--man-dir")
 	args = append(args, "test")
-	args = append(args, "--parserName")
+	args = append(args, "--parser-name")
 	args = append(args, "test")
-	args = append(args, "--paths")
+	args = append(args, "--path")
 	args = append(args, "--recursive")
 	args = append(args, "--force")
 

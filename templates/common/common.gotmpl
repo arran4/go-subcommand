@@ -37,6 +37,13 @@
 	{{- if $hasDuration }}
 	"time"
 	{{- end }}
+	{{- range paramImports $params }}
+	{{- if .Alias }}
+	{{.Alias}} "{{.Path}}"
+	{{- else }}
+	"{{.Path}}"
+	{{- end }}
+	{{- end }}
 {{- end -}}
 
 {{- define "flag_definitions" -}}
@@ -44,7 +51,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if not .IsPositional }}
+		{{- if and (not .IsPositional) (not .HasGenerator) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -67,7 +74,7 @@
 		{{- end -}}
 
 		{{- $aliases := .FlagAliases }}
-		{{- if not $aliases }}{{ $aliases = slice .Name }}{{ end }}
+		{{- if not $aliases }}{{ $aliases = list .Name }}{{ end }}
 
 		{{- range $aliases }}
 			{{- if $param.IsSlice }}
@@ -78,7 +85,7 @@
 	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
 			{{- else }}
 				{{- if $param.HasPointer }}
-					{{- if $param.IsString }}
+					{{- if and $param.IsString (not $param.HasCustomParser) }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
 		{{$struct}}.{{$param.Name}} = &s
 		return nil
@@ -87,17 +94,26 @@
 						{{- $funcName := "Func" }}
 						{{- if $param.IsBool }}{{ $funcName = "BoolFunc" }}{{ end }}
 	{{$set}}.{{$funcName}}("{{.}}", "{{$desc}}", func(s string) error {
-		v, err := {{$param.ParserCall "s"}}
+		parsed, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
 		}
-		val := {{$param.CastCode "v"}}
+		val := {{$param.CastCode "parsed"}}
 		{{$struct}}.{{$param.Name}} = &val
 		return nil
 	})
 					{{- end }}
 				{{- else }}
-					{{- if $param.IsDuration }}
+					{{- if $param.HasCustomParser }}
+	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		parsed, err := {{$param.ParserCall "s"}}
+		if err != nil {
+			return err
+		}
+		{{$struct}}.{{$param.Name}} = {{$param.CastCode "parsed"}}
+		return nil
+	})
+					{{- else if $param.IsDuration }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
 	} else {
@@ -160,7 +176,7 @@
 			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
-		{{- if .IsString }}
+		{{- if and .IsString (not .HasCustomParser) }}
 		c.{{.Name}} = varArgs
 		{{- else }}
 		for _, arg := range varArgs {
@@ -178,7 +194,7 @@
 		argIndex := {{.PositionalArgIndex | add -1}}
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
-			{{- if .IsString }}
+			{{- if and .IsString (not .HasCustomParser) }}
 			c.{{.Name}} = argVal
 			{{- else }}
 			v, err := {{.ParserCall "argVal"}}

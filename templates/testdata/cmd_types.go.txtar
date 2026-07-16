@@ -159,7 +159,7 @@ func (c *MyCmd) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "t" || char == "[t]" || char == "1" {
+				if char == "t" {
 					found = true
 					// Value flag
 					value := ""

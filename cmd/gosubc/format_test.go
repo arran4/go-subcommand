@@ -25,7 +25,7 @@ func TestFormat_Execute(t *testing.T) {
 	args = append(args, "--dir")
 	args = append(args, "test")
 	args = append(args, "--inplace")
-	args = append(args, "--paths")
+	args = append(args, "--path")
 	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)

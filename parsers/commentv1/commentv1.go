@@ -804,7 +804,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "global", "inherited", "from parent"}
+	knownSingles := []string{"required", "inherited", "from parent"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -879,8 +879,18 @@ func splitSafe(s string, sep rune) []string {
 	var current strings.Builder
 	depth := 0
 	inQuote := false
+	escaped := false
 
 	for _, r := range s {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
 		if r == '"' {
 			inQuote = !inQuote
 		}
@@ -899,6 +909,9 @@ func splitSafe(s string, sep rune) []string {
 		} else {
 			current.WriteRune(r)
 		}
+	}
+	if escaped {
+		current.WriteRune('\\')
 	}
 	if current.Len() > 0 {
 		parts = append(parts, current.String())
@@ -944,8 +957,6 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		switch key {
 		case AttributeRequired:
 			p.Required = true
-		case AttributeGlobal:
-			p.Inherited = true
 		case AttributeGenerator:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
@@ -994,7 +1005,10 @@ func parseAttributes(attrs string, p *ParsedParam) {
 				}
 			}
 		case AttributeAka, AttributeAlias, AttributeAliases:
-			vals := strings.Split(val, ",")
+			vals := splitSafe(val, ',')
+			if len(vals) == 1 {
+				vals = splitSafe(val, ';')
+			}
 			for _, v := range vals {
 				v = strings.TrimSpace(v)
 				if v != "" {

@@ -24,9 +24,9 @@ func TestGoreleaser_Execute(t *testing.T) {
 	args := []string{}
 	args = append(args, "--dir")
 	args = append(args, "test")
-	args = append(args, "--githubWorkflow")
-	args = append(args, "--verificationWorkflow")
-	args = append(args, "--prCreationWorkflow")
+	args = append(args, "--go-releaser-github-workflow")
+	args = append(args, "--verification-workflow")
+	args = append(args, "--pr-creation-workflow")
 
 	err := cmd.Execute(args)
 	if err != nil {
