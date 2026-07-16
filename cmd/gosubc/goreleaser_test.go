@@ -32,6 +32,7 @@ func TestGoreleaser_Execute(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
+
 	if !called {
 		t.Error("CommandAction was not called")
 	}

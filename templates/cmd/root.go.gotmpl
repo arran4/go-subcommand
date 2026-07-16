@@ -391,13 +391,13 @@ func (c *RootCmd) Execute(args []string) error {
 				v := int8(iv)
 				c.{{$param.Name}} = &v
 				{{- else if eq $param.Type "uint" }}
-				iv, err := strconv.ParseUint(value, 10, 64)
+				iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 				if err != nil {
 					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
 				}
 				c.{{$param.Name}} = uint(iv)
 				{{- else if eq $param.Type "*uint" }}
-				iv, err := strconv.ParseUint(value, 10, 64)
+				iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 				if err != nil {
 					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
 				}
@@ -560,13 +560,13 @@ func (c *RootCmd) Execute(args []string) error {
 				v := int8(iv)
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 				{{- else if eq $param.Type "[]uint" }}
-				iv, err := strconv.ParseUint(value, 10, 64)
+				iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 				if err != nil {
 					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
 				}
 				c.{{$param.Name}} = append(c.{{$param.Name}}, uint(iv))
 				{{- else if eq $param.Type "[]*uint" }}
-				iv, err := strconv.ParseUint(value, 10, 64)
+				iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 				if err != nil {
 					return fmt.Errorf("invalid uint value for flag %s: %s", name, value)
 				}
@@ -650,6 +650,7 @@ func (c *RootCmd) Execute(args []string) error {
 				c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 				{{- else }}
 				// TODO: Implement parsing for flag type {{$param.Type}}
+				return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented (value: %s)", value)
 				{{- end }}
 				{{- end }}
 			{{- end }}
@@ -801,13 +802,13 @@ func (c *RootCmd) Execute(args []string) error {
 					v := int8(iv)
 					c.{{$param.Name}} = &v
 					{{- else if eq $param.Type "uint" }}
-					iv, err := strconv.ParseUint(value, 10, 64)
+					iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 					if err != nil {
 						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
 					}
 					c.{{$param.Name}} = uint(iv)
 					{{- else if eq $param.Type "*uint" }}
-					iv, err := strconv.ParseUint(value, 10, 64)
+					iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 					if err != nil {
 						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
 					}
@@ -970,13 +971,13 @@ func (c *RootCmd) Execute(args []string) error {
 					v := int8(iv)
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 					{{- else if eq $param.Type "[]uint" }}
-					iv, err := strconv.ParseUint(value, 10, 64)
+					iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 					if err != nil {
 						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
 					}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, uint(iv))
 					{{- else if eq $param.Type "[]*uint" }}
-					iv, err := strconv.ParseUint(value, 10, 64)
+					iv, err := strconv.ParseUint(value, 10, strconv.IntSize)
 					if err != nil {
 						return fmt.Errorf("invalid uint value for flag -%s: %s", char, value)
 					}
@@ -1060,6 +1061,7 @@ func (c *RootCmd) Execute(args []string) error {
 					c.{{$param.Name}} = append(c.{{$param.Name}}, &v)
 					{{- else }}
 					// TODO: Implement parsing for flag type {{$param.Type}}
+					return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented (value: %s)", value)
 					{{- end }}
 					{{- end }}
 				}

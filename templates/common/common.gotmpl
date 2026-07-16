@@ -325,7 +325,7 @@ func (s *UintSlice) String() string {
 }
 
 func (s *UintSlice) Set(value string) error {
-	i, err := strconv.ParseUint(value, 10, 64) // uint can be 32 or 64 bit, but 64 covers both
+	i, err := strconv.ParseUint(value, 10, strconv.IntSize) // uint can be 32 or 64 bit, but 64 covers both
 	if err != nil {
 		return err
 	}
@@ -655,7 +655,7 @@ func (s *UintPointerSlice) String() string {
 }
 
 func (s *UintPointerSlice) Set(value string) error {
-	i, err := strconv.ParseUint(value, 10, 64)
+	i, err := strconv.ParseUint(value, 10, strconv.IntSize)
 	if err != nil {
 		return err
 	}

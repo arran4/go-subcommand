@@ -140,6 +140,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 
 	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSkill() })
+		c.Commands["skill"] = subCmd
+
+	}
+
+	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewSyntax() })
 		c.Commands["syntax"] = subCmd
 

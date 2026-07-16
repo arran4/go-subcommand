@@ -9,6 +9,12 @@ Subcommands:
     goreleaser                               generates goreleaser configuration and workflows
     list                                     lists the subcommands
     scan                                     lists all available subcommands and their flags
+    skill
+    skill inspect                            inspects an AI agent skill.
+    skill install                            installs an AI agent skill.
+    skill list                               lists installed AI agent skills.
+    skill remove                             removes an AI agent skill.
+    skill update                             updates an AI agent skill.
     syntax                                   prints the available forms of function comments
     validate                                 validates the subcommand code
 {{else}}
@@ -18,6 +24,7 @@ Subcommands:
     goreleaser generates goreleaser configuration and workflows
     list       lists the subcommands
     scan       lists all available subcommands and their flags
+    skill
     syntax     prints the available forms of function comments
     validate   validates the subcommand code
 {{end}}

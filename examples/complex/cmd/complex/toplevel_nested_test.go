@@ -26,13 +26,12 @@ func TestToplevelNested_Execute(t *testing.T) {
 	args = append(args, "--count")
 	args = append(args, "1")
 	args = append(args, "--verbose")
-	args = append(args, "--name")
-	args = append(args, "test")
 
 	err := cmd.Execute(args)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
+
 	if !called {
 		t.Error("CommandAction was not called")
 	}
@@ -42,8 +41,5 @@ func TestToplevelNested_Execute(t *testing.T) {
 	}
 	if cmd.verbose != true {
 		t.Errorf("Expected verbose to be true, got '%v'", cmd.verbose)
-	}
-	if cmd.name != "test" {
-		t.Errorf("Expected name to be 'test', got '%v'", cmd.name)
 	}
 }

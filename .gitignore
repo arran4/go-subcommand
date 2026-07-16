@@ -37,3 +37,5 @@ go.work.sum
 /cmd/complex/
 /gosubc
 /*.txt
+cmd/gosubc/skill_*_test.go
+cmd/gosubc/skill_test.go

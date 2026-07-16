@@ -27,12 +27,14 @@ func TestValidate_Execute(t *testing.T) {
 	args = append(args, "--parser-name")
 	args = append(args, "test")
 	args = append(args, "--path")
+	args = append(args, "test")
 	args = append(args, "--recursive")
 
 	err := cmd.Execute(args)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
+
 	if !called {
 		t.Error("CommandAction was not called")
 	}
