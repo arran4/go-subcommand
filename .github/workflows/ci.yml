@@ -265,7 +265,7 @@ jobs:
   hugo-deploy:
     name: Deploy to GitHub Pages
     needs: [route, hugo-build]
-    if: ${{ needs.route.outputs.run_pages == 'true' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && needs.route.outputs.run_pages == 'true' }}
     runs-on: ubuntu-latest
     concurrency:
       group: pages
