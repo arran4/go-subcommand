@@ -1,0 +1,597 @@
+# Agent rules for generation:
+# https://arran4.github.io/blog/post/2026/006-github-ci-and-deploy/
+# Built using this post as a reference/guide.
+name: CI/CD
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+      - 'v*.*.*'
+      - 'v*.*.*-rc*'
+      - 'v*.*.*-beta*'
+      - 'test-*'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+    branches: [main, master]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pipeline mode"
+        required: true
+        default: "lint-fix"
+        type: choice
+        options:
+          - lint-fix
+          - build
+          - release-major
+          - release-minor
+          - release-patch
+          - release-test
+          - release-rc
+          - release-alpha
+          - monthly-maintenance
+      release_version_override:
+        description: "Optional explicit release version (for example 2.4.0 or 2.4.0-rc.2)"
+        required: false
+        default: ""
+        type: string
+      allow_prs:
+        description: "Allow automation to open pull requests"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: '17 3 1 * *'
+    - cron: '41 2 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  discussions: write
+  pull-requests: write
+  checks: write
+  packages: write
+  security-events: write
+  pages: write
+  id-token: write
+
+jobs:
+  route:
+    name: Route event
+    runs-on: ubuntu-latest
+    outputs:
+      run_code_checks: ${{ steps.route.outputs.run_code_checks }}
+      run_pr_meta_checks: ${{ steps.route.outputs.run_pr_meta_checks }}
+      run_cleanup: ${{ steps.route.outputs.run_cleanup }}
+      run_release: ${{ steps.route.outputs.run_release }}
+      is_monthly: ${{ steps.route.outputs.is_monthly }}
+      is_nightly: ${{ steps.route.outputs.is_nightly }}
+      run_pages: ${{ steps.route.outputs.run_pages }}
+    steps:
+      - id: route
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_code_checks=false
+          run_pr_meta_checks=false
+          run_cleanup=false
+          run_release=false
+          is_monthly=false
+          is_nightly=false
+          run_pages=false
+
+          case "${{ github.event_name }}" in
+            push)
+              run_code_checks=true
+              if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+                run_release=true
+              fi
+              ;;
+            pull_request)
+              if [[ "${{ github.event.action }}" == "closed" ]]; then
+                run_cleanup=true
+              else
+                run_pr_meta_checks=true
+                run_code_checks=true
+              fi
+              ;;
+            release)
+              run_release=true
+              ;;
+            workflow_dispatch)
+              run_code_checks=true
+              if [[ "${{ inputs.mode }}" == release-* ]]; then
+                run_release=true
+              fi
+              if [[ "${{ inputs.mode }}" == "monthly-maintenance" ]]; then
+                is_monthly=true
+              fi
+              if [[ "${{ inputs.mode }}" == "lint-fix" ]]; then
+                is_nightly=true
+              fi
+              ;;
+            schedule)
+              run_code_checks=true
+              if [[ "${{ github.event.schedule }}" == "17 3 1 * *" ]]; then
+                is_monthly=true
+              fi
+              if [[ "${{ github.event.schedule }}" == "41 2 * * *" ]]; then
+                is_nightly=true
+              fi
+              ;;
+          esac
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            run_pages=true
+          elif [[ "${{ github.ref }}" == refs/tags/* || "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/master" ]]; then
+            run_pages=true
+          fi
+
+          echo "run_code_checks=$run_code_checks" >> "$GITHUB_OUTPUT"
+          echo "run_pr_meta_checks=$run_pr_meta_checks" >> "$GITHUB_OUTPUT"
+          echo "run_cleanup=$run_cleanup" >> "$GITHUB_OUTPUT"
+          echo "run_release=$run_release" >> "$GITHUB_OUTPUT"
+          echo "is_monthly=$is_monthly" >> "$GITHUB_OUTPUT"
+          echo "is_nightly=$is_nightly" >> "$GITHUB_OUTPUT"
+          echo "run_pages=$run_pages" >> "$GITHUB_OUTPUT"
+
+  prepare-release-tag:
+    name: Prepare release tag
+    needs: [route]
+    if: ${{ github.event_name == 'workflow_dispatch' && startsWith(inputs.mode, 'release-') }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      next_version: ${{ steps.tag.outputs.next_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup git-tag-inc
+        uses: arran4/git-tag-inc-action@v1
+        with:
+          mode: install
+      - id: tag
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_OVERRIDE: ${{ inputs.release_version_override }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          MODE="$INPUT_MODE"
+          OVERRIDE="$INPUT_OVERRIDE"
+
+          if [[ -n "$OVERRIDE" ]]; then
+            OVERRIDE="${OVERRIDE#v}"
+            next_tag="v$OVERRIDE"
+          else
+            case "$MODE" in
+              release-major) level="major"; suffix="" ;;
+              release-minor) level="minor"; suffix="" ;;
+              release-patch) level="patch"; suffix="" ;;
+              release-test)  level="patch"; suffix="test" ;;
+              release-rc)    level="patch"; suffix="rc" ;;
+              release-alpha) level="patch"; suffix="alpha" ;;
+              *) echo "Unsupported release mode: $MODE"; exit 1 ;;
+            esac
+            if command -v git-tag-inc >/dev/null 2>&1; then
+              level="${level#-}"
+              args=(-print-version-only "$level")
+              [[ -n "$suffix" ]] && args+=("$suffix")
+              next_tag=$(git-tag-inc "${args[@]}")
+            else
+              git fetch --tags --force
+              latest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -n 1)
+              [[ -z "$latest" ]] && latest='0.0.0'
+
+              if command -v npx >/dev/null 2>&1; then
+                case "$level" in
+                  major) bumped=$(npx --yes semver "$latest" -i major) ;;
+                  minor) bumped=$(npx --yes semver "$latest" -i minor) ;;
+                  *) bumped=$(npx --yes semver "$latest" -i patch) ;;
+                esac
+                next_tag="v${bumped}"
+              else
+                base="${latest%%-*}"
+                IFS='.' read -r maj min pat <<< "$base"
+                case "$level" in
+                  major) maj=$((maj+1)); min=0; pat=0 ;;
+                  minor) min=$((min+1)); pat=0 ;;
+                  *) pat=$((pat+1)) ;;
+                esac
+                next_tag="v${maj}.${min}.${pat}"
+              fi
+
+              if [[ -n "$suffix" ]]; then
+                next_tag="${next_tag}-${suffix}.1"
+              fi
+            fi
+          fi
+
+          if [[ ! "$next_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid tag format: $next_tag" >&2
+            exit 1
+          fi
+          git fetch --tags --force
+          if git rev-parse "$next_tag" >/dev/null 2>&1; then
+            echo "Tag already exists: $next_tag" >&2
+            echo "Choose a new mode or set release_version_override." >&2
+            exit 1
+          fi
+
+          echo "release_tag=$next_tag" >> "$GITHUB_OUTPUT"
+          clean_tag="${next_tag#v}"; clean_tag="${clean_tag%%-*}"
+          IFS='.' read -r maj min pat <<< "$clean_tag"
+          echo "next_version=${maj:-0}.${min:-0}.$(( ${pat:-0} + 1 ))-SNAPSHOT" >> "$GITHUB_OUTPUT"
+
+  hugo-build:
+    name: Build Hugo site
+    needs: [route]
+    if: ${{ needs.route.outputs.run_pages == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build with Hugo
+        working-directory: ./docs
+        env:
+          HUGO_ENVIRONMENT: production
+          HUGO_ENV: production
+        run: |
+          hugo --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/public
+
+  hugo-deploy:
+    name: Deploy to GitHub Pages
+    needs: [route, hugo-build]
+    if: ${{ needs.route.outputs.run_pages == 'true' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  golangci:
+    name: lint
+    needs: [route]
+    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          install-mode: goinstall
+
+  go-test:
+    name: Go lint/test (${{ matrix.os }})
+    needs: [route, golangci]
+    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: go test ./... -v
+
+  go-vet:
+    name: Go vet
+    needs: [route]
+    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./...
+
+  go-fmt-pr:
+    name: go fmt -> PR (manual dispatch)
+    needs: [route]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'lint-fix' && inputs.allow_prs == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run go fmt
+        run: go fmt ./...
+      - name: Create PR if go fmt changed files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then echo "No fmt changes"; else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            BRANCH="ci/gofmt/${{ github.run_id }}"
+            git checkout -b "$BRANCH"
+            git add -A
+            git commit -m "ci: go fmt"
+            git \
+              push origin "$BRANCH"
+            gh pr create --title "ci: go fmt" --body "Automated go fmt from manual dispatch." --base main --head "$BRANCH" --label "ci-autofix"
+          fi
+
+  verify-generation:
+    name: Verify Generated Code
+    needs: [route]
+    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install gosubc
+        run: go install ./cmd/gosubc
+
+      - name: Clean generated files
+        run: |
+          # Clean generated Go files in cmd/gosubc (preserving directory structure if needed)
+          rm -f cmd/gosubc/*.go
+          # Clean generated templates directory
+          rm -rf cmd/gosubc/templates
+
+      - name: Run generation
+        run: gosubc generate
+
+      - name: Build
+        run: |
+          go build .
+          go build ./cmd/gosubc
+
+          cd examples/basic1
+          go build .
+          cd ../..
+
+          cd examples/complex
+          go build .
+          cd ../..
+
+      - name: Verify (Vet & Lint)
+        run: |
+          go vet .
+          go vet ./cmd/gosubc
+          go vet ./templates
+
+          # Vet examples
+          cd examples/basic1
+          go vet ./...
+          cd ../..
+
+          cd examples/complex
+          go vet ./...
+          cd ../..
+
+          cd examples/returns
+          go vet ./...
+          cd ../..
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          install-mode: goinstall
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected"
+            git status
+            git diff
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_prs }}" == "true" ]]; then
+              echo "Will create PR."
+            else
+              echo "Changes found but PR creation is not enabled. Failing workflow."
+              exit 1
+            fi
+          else
+            echo "No changes detected"
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine PR attributes
+        if: steps.check_changes.outputs.changes_detected == 'true'
+        id: pr_attributes
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            echo "base=$HEAD_REF" >> $GITHUB_OUTPUT
+            echo "branch=update-generated-code-$HEAD_REF" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $HEAD_REF" >> $GITHUB_OUTPUT
+          else
+            echo "base=$REF_NAME" >> $GITHUB_OUTPUT
+            echo "branch=update-generated-code-$REF_NAME" >> $GITHUB_OUTPUT
+            echo "title=chore: update generated code for $REF_NAME" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes_detected == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update generated code"
+          title: ${{ steps.pr_attributes.outputs.title }}
+          body: "This PR updates the generated code to match the current generator logic."
+          branch: ${{ steps.pr_attributes.outputs.branch }}
+          delete-branch: true
+          base: ${{ steps.pr_attributes.outputs.base }}
+
+  integration-test:
+    name: Run Integration Script
+    needs: [route]
+    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build and Install gosubc
+        run: go install ./cmd/gosubc
+
+      - name: Run Integration Test
+        run: |
+          set -e
+
+          # Verify installation
+          if ! command -v gosubc &> /dev/null; then
+              echo "Error: gosubc not installed or not in PATH"
+              exit 1
+          fi
+
+          echo "gosubc installed successfully at $(which gosubc)"
+
+          # Create a temporary directory for integration test
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+
+          echo "Using temp dir: $TEMP_DIR"
+
+          # Define module name
+          MODULE_NAME="example.com/integrationtest"
+
+          # Create go.mod
+          cat <<EOF2 > "$TEMP_DIR/go.mod"
+          module $MODULE_NAME
+
+          go 1.25
+          EOF2
+
+          # Create pkg directory
+          mkdir -p "$TEMP_DIR/pkg"
+
+          # Create lib.go with a simple subcommand definition
+          cat <<EOF2 > "$TEMP_DIR/pkg/lib.go"
+          package pkg
+
+          import "fmt"
+
+          // Hello is a subcommand \`testapp hello\`
+          // Flags:
+          //
+          //	name: --name -n (default: "World") Name to greet
+          func Hello(name string) {
+              fmt.Printf("Hello, %s!\n", name)
+          }
+          EOF2
+
+          # Switch to temp dir to avoid path issues with go build
+          cd "$TEMP_DIR"
+
+          # Run gosubc generate
+          echo "Running gosubc generate..."
+          gosubc generate
+
+          # Verify generated code
+          if [ ! -d "cmd/testapp" ]; then
+              echo "Error: Generated cmd directory not found!"
+              exit 1
+          fi
+
+          # Build the generated app
+          echo "Building generated app..."
+          go build -o testapp ./cmd/testapp
+
+          # Run the generated app
+          echo "Running generated app..."
+          OUTPUT=$(./testapp hello --name "Integration")
+          EXPECTED="Hello, Integration!"
+
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+              echo "Error: Unexpected output. Expected '$EXPECTED', got '$OUTPUT'"
+              exit 1
+          fi
+
+          echo "Integration test passed!"
+
+  goreleaser:
+    name: GoReleaser
+    needs: [route, go-test, verify-generation, integration-test, prepare-release-tag]
+    if: ${{ always() && (needs.route.outputs.run_release == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag commit for release (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && startsWith(inputs.mode, 'release-') }}
+        run: git tag -f ${{ needs.prepare-release-tag.outputs.release_tag }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          version: latest
+          args: release --rm-dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
