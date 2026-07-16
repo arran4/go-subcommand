@@ -38,3 +38,26 @@ func TestParentChild_Execute(t *testing.T) {
 		t.Errorf("Expected verbose to be true, got '%v'", cmd.verbose)
 	}
 }
+
+func TestParentChild_ExecuteHelpAndUnknownFlags(t *testing.T) {
+
+	parent := &Parent{}
+	parent.RootCmd = &RootCmd{
+		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
+		Commands: make(map[string]func() Cmd),
+	}
+	cmd := parent.NewParentChild()
+
+	if err := cmd.Execute([]string{"--help"}); err != nil {
+		t.Errorf("--help returned an error: %v", err)
+	}
+	if err := cmd.Execute([]string{"-h"}); err != nil {
+		t.Errorf("-h returned an error: %v", err)
+	}
+	if err := cmd.Execute([]string{"--not-a-real-flag"}); err == nil {
+		t.Error("expected an error for an unknown long flag")
+	}
+	if err := cmd.Execute([]string{"-?"}); err == nil {
+		t.Error("expected an error for an unknown short flag")
+	}
+}

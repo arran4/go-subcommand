@@ -52,9 +52,6 @@ func TestSkillInstall(t *testing.T) {
 }
 
 func TestSkillInstall_PathTraversal(t *testing.T) {
-	// Our fetching uses MkdirTemp and we explicitly use validateSafePath where applicable,
-	// though standard install logic relies on `copyDir` which we should ensure is safe.
-	// Let's create a local skill with a symlink to test it if we can.
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
 	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
@@ -66,21 +63,48 @@ func TestSkillInstall_PathTraversal(t *testing.T) {
 	defer func() { _ = os.Chdir(originalWd) }()
 
 	err := SkillInstall(tempSource, "../malicious_skill", "project", "")
-
-	// Right now resolveSkillPath just uses filepath.Join, which might clean it
-	// but could technically escape if it goes high enough. Let's see what happens.
-	// filepath.Join baseDir + "skills" + "../malicious_skill" -> baseDir/malicious_skill
-	// This escapes the "skills" directory! We should fix this in resolveSkillPath actually.
-
-	// Let's ensure it doesn't fail the test if it's already caught, or fails if it escapes .agents/skills/
 	expectedEscapedPath := filepath.Join(tempDest, ".agents", "malicious_skill")
+	if err == nil {
+		t.Fatal("SkillInstall accepted a path traversal skill name")
+	}
+	if _, statErr := os.Stat(expectedEscapedPath); !os.IsNotExist(statErr) {
+		t.Fatalf("path traversal installed a skill outside the skills root: %s", expectedEscapedPath)
+	}
+}
 
-	// Ideally, it shouldn't install there. Let's check.
-	// If it installed, our validation is missing.
+func TestResolveSkillPath(t *testing.T) {
+	path, err := resolveSkillPath("", "project", "nested/skill")
+	if err != nil {
+		t.Fatalf("resolveSkillPath() error = %v", err)
+	}
+	if filepath.Base(path) != "skill" {
+		t.Errorf("resolveSkillPath() = %q, want path ending in skill", path)
+	}
+	if _, err := resolveSkillPath("", "project", "../../escape"); err == nil {
+		t.Error("resolveSkillPath accepted a traversal path")
+	}
+	if _, err := resolveSkillPath("", "invalid", "skill"); err == nil {
+		t.Error("resolveSkillPath accepted an invalid scope")
+	}
+	root, err := resolveSkillRoot("", "project")
+	if err != nil {
+		t.Fatalf("resolveSkillRoot() error = %v", err)
+	}
+	if filepath.Base(root) != "skills" {
+		t.Errorf("resolveSkillRoot() = %q, want path ending in skills", root)
+	}
+}
 
-	// We'll update the test when we add validation to resolveSkillPath.
-	_ = expectedEscapedPath
-	_ = err
+func TestSkillListAndInspectValidation(t *testing.T) {
+	if err := SkillList("invalid", ""); err == nil {
+		t.Error("SkillList accepted an invalid scope")
+	}
+	if err := SkillInspect("", "project", ""); err == nil {
+		t.Error("SkillInspect accepted an empty skill name")
+	}
+	if err := SkillInspect("missing", "project", ""); err == nil {
+		t.Error("SkillInspect accepted a missing skill")
+	}
 }
 
 func TestValidateSafePath(t *testing.T) {
