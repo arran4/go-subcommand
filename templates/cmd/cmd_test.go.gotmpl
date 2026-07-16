@@ -28,13 +28,11 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	cmd := parent.New{{.SubCommandStructName}}()
 	{{end}}
 
-	{{- if .SubCommandFunctionName}}
 	called := false
 	cmd.CommandAction = func(c *{{.SubCommandStructName}}) error {
 		called = true
 		return nil
 	}
-	{{- end}}
 
 	args := []string{}
 	{{- range .Parameters}}
@@ -83,11 +81,9 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	{{- if .SubCommandFunctionName}}
 	if !called {
 		t.Error("CommandAction was not called")
 	}
-	{{- end}}
 
 	{{range .Parameters}}
 	{{- $param := . }}
