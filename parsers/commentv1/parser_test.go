@@ -122,6 +122,49 @@ func (t *T) Method() {}
 	}
 }
 
+func TestParseGoFile_InheritedFlagAliasAndLocalParser(t *testing.T) {
+	const source = `package app
+
+// Parent is a subcommand ` + "`app parent`" + `.
+//
+// Flags:
+//
+//	dir: --dir Parent directory
+func Parent(dir string) {}
+
+// Child is a subcommand ` + "`app parent child`" + `.
+//
+// Flags:
+//
+//	dir: --dir (from parent)
+//	parsed: (parser: ParseLocal) --parsed Parsed locally
+func Child(d string, parsed string) {}
+
+func ParseLocal(value string) (string, error) { return value, nil }
+`
+
+	commands := &CommandsTree{Commands: make(map[string]*CommandTree), PackagePath: "example.com/project"}
+	if err := ParseGoFile(token.NewFileSet(), "internal/commands.go", "example.com/project/internal", strings.NewReader(source), commands); err != nil {
+		t.Fatalf("ParseGoFile() error = %v", err)
+	}
+
+	child := commands.Commands["app"].SubCommands["parent"].SubCommands["child"].SubCommand
+	inherited := child.Parameters[0]
+	if inherited.InheritedFrom != "dir" || inherited.DeclaredIn != "parent" {
+		t.Errorf("inherited parameter = %#v, want InheritedFrom dir declared in parent", inherited)
+	}
+	if got, want := inherited.FlagAliases, []string{"dir"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("inherited aliases = %v, want %v", got, want)
+	}
+	localParser := child.Parameters[1].Parser.Func
+	if localParser == nil {
+		t.Fatal("local parser was not recorded")
+	}
+	if localParser.ImportPath != "example.com/project/internal" || localParser.CommandPackageName != "app" || localParser.FunctionName != "ParseLocal" {
+		t.Errorf("local parser reference = %#v", localParser)
+	}
+}
+
 func getKeys(m map[string]*CommandTree) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

@@ -304,6 +304,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			}
 
 			var params []*model.FunctionParameter
+			usedFlagParams := make(map[string]bool)
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
@@ -335,8 +336,33 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 
 						var candidates []ParsedParam
 
-						// 1. Flags block
-						if parsed, ok := parsedParams[name.Name]; ok {
+						// 1. Flags block. Prefer an exact parameter-name match. When the
+						// comment intentionally uses a different name (for example
+						// `dir` for a child argument named `d`), pair unmatched entries
+						// with parameters in their documented declaration order.
+						flagBlockName := name.Name
+						parsed, ok := parsedParams[flagBlockName]
+						if !ok {
+							var names []string
+							for candidateName := range parsedParams {
+								if !usedFlagParams[candidateName] {
+									names = append(names, candidateName)
+								}
+							}
+							sort.SliceStable(names, func(i, j int) bool {
+								left, right := parsedParams[names[i]], parsedParams[names[j]]
+								if left.Order == right.Order {
+									return names[i] < names[j]
+								}
+								return left.Order < right.Order
+							})
+							if len(names) > 0 {
+								flagBlockName = names[0]
+								parsed, ok = parsedParams[flagBlockName]
+							}
+						}
+						if ok {
+							usedFlagParams[flagBlockName] = true
 							candidates = append(candidates, parsed)
 						} else {
 							candidates = append(candidates, ParsedParam{})
@@ -424,12 +450,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -460,12 +485,11 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
@@ -496,16 +520,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
-							if c.Generator != "" {
+							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
-							if c.ParserFunc != "" {
-								fp.ParserFunc = c.ParserFunc
-								fp.ParserPkg = c.ParserPkg
+							if c.Parser.Type != "" {
+								fp.Parser = c.Parser
 							}
 						}
 
 						if inherited {
+							if flagBlockName != name.Name {
+								fp.InheritedFrom = flagBlockName
+							}
 							parentCmdName := cmdName
 							if len(subCommandSequence) > 1 {
 								parentCmdName = subCommandSequence[len(subCommandSequence)-2]
@@ -516,6 +542,20 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if parentCmdName != "" {
 								fp.DeclaredIn = parentCmdName
 							}
+						}
+
+						// Generated commands live in a different package. A parser or
+						// generator declared beside the command must therefore be imported
+						// when the command package is not main.
+						if fp.Parser.Func != nil && fp.Parser.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.Parser.Func.ImportPath = importPath
+							fp.Parser.Func.PackagePath = importPath
+							fp.Parser.Func.CommandPackageName = f.Name.Name
+						}
+						if fp.Generator.Func != nil && fp.Generator.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.Generator.Func.ImportPath = importPath
+							fp.Generator.Func.PackagePath = importPath
+							fp.Generator.Func.CommandPackageName = f.Name.Name
 						}
 
 						if len(fp.FlagAliases) == 0 {
@@ -634,9 +674,9 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
-	Generator          string
-	ParserFunc         string
-	ParserPkg          string
+	Generator          model.GeneratorConfig
+	Parser             model.ParserConfig
+	Order              int `json:"-"`
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -648,6 +688,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 	inFlagsBlock := false
 	justEnteredFlagsBlock := false
+	paramOrder := 0
 
 	for scanner.Scan() {
 		line := scanner.Text() // Keep whitespace for indentation check
@@ -771,7 +812,10 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
-				params[name] = parseParamDetails(rest)
+				details := parseParamDetails(rest)
+				details.Order = paramOrder
+				paramOrder++
+				params[name] = details
 			} else {
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
@@ -788,6 +832,8 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
 				if details.IsPositional || details.IsVarArg {
+					details.Order = paramOrder
+					paramOrder++
 					params[name] = details
 					continue
 				}
@@ -808,7 +854,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "global", "inherited", "from parent"}
+	knownSingles := []string{"required", "inherited", "from parent"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -883,8 +929,18 @@ func splitSafe(s string, sep rune) []string {
 	var current strings.Builder
 	depth := 0
 	inQuote := false
+	escaped := false
 
 	for _, r := range s {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
 		if r == '"' {
 			inQuote = !inQuote
 		}
@@ -903,6 +959,9 @@ func splitSafe(s string, sep rune) []string {
 		} else {
 			current.WriteRune(r)
 		}
+	}
+	if escaped {
+		current.WriteRune('\\')
 	}
 	if current.Len() > 0 {
 		parts = append(parts, current.String())
@@ -948,34 +1007,58 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		switch key {
 		case AttributeRequired:
 			p.Required = true
-		case AttributeGlobal:
-			p.Inherited = true
 		case AttributeGenerator:
-			p.Generator = val
-		case AttributeParser:
-			if strings.Contains(val, "\"") {
-				// parser: "pkg/path".Func
-				// parser: "pkg".Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.ParserPkg = strings.Trim(val[:lastDot], "\"")
-					p.ParserFunc = val[lastDot+1:]
+			p.Generator.Type = model.SourceTypeGenerator
+			if val != "" {
+				if idx := strings.LastIndex(val, "."); idx != -1 {
+					p.Generator.Func = &model.FuncRef{
+						ImportPath:   strings.Trim(val[:idx], "\""),
+						FunctionName: val[idx+1:],
+					}
+					p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
+					p.Generator.Func.CommandPackageName = path.Base(p.Generator.Func.ImportPath)
 				} else {
-					p.ParserFunc = val
+					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
-			} else {
-				// parser: Func
-				// parser: pkg.Func
-				lastDot := strings.LastIndex(val, ".")
-				if lastDot != -1 {
-					p.ParserPkg = val[:lastDot]
-					p.ParserFunc = val[lastDot+1:]
+			}
+		case AttributeParser:
+			p.Parser.Type = model.ParserTypeCustom
+			if val != "" {
+				if strings.Contains(val, "\"") {
+					// parser: "pkg/path".Func
+					// parser: "pkg".Func
+					lastDot := strings.LastIndex(val, ".")
+					if lastDot != -1 {
+						p.Parser.Func = &model.FuncRef{
+							ImportPath:   strings.Trim(val[:lastDot], "\""),
+							FunctionName: val[lastDot+1:],
+						}
+						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
+					} else {
+						p.Parser.Func = &model.FuncRef{FunctionName: val}
+					}
 				} else {
-					p.ParserFunc = val
+					// parser: Func
+					// parser: pkg.Func
+					lastDot := strings.LastIndex(val, ".")
+					if lastDot != -1 {
+						p.Parser.Func = &model.FuncRef{
+							ImportPath:   val[:lastDot],
+							FunctionName: val[lastDot+1:],
+						}
+						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
+						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
+					} else {
+						p.Parser.Func = &model.FuncRef{FunctionName: val}
+					}
 				}
 			}
 		case AttributeAka, AttributeAlias, AttributeAliases:
-			vals := strings.Split(val, ",")
+			vals := splitSafe(val, ',')
+			if len(vals) == 1 {
+				vals = splitSafe(val, ';')
+			}
 			for _, v := range vals {
 				v = strings.TrimSpace(v)
 				if v != "" {

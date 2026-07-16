@@ -11,13 +11,34 @@ func MyFunc() {}
 -- expected.json --
 {
   "username": {
-    "Flags": ["username", "u"],
+    "Flags": [
+      "username",
+      "u"
+    ],
     "Default": "guest",
-    "Description": "The user to greet"
+    "Description": "The user to greet",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   },
   "force": {
-    "Flags": ["f"],
+    "Flags": [
+      "f"
+    ],
     "Default": "false",
-    "Description": "Force action"
+    "Description": "Force action",
+    "Parser": {
+      "Type": "",
+      "Func": null
+    },
+    "Generator": {
+      "Type": "",
+      "Func": null
+    }
   }
 }

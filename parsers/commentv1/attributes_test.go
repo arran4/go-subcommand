@@ -1,6 +1,7 @@
 package commentv1
 
 import (
+	"github.com/arran4/go-subcommand/model"
 	"reflect"
 	"testing"
 )
@@ -50,8 +51,8 @@ func TestExtractParamAttributes(t *testing.T) {
 		},
 		{
 			name:      "Complex Attributes",
-			text:      "(parser: NewThing;required;global;aka nt) Description",
-			wantAttrs: "parser: NewThing;required;global;aka nt",
+			text:      "(parser: NewThing;required;inherited;aka nt) Description",
+			wantAttrs: "parser: NewThing;required;inherited;aka nt",
 			wantClean: "Description",
 		},
 	}
@@ -83,40 +84,31 @@ func TestParseAttributes(t *testing.T) {
 			},
 		},
 		{
-			name:  "Global",
-			attrs: "global",
-			wantParam: ParsedParam{
-				Inherited: true,
-			},
-		},
-		{
 			name:  "Parser Simple",
 			attrs: "parser: MyFunc",
 			wantParam: ParsedParam{
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Parser Package",
 			attrs: "parser: pkg.MyFunc",
 			wantParam: ParsedParam{
-				ParserPkg:  "pkg",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{ImportPath: "pkg", PackagePath: "pkg", CommandPackageName: "pkg", FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Parser String Import",
 			attrs: `parser: "github.com/foo/bar".MyFunc`,
 			wantParam: ParsedParam{
-				ParserPkg:  "github.com/foo/bar",
-				ParserFunc: "MyFunc",
+				Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{ImportPath: "github.com/foo/bar", PackagePath: "github.com/foo/bar", CommandPackageName: "bar", FunctionName: "MyFunc"}},
 			},
 		},
 		{
 			name:  "Generator",
 			attrs: "generator: MyGen",
 			wantParam: ParsedParam{
-				Generator: "MyGen",
+				Generator: model.GeneratorConfig{Type: model.SourceTypeGenerator, Func: &model.FuncRef{FunctionName: "MyGen"}},
 			},
 		},
 		{
@@ -128,12 +120,12 @@ func TestParseAttributes(t *testing.T) {
 		},
 		{
 			name:  "Multiple",
-			attrs: "required; global; parser: func; aka: f",
+			attrs: "required; inherited; parser: func; aka: f",
 			wantParam: ParsedParam{
-				Required:   true,
-				Inherited:  true,
-				ParserFunc: "func",
-				Flags:      []string{"f"},
+				Required:  true,
+				Inherited: true,
+				Parser:    model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func"}},
+				Flags:     []string{"f"},
 			},
 		},
 		{
@@ -169,8 +161,8 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Mixed Parser with Comma",
 			attrs: `parser: func(a,b); required`,
 			wantParam: ParsedParam{
-				ParserFunc: "func(a,b)",
-				Required:   true,
+				Parser:   model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "func(a,b)"}},
+				Required: true,
 			},
 		},
 	}
@@ -202,7 +194,7 @@ func TestParseParamDetails_Integration(t *testing.T) {
 		},
 		{
 			name: "End Block",
-			text: "Description (global)",
+			text: "Description (from parent)",
 			want: ParsedParam{
 				Inherited:   true,
 				Description: "Description",

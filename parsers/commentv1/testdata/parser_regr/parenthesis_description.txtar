@@ -21,8 +21,13 @@ func MyCommand(path string) {}
     "VarArgMax": 0,
     "Inherited": false,
     "Required": false,
-    "Generator": "",
-    "ParserFunc": "",
-    "ParserPkg": ""
+    "Generator": {
+      "Type": "",
+      "Func": null
+    },
+    "Parser": {
+      "Type": "",
+      "Func": null
+    }
   }
 }

@@ -28,11 +28,34 @@ func TestSimple_Execute(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
+
 	if !called {
 		t.Error("CommandAction was not called")
 	}
 
 	if cmd.fail != true {
 		t.Errorf("Expected fail to be true, got '%v'", cmd.fail)
+	}
+}
+
+func TestSimple_ExecuteHelpAndUnknownFlags(t *testing.T) {
+
+	parent := &RootCmd{
+		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
+		Commands: make(map[string]func() Cmd),
+	}
+	cmd := parent.NewSimple()
+
+	if err := cmd.Execute([]string{"--help"}); err != nil {
+		t.Errorf("--help returned an error: %v", err)
+	}
+	if err := cmd.Execute([]string{"-h"}); err != nil {
+		t.Errorf("-h returned an error: %v", err)
+	}
+	if err := cmd.Execute([]string{"--not-a-real-flag"}); err == nil {
+		t.Error("expected an error for an unknown long flag")
+	}
+	if err := cmd.Execute([]string{"-?"}); err == nil {
+		t.Error("expected an error for an unknown short flag")
 	}
 }

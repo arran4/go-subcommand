@@ -1,4 +1,4 @@
-package go_subcommand
+package skills
 
 import (
 	"fmt"
@@ -39,7 +39,8 @@ func resolveSkillPath(agentName, scope, skillName string) (string, error) {
 		return "", fmt.Errorf("invalid scope: %s (must be 'user' or 'project')", scope)
 	}
 
-	return filepath.Join(baseDir, "skills", skillName), nil
+	root := filepath.Join(baseDir, "skills")
+	return validateSafePath(root, filepath.Join(root, skillName))
 }
 
 // resolveSkillRoot returns the root directory for all skills for a given agent and scope.

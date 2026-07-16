@@ -150,14 +150,27 @@ func compareParams(got, expected ParsedParam) bool {
 	if got.Inherited != expected.Inherited {
 		return false
 	}
-	if got.Generator != expected.Generator {
+	if got.Generator.Type != expected.Generator.Type {
 		return false
 	}
-	if got.ParserFunc != expected.ParserFunc {
+	if (got.Generator.Func == nil) != (expected.Generator.Func == nil) {
 		return false
 	}
-	if got.ParserPkg != expected.ParserPkg {
+	if got.Generator.Func != nil {
+		if got.Generator.Func.FunctionName != expected.Generator.Func.FunctionName || got.Generator.Func.ImportPath != expected.Generator.Func.ImportPath {
+			return false
+		}
+	}
+	if got.Parser.Type != expected.Parser.Type {
 		return false
+	}
+	if (got.Parser.Func == nil) != (expected.Parser.Func == nil) {
+		return false
+	}
+	if got.Parser.Func != nil {
+		if got.Parser.Func.FunctionName != expected.Parser.Func.FunctionName || got.Parser.Func.ImportPath != expected.Parser.Func.ImportPath {
+			return false
+		}
 	}
 
 	if len(got.Flags) != len(expected.Flags) {

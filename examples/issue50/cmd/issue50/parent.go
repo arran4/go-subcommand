@@ -94,6 +94,10 @@ func (c *Parent) Execute(args []string) error {
 				}
 				found := false
 
+				if char == "v" {
+					found = true
+					c.verbose = true
+				}
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)
 				}
@@ -129,7 +133,8 @@ func (c *RootCmd) NewParent() *Parent {
 		SubCommands: make(map[string]func() Cmd),
 	}
 
-	set.BoolVar(&v.verbose, "verbose", false, "TODO: Add usage text")
+	set.BoolVar(&v.verbose, "verbose", false, "Verbosity level")
+	set.BoolVar(&v.verbose, "v", false, "Verbosity level")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Parent) error {

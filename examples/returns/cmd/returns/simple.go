@@ -94,7 +94,7 @@ func (c *Simple) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "f" || char == "[f]" || char == "1" {
+				if char == "f" {
 					found = true
 					c.fail = true
 				}
