@@ -443,7 +443,8 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"append": func(list []interface{}, args ...interface{}) []interface{} {
 			return append(list, args...)
 		},
-		"paramImports": parameterImports,
+		"paramImports":       parameterImports,
+		"paramImportsExcept": parameterImportsExcept,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -481,10 +482,14 @@ type templateImport struct {
 }
 
 func parameterImports(params []*model.FunctionParameter) []templateImport {
+	return parameterImportsExcept(params, "")
+}
+
+func parameterImportsExcept(params []*model.FunctionParameter, excludedPath string) []templateImport {
 	seen := map[string]bool{}
 	var imports []templateImport
 	add := func(ref *model.FuncRef) {
-		if ref == nil || ref.ImportPath == "" || seen[ref.ImportPath] {
+		if ref == nil || ref.ImportPath == "" || ref.ImportPath == excludedPath || seen[ref.ImportPath] {
 			return
 		}
 		seen[ref.ImportPath] = true

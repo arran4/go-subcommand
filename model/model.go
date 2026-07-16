@@ -146,6 +146,9 @@ type FunctionParameter struct {
 	Parser ParserConfig
 	// Inherited indicates if the parameter was inherited from a parent command.
 	Inherited bool
+	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
+	// It is parser metadata and is intentionally excluded from serialized models.
+	InheritedFrom string `json:"-"`
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -183,6 +186,14 @@ func (p *FunctionParameter) PrimaryFlagName() string {
 		return "--" + name
 	}
 	return "-" + name
+}
+
+// ValueFieldName returns the generated command field that supplies this argument.
+func (p *FunctionParameter) ValueFieldName() string {
+	if p.InheritedFrom != "" {
+		return p.InheritedFrom
+	}
+	return p.Name
 }
 
 func (p *FunctionParameter) DefaultString() string {
@@ -403,7 +414,7 @@ func (cmd *Command) HasRequiredFlags() bool {
 }
 
 func (sc *SubCommand) HasRequiredFlags() bool {
-	return requiredFlagPresent(sc.AllParameters())
+	return requiredFlagPresent(sc.Parameters)
 }
 
 func (sc *SubCommand) ResolveInheritance() {
@@ -414,7 +425,7 @@ func (sc *SubCommand) ResolveInheritance() {
 				// Find matching parameter in ancestor
 				var parentParam *FunctionParameter
 				for _, pp := range ancestor.Parameters {
-					if pp.Name == p.Name {
+					if pp.Name == p.Name || pp.Name == p.InheritedFrom {
 						parentParam = pp
 						break
 					}
@@ -440,7 +451,7 @@ func (sc *SubCommand) ResolveInheritance() {
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
 				// Declared in Root Command
 				for _, pp := range sc.Command.Parameters {
-					if pp.Name == p.Name {
+					if pp.Name == p.Name || pp.Name == p.InheritedFrom {
 						if p.Description == "" {
 							p.Description = pp.Description
 						}
@@ -484,8 +495,12 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 
 	addParams := func(ps []*FunctionParameter) {
 		for _, p := range ps {
-			if !seen[p.Name] {
-				seen[p.Name] = true
+			key := p.Name
+			if p.InheritedFrom != "" {
+				key = p.InheritedFrom
+			}
+			if !seen[key] {
+				seen[key] = true
 				params = append(params, p)
 			}
 		}

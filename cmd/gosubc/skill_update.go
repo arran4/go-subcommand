@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"errors"
-	go_subcommand "github.com/arran4/go-subcommand"
 	"github.com/arran4/go-subcommand/cmd"
+	"github.com/arran4/go-subcommand/skills"
 )
 
 var _ Cmd = (*SkillUpdate)(nil)
@@ -188,7 +188,7 @@ func (c *Skill) NewSkillUpdate() *SkillUpdate {
 
 	v.CommandAction = func(c *SkillUpdate) error {
 
-		err := go_subcommand.SkillUpdate(c.name, c.all, c.scope, c.agent, c.force)
+		err := skills.SkillUpdate(c.name, c.all, c.scope, c.agent, c.force)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

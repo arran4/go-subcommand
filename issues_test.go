@@ -7,11 +7,18 @@ import (
 	"testing/fstest"
 
 	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parsers"
 	"github.com/arran4/go-subcommand/parsers/commentv1"
 )
 
 //go:embed testdata/issue350_388.go
 var issue350388Source string
+
+//go:embed testdata/issue330.go
+var issue330Source string
+
+//go:embed testdata/issue18.go
+var issue18Source string
 
 // setupProject returns an in-memory FS
 func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
@@ -91,6 +98,90 @@ func assertNotContains(t *testing.T, s, substr, msg string) {
 	t.Helper()
 	if strings.Contains(s, substr) {
 		t.Fatalf("%s: found unexpected %q in:\n%s", msg, substr, s)
+	}
+}
+
+func TestIssue18_MoreBasicTypes(t *testing.T) {
+	writer := runGenerateInMemory(t, setupProject(t, issue18Source))
+	code := string(mustGeneratedFile(t, writer, "cmd/app/mycmd.go"))
+
+	for _, typ := range []string{
+		"int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32", "[]int64", "*int64",
+	} {
+		if strings.Contains(code, "TODO: Implement parsing for flag type "+typ) {
+			t.Errorf("Missing parsing for flag type %s", typ)
+		}
+	}
+}
+
+func TestIssue55_SanitizeToIdentifier(t *testing.T) {
+	tests := []struct{ input, expected string }{
+		{"", "Cmd"}, {"123test", "Cmd123test"}, {"123-test", "Cmd123Test"},
+		{"123", "Cmd123"}, {"@foo", "Foo"}, {" foo", "Foo"},
+		{"-foo", "Foo"}, {"_123", "Cmd123"}, {"foo@bar", "FooBar"},
+		{"foo#bar", "FooBar"}, {"foo$bar", "FooBar"}, {"foo123bar", "Foo123bar"},
+		{"foo-123-bar", "Foo123Bar"}, {"123-foo@bar.com", "Cmd123FooBarCom"},
+		{"!@#$", "Cmd"}, {"héllo", "Héllo"}, {"éllo", "Éllo"},
+		{"1éllo", "Cmd1éllo"}, {"１test", "Cmd１test"}, {"a💩b", "AB"},
+		{"💩", "Cmd"}, {"💩a", "A"},
+	}
+	for _, tt := range tests {
+		if got := parsers.SanitizeToIdentifier(tt.input); got != tt.expected {
+			t.Errorf("SanitizeToIdentifier(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestIssue55_ToKebabCase(t *testing.T) {
+	tests := []struct{ input, expected string }{
+		{"Test", "test"}, {"123Test", "123-test"}, {"123test", "123test"},
+		{"Cmd123Test", "cmd123-test"}, {"Cmd123test", "cmd123test"},
+		{"JSONData", "json-data"}, {"JSON123Data", "json123-data"},
+		{"JSON123data", "json123data"}, {"My123Test", "my123-test"},
+		{"My123test", "my123test"},
+	}
+	for _, tt := range tests {
+		if got := parsers.ToKebabCase(tt.input); got != tt.expected {
+			t.Errorf("ToKebabCase(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestIssue330_ParentFlagsReporting(t *testing.T) {
+	writer := runGenerateInMemory(t, setupProject(t, issue330Source))
+
+	usageText := string(mustGeneratedFile(t, writer, "cmd/app/templates/child_usage.txt"))
+	if !strings.Contains(usageText, "`child` Flags:") {
+		t.Error("Missing '`child` Flags:' section in usage")
+	}
+	if !strings.Contains(usageText, "`parent` Flags:") {
+		t.Error("Missing '`parent` Flags:' section in usage")
+	}
+
+	parentIndex := strings.Index(usageText, "`parent` Flags:")
+	childIndex := strings.Index(usageText, "`child` Flags:")
+	dirIndex := strings.Index(usageText, "--dir")
+	if parentIndex == -1 || childIndex == -1 || dirIndex == -1 {
+		t.Fatalf("incomplete parent/child usage output:\n%s", usageText)
+	}
+	if parentIndex > childIndex || dirIndex < parentIndex || dirIndex > childIndex {
+		t.Errorf("--dir should be listed in the parent group before child flags:\n%s", usageText)
+	}
+	assertNotContains(t, usageText, "-d string", "child argument d should inherit --dir")
+	assertNotContains(t, usageText, "--ir int", "child argument ir should use the documented --i flag")
+	assertContains(t, usageText, "-i int", "child argument ir should use -i")
+	assertContains(t, usageText, "(default: 0)", "child argument ir should retain its documented default")
+	childCode := string(mustGeneratedFile(t, writer, "cmd/app/parent_child.go"))
+	assertNotContains(t, childCode, `case "dir"`, "inherited parent flags should not be reparsed by the child")
+	assertContains(t, childCode, "Child(c.dir, c.ir)", "child action should read the embedded parent value")
+
+	grandchildUsage := string(mustGeneratedFile(t, writer, "cmd/app/templates/grandchild_usage.txt"))
+	for _, expected := range []string{"`parent` Flags:", "--dir", "The directory"} {
+		if !strings.Contains(grandchildUsage, expected) {
+			t.Errorf("Grandchild usage missing %q:\n%s", expected, grandchildUsage)
+		}
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
-{{- template "common_imports" (list .AllParameters true) }}
+{{- template "common_imports" (list .Parameters true .ImportPath) }}
 {{- if .ImportPath}}
 
 	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
@@ -53,7 +53,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 }
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
-	{{- range .AllParameters }}
+	{{- range .Parameters }}
 	{{- if .HasGenerator }}
 	{
 		v, err := {{.GeneratorCall}}
@@ -65,7 +65,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- end }}
 	{{- end }}
 	{{- $needsRemainingArgs := false }}
-	{{- range .AllParameters }}
+	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
@@ -97,8 +97,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 			_ = value
 			_ = hasValue
 			switch name {
-			{{- range .AllParameters }}
-			{{- if and (not .IsPositional) (not .HasGenerator) }}
+			{{- range .Parameters }}
+			{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -213,8 +213,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					return nil
 				}
 				found := false
-				{{- range .AllParameters }}
-				{{- if and (not .IsPositional) (not .HasGenerator) }}
+				{{- range .Parameters }}
+				{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -253,6 +253,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -316,8 +319,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	}
 
 	{{- if .HasRequiredFlags }}
-	{{- range .AllParameters }}
-	{{- if and .Required (not .IsPositional) (not .HasGenerator) }}
+	{{- range .Parameters }}
+	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
 	if !seenFlags["{{.Name}}"] {
 		return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
 	}
@@ -360,9 +363,9 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
-		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- else }}
-    err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+    err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
 		if err != nil {
       if errors.Is(err, cmd.ErrPrintHelp) {
@@ -379,7 +382,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
       return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
 		{{else}}
-		{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{end -}}
 		return nil
 	}

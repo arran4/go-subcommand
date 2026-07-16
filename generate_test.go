@@ -1,11 +1,24 @@
 package go_subcommand
 
 import (
+	_ "embed"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
 	"github.com/arran4/go-subcommand/parsers"
 )
+
+//go:embed testdata/issue_runtime.go
+var issueRuntimeSource string
+
+//go:embed testdata/issue_runtime_parser.go
+var issueRuntimeParserSource string
+
+//go:embed testdata/issue_runtime_test.go
+var issueRuntimeTestSource string
 
 func TestGenerate_Recursive(t *testing.T) {
 	fs := fstest.MapFS{
@@ -73,5 +86,38 @@ func Cmd2() {}
 	}
 	if _, ok := writer.Files["cmd/app/cmd2.go"]; ok {
 		t.Errorf("Expected cmd2.go NOT to be generated")
+	}
+}
+
+func TestGenerate_RuntimeRequirements(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/e2e\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
+
+	cmd := exec.Command("go", "test", "./...")
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		generatedTest, readErr := os.ReadFile(filepath.Join(dir, "cmd", "app", "runtime_test.go"))
+		if readErr != nil {
+			t.Fatalf("generated module tests failed: %v\n%s", err, output)
+		}
+		t.Fatalf("generated module tests failed: %v\n%s\nGenerated test:\n%s", err, output, generatedTest)
+	}
+}
+
+func writeRuntimeFixture(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		t.Fatalf("create %q parent: %v", name, err)
+	}
+	if err := os.WriteFile(name, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %q: %v", name, err)
 	}
 }

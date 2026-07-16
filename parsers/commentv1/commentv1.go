@@ -304,6 +304,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			}
 
 			var params []*model.FunctionParameter
+			usedFlagParams := make(map[string]bool)
 			if s.Type.Params != nil {
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
@@ -335,8 +336,33 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 
 						var candidates []ParsedParam
 
-						// 1. Flags block
-						if parsed, ok := parsedParams[name.Name]; ok {
+						// 1. Flags block. Prefer an exact parameter-name match. When the
+						// comment intentionally uses a different name (for example
+						// `dir` for a child argument named `d`), pair unmatched entries
+						// with parameters in their documented declaration order.
+						flagBlockName := name.Name
+						parsed, ok := parsedParams[flagBlockName]
+						if !ok {
+							var names []string
+							for candidateName := range parsedParams {
+								if !usedFlagParams[candidateName] {
+									names = append(names, candidateName)
+								}
+							}
+							sort.SliceStable(names, func(i, j int) bool {
+								left, right := parsedParams[names[i]], parsedParams[names[j]]
+								if left.Order == right.Order {
+									return names[i] < names[j]
+								}
+								return left.Order < right.Order
+							})
+							if len(names) > 0 {
+								flagBlockName = names[0]
+								parsed, ok = parsedParams[flagBlockName]
+							}
+						}
+						if ok {
+							usedFlagParams[flagBlockName] = true
 							candidates = append(candidates, parsed)
 						} else {
 							candidates = append(candidates, ParsedParam{})
@@ -503,6 +529,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if inherited {
+							if flagBlockName != name.Name {
+								fp.InheritedFrom = flagBlockName
+							}
 							parentCmdName := cmdName
 							if len(subCommandSequence) > 1 {
 								parentCmdName = subCommandSequence[len(subCommandSequence)-2]
@@ -513,6 +542,20 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if parentCmdName != "" {
 								fp.DeclaredIn = parentCmdName
 							}
+						}
+
+						// Generated commands live in a different package. A parser or
+						// generator declared beside the command must therefore be imported
+						// when the command package is not main.
+						if fp.Parser.Func != nil && fp.Parser.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.Parser.Func.ImportPath = importPath
+							fp.Parser.Func.PackagePath = importPath
+							fp.Parser.Func.CommandPackageName = f.Name.Name
+						}
+						if fp.Generator.Func != nil && fp.Generator.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.Generator.Func.ImportPath = importPath
+							fp.Generator.Func.PackagePath = importPath
+							fp.Generator.Func.CommandPackageName = f.Name.Name
 						}
 
 						if len(fp.FlagAliases) == 0 {
@@ -633,6 +676,7 @@ type ParsedParam struct {
 	Required           bool
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
+	Order              int `json:"-"`
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
@@ -644,6 +688,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 	inFlagsBlock := false
 	justEnteredFlagsBlock := false
+	paramOrder := 0
 
 	for scanner.Scan() {
 		line := scanner.Text() // Keep whitespace for indentation check
@@ -767,7 +812,10 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			if matches != nil {
 				name := matches[1]
 				rest := matches[2]
-				params[name] = parseParamDetails(rest)
+				details := parseParamDetails(rest)
+				details.Order = paramOrder
+				paramOrder++
+				params[name] = details
 			} else {
 				extendedHelpLines = append(extendedHelpLines, trimmedLine)
 			}
@@ -784,6 +832,8 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				// e.g. @N for positional, or defined flags, or default value.
 				// This prevents false positives from general description text.
 				if details.IsPositional || details.IsVarArg {
+					details.Order = paramOrder
+					paramOrder++
 					params[name] = details
 					continue
 				}

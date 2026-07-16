@@ -43,7 +43,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	args := []string{}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) (not .IsPositional)}}
+	{{- if and (not .HasGenerator) (not .IsPositional) (not .InheritedFrom)}}
 	args = append(args, "{{.PrimaryFlagName}}")
 		{{- if ne .BaseType "bool"}}
 			{{- if eq .BaseType "string"}}
@@ -58,7 +58,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	{{- end}}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) .IsPositional}}
+	{{- if and (not .HasGenerator) .IsPositional (not .InheritedFrom)}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
 				{{- range until .VarArgMin}}
@@ -99,7 +99,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 
 	{{range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) (not .HasCustomParser) }}
+	{{- if and (not .HasGenerator) (not .HasCustomParser) (not .InheritedFrom) }}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
