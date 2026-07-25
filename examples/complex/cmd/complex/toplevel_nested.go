@@ -94,17 +94,6 @@ func (c *ToplevelNested) Execute(args []string) error {
 				} else {
 					c.verbose = true
 				}
-
-			case "name":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.name = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -119,13 +108,16 @@ func (c *ToplevelNested) Execute(args []string) error {
 				}
 				found := false
 
-				if char == "c" || char == "[c]" || char == "1" {
+				if char == "c" {
 					found = true
 					// Value flag
 					value := ""
 					if j+1 < len(shorts) {
 						// Value is the rest of the short flag
 						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
 						j = len(shorts) // break inner loop
 					} else {
 						// Value is the next arg
@@ -143,29 +135,9 @@ func (c *ToplevelNested) Execute(args []string) error {
 					c.count = v
 				}
 
-				if char == "v" || char == "[v]" || char == "1" {
+				if char == "v" {
 					found = true
 					c.verbose = true
-				}
-
-				if char == "n" || char == "[n]" || char == "1" {
-					found = true
-					// Value flag
-					value := ""
-					if j+1 < len(shorts) {
-						// Value is the rest of the short flag
-						value = shorts[j+1:]
-						j = len(shorts) // break inner loop
-					} else {
-						// Value is the next arg
-						if i+1 < len(args) {
-							value = args[i+1]
-							i++
-						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
-						}
-					}
-					c.name = value
 				}
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)

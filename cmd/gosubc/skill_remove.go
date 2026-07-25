@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"errors"
-	go_subcommand "github.com/arran4/go-subcommand"
 	"github.com/arran4/go-subcommand/cmd"
+	"github.com/arran4/go-subcommand/skills"
 )
 
 var _ Cmd = (*SkillRemove)(nil)
@@ -159,7 +159,7 @@ func (c *Skill) NewSkillRemove() *SkillRemove {
 
 	v.CommandAction = func(c *SkillRemove) error {
 
-		err := go_subcommand.SkillRemove(c.name, c.scope, c.agent)
+		err := skills.SkillRemove(c.name, c.scope, c.agent)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

@@ -26,46 +26,78 @@ var ReservedKeywords = []string{
 // DataModel represents the parsed data model of the Go files, containing commands and package information.
 type DataModel struct {
 	// FileSet is the token.FileSet used for parsing.
-	FileSet     *token.FileSet
+	FileSet *token.FileSet
 	// PackageName is the name of the package where the main command is defined.
 	PackageName string
 	// Commands is the list of top-level commands found.
-	Commands    []*Command
+	Commands []*Command
 	// GoVersion is the Go version from go.mod.
-	GoVersion   string
+	GoVersion string
+}
+
+type SourceType string
+
+const (
+	SourceTypeFlag      SourceType = "flag"
+	SourceTypeGenerator SourceType = "generator"
+)
+
+type ParserType string
+
+const (
+	ParserTypeImplicit ParserType = "implicit"
+	ParserTypeCustom   ParserType = "custom"
+	ParserTypeIdentity ParserType = "identity"
+)
+
+type FuncRef struct {
+	PackagePath        string
+	ImportPath         string
+	CommandPackageName string
+	FunctionName       string
+}
+
+type GeneratorConfig struct {
+	Type SourceType
+	Func *FuncRef
+}
+
+type ParserConfig struct {
+	Type ParserType
+	Func *FuncRef
 }
 
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
 	// MainCmdName is the name of the command (usually derived from the function name).
-	MainCmdName        string
+	MainCmdName string
 	// SubCommands is the list of direct subcommands for this command.
-	SubCommands        []*SubCommand
+	SubCommands []*SubCommand
 	// PackagePath is the full package path (module path + relative path).
-	PackagePath        string
+	PackagePath string
 	// ImportPath is the import path for the package containing the command.
-	ImportPath         string
+	ImportPath string
 	// CommandPackageName is the package name where the command function is defined.
 	CommandPackageName string
 	// Description is a short description of the command.
-	Description        string
+	Description string
 	// ExtendedHelp is the long description/help text for the command.
-	ExtendedHelp       string
+	ExtendedHelp string
 	// FunctionName is the name of the function definition.
-	FunctionName       string
+	FunctionName string
 	// DefinitionFile is the path to the file where the command is defined.
-	DefinitionFile     string
+	DefinitionFile string
 	// DocStart is the starting position of the documentation comment.
-	DocStart           token.Pos
+	DocStart token.Pos
 	// DocEnd is the ending position of the documentation comment.
-	DocEnd             token.Pos
+	DocEnd token.Pos
 	// Parameters is the list of parameters (flags and arguments) for the command.
-	Parameters         []*FunctionParameter
+	Parameters []*FunctionParameter
 	// ReturnsError indicates if the command function returns an error.
-	ReturnsError       bool
+	ReturnsError bool
 	// ReturnCount is the number of return values.
-	ReturnCount        int
+	ReturnCount int
 }
 
 func (c *Command) ImportAlias() string {
@@ -85,36 +117,38 @@ func (c *Command) ImportAlias() string {
 // FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
 type FunctionParameter struct {
 	// Name is the name of the parameter in the function signature.
-	Name               string
+	Name string
 	// Type is the Go type of the parameter (e.g., "string", "int", "[]string").
-	Type               string
+	Type string
 	// FlagAliases is a list of alternative names for the flag (e.g., "v" for "verbose").
-	FlagAliases        []string
+	FlagAliases []string
 	// Default is the default value for the parameter if not provided.
-	Default            string
+	Default string
 	// Description is the help text for the parameter.
-	Description        string
+	Description string
 	// IsPositional indicates if the parameter is a positional argument (not a flag).
-	IsPositional       bool
+	IsPositional bool
 	// PositionalArgIndex is the index of the positional argument (0-based).
 	PositionalArgIndex int
 	// IsVarArg indicates if the parameter captures remaining arguments (variadic).
-	IsVarArg           bool
+	IsVarArg bool
 	// VarArgMin is the minimum number of arguments required for a variadic parameter.
-	VarArgMin          int
+	VarArgMin int
 	// VarArgMax is the maximum number of arguments allowed for a variadic parameter.
-	VarArgMax          int
+	VarArgMax int
 	// DeclaredIn is the name of the command where this parameter was originally declared (used for inheritance).
-	DeclaredIn         string
+	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
-	Required           bool
-	// Generator is the name of a function that generates the value for this parameter.
-	// If set, the parameter is not parsed from the command line but generated.
-	Generator          string
-	// ParserFunc is the name of a custom parser function to use for this parameter.
-	ParserFunc         string
-	// ParserPkg is the package path where the custom parser function is defined.
-	ParserPkg          string
+	Required bool
+	// Generator specifies the source of the parameter value.
+	Generator GeneratorConfig
+	// Parser holds configuration for value parsing.
+	Parser ParserConfig
+	// Inherited indicates if the parameter was inherited from a parent command.
+	Inherited bool
+	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
+	// It is parser metadata and is intentionally excluded from serialized models.
+	InheritedFrom string `json:"-"`
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -143,7 +177,29 @@ func (p *FunctionParameter) FlagString() string {
 	return flags + typeStr
 }
 
+func (p *FunctionParameter) PrimaryFlagName() string {
+	name := p.Name
+	if len(p.FlagAliases) > 0 {
+		name = p.FlagAliases[0]
+	}
+	if len(name) > 1 {
+		return "--" + name
+	}
+	return "-" + name
+}
+
+// ValueFieldName returns the generated command field that supplies this argument.
+func (p *FunctionParameter) ValueFieldName() string {
+	if p.InheritedFrom != "" {
+		return p.InheritedFrom
+	}
+	return p.Name
+}
+
 func (p *FunctionParameter) DefaultString() string {
+	if p.Required {
+		return "(required)"
+	}
 	if p.Default == "" {
 		return ""
 	}
@@ -186,7 +242,18 @@ func (p *FunctionParameter) IsDuration() bool {
 	return p.BaseType() == "time.Duration"
 }
 
+func (p *FunctionParameter) HasCustomParser() bool {
+	return p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.FunctionName != ""
+}
+
 func (p *FunctionParameter) ParserCall(valName string) string {
+	if p.HasCustomParser() {
+		if p.Parser.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Parser.Func.CommandPackageName, p.Parser.Func.FunctionName, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.Parser.Func.FunctionName, valName)
+	}
+
 	t := p.BaseType()
 	if t == "int" {
 		return fmt.Sprintf("strconv.Atoi(%s)", valName)
@@ -248,39 +315,39 @@ func (p *FunctionParameter) TypeDescription() string {
 type SubCommand struct {
 	*Command
 	// Parent points to the parent command.
-	Parent                 *SubCommand
+	Parent *SubCommand
 	// SubCommands is the list of children subcommands.
-	SubCommands            []*SubCommand
+	SubCommands []*SubCommand
 	// SubCommandName is the name of this subcommand (the word used in the CLI).
-	SubCommandName         string
+	SubCommandName string
 	// Aliases is a list of alternative names for this subcommand.
-	Aliases                []string
+	Aliases []string
 	// SubCommandStructName is the name of the generated struct for this subcommand.
-	SubCommandStructName   string
+	SubCommandStructName string
 	// SubCommandFunctionName is the name of the function that implements this subcommand.
 	SubCommandFunctionName string
 	// SubCommandDescription is a short description.
-	SubCommandDescription  string
+	SubCommandDescription string
 	// SubCommandExtendedHelp is the long help text.
 	SubCommandExtendedHelp string
 	// ImportPath is the import path where the subcommand is defined.
-	ImportPath             string
+	ImportPath string
 	// SubCommandPackageName is the package name where the subcommand is defined.
-	SubCommandPackageName  string
+	SubCommandPackageName string
 	// UsageFileName is the name of the file containing usage documentation.
-	UsageFileName          string
+	UsageFileName string
 	// DefinitionFile is the path to the source file.
-	DefinitionFile         string
+	DefinitionFile string
 	// DocStart is the starting position of the docs.
-	DocStart               token.Pos
+	DocStart token.Pos
 	// DocEnd is the ending position of the docs.
-	DocEnd                 token.Pos
+	DocEnd token.Pos
 	// Parameters is the list of parameters for this subcommand.
-	Parameters             []*FunctionParameter
+	Parameters []*FunctionParameter
 	// ReturnsError indicates if the function returns an error.
-	ReturnsError           bool
+	ReturnsError bool
 	// ReturnCount is the number of return values.
-	ReturnCount            int
+	ReturnCount int
 }
 
 func (sc *SubCommand) ImportAlias() string {
@@ -322,12 +389,32 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
+		if p.HasGenerator() {
+			continue
+		}
 		l := len(p.FlagString())
 		if l > max {
 			max = l
 		}
 	}
 	return max
+}
+
+func requiredFlagPresent(params []*FunctionParameter) bool {
+	for _, p := range params {
+		if p.Required && !p.IsPositional && !p.HasGenerator() {
+			return true
+		}
+	}
+	return false
+}
+
+func (cmd *Command) HasRequiredFlags() bool {
+	return requiredFlagPresent(cmd.Parameters)
+}
+
+func (sc *SubCommand) HasRequiredFlags() bool {
+	return requiredFlagPresent(sc.Parameters)
 }
 
 func (sc *SubCommand) ResolveInheritance() {
@@ -338,7 +425,7 @@ func (sc *SubCommand) ResolveInheritance() {
 				// Find matching parameter in ancestor
 				var parentParam *FunctionParameter
 				for _, pp := range ancestor.Parameters {
-					if pp.Name == p.Name {
+					if pp.Name == p.Name || pp.Name == p.InheritedFrom {
 						parentParam = pp
 						break
 					}
@@ -354,11 +441,17 @@ func (sc *SubCommand) ResolveInheritance() {
 					if len(p.FlagAliases) == 0 {
 						p.FlagAliases = parentParam.FlagAliases
 					}
+					if p.Generator.Type == "" && parentParam.Generator.Type != "" {
+						p.Generator = parentParam.Generator
+					}
+					if p.Parser.Type == "" && parentParam.Parser.Type != "" {
+						p.Parser = parentParam.Parser
+					}
 				}
 			} else if sc.Command != nil && sc.MainCmdName == p.DeclaredIn {
 				// Declared in Root Command
 				for _, pp := range sc.Command.Parameters {
-					if pp.Name == p.Name {
+					if pp.Name == p.Name || pp.Name == p.InheritedFrom {
 						if p.Description == "" {
 							p.Description = pp.Description
 						}
@@ -402,8 +495,12 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 
 	addParams := func(ps []*FunctionParameter) {
 		for _, p := range ps {
-			if !seen[p.Name] {
-				seen[p.Name] = true
+			key := p.Name
+			if p.InheritedFrom != "" {
+				key = p.InheritedFrom
+			}
+			if !seen[key] {
+				seen[key] = true
 				params = append(params, p)
 			}
 		}
@@ -422,19 +519,19 @@ func (sc *SubCommand) AllParameters() []*FunctionParameter {
 }
 
 // ParameterGroup represents a group of parameters belonging to a specific command level.
-// Used for displaying flags grouped by where they are defined (e.g. Global Flags vs Local Flags).
+// Used for displaying flags grouped by where they are defined.
 type ParameterGroup struct {
 	// CommandName is the name of the command that defines these parameters.
 	CommandName string
 	// Parameters is the list of parameters in this group.
-	Parameters  []*FunctionParameter
+	Parameters []*FunctionParameter
 }
 
 func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	allParams := sc.AllParameters()
 	grouped := make(map[string][]*FunctionParameter)
 	for _, p := range allParams {
-		if p.IsPositional {
+		if p.IsPositional || p.HasGenerator() {
 			continue
 		}
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
@@ -496,22 +593,26 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	return groups
 }
 
+func appendFlagsUsage(parts *[]string, params []*FunctionParameter) {
+	hasFlags := false
+	for _, p := range params {
+		if !p.IsPositional && !p.HasGenerator() {
+			hasFlags = true
+			break
+		}
+	}
+	if hasFlags {
+		*parts = append(*parts, "[flags...]")
+	}
+}
+
 func (sc *SubCommand) FullUsageString() string {
 	var parts []string
 
 	// Add root command
 	if sc.Command != nil {
 		parts = append(parts, sc.MainCmdName)
-		hasFlags := false
-		for _, p := range sc.Command.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, sc.Command.Parameters)
 	}
 
 	// Traverse from root to current
@@ -524,20 +625,11 @@ func (sc *SubCommand) FullUsageString() string {
 
 	for i := len(stack) - 1; i >= 0; i-- {
 		cmd := stack[i]
+		if cmd.SubCommandName == "" {
+			continue
+		}
 		parts = append(parts, cmd.SubCommandName)
-
-		// Check for flags declared in THIS command
-		hasFlags := false
-		for _, p := range cmd.Parameters {
-			if !p.IsPositional {
-				hasFlags = true
-				break
-			}
-		}
-
-		if hasFlags {
-			parts = append(parts, "[flags...]")
-		}
+		appendFlagsUsage(&parts, cmd.Parameters)
 	}
 
 	// Add positional arguments for the LEAF command (sc)
@@ -562,7 +654,7 @@ func (sc *SubCommand) FullUsageString() string {
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional {
+		if p.IsPositional || p.HasGenerator() {
 			continue
 		}
 		l := len(p.DefaultString())
@@ -571,4 +663,18 @@ func (sc *SubCommand) MaxDefaultLength() int {
 		}
 	}
 	return max
+}
+
+func (p *FunctionParameter) HasGenerator() bool {
+	return p.Generator.Type == SourceTypeGenerator
+}
+
+func (p *FunctionParameter) GeneratorCall() string {
+	if p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
+		if p.Generator.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
+		}
+		return fmt.Sprintf("%s()", p.Generator.Func.FunctionName)
+	}
+	return ""
 }

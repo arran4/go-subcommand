@@ -73,21 +73,22 @@ type RootCmd struct {
 }
 
 func (c *RootCmd) Usage() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	for name := range c.Commands {
-		fmt.Fprintf(os.Stderr, "    %s\n", name)
+	err := executeUsage(os.Stderr, "complex_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	c.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "  Commands:")
-	fmt.Fprintf(os.Stderr, "    %s\n", "another")
-	fmt.Fprintf(os.Stderr, "    %s\n", "toplevel")
-	fmt.Fprintf(os.Stderr, "    %s\n", "toplevel nested")
+	err := executeUsage(os.Stderr, "complex_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
 }
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {

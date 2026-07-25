@@ -7,7 +7,9 @@ import (
 	"go/format"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -279,6 +281,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 
 	for _, cmd := range dataModel.Commands {
 		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
+		assignUsageFileNames(cmd.SubCommands)
 		if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
@@ -301,8 +304,24 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdTemplatesDir, "templates.go", "templates.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		rootUsage := &model.SubCommand{
+			Command:                cmd,
+			SubCommands:            cmd.SubCommands,
+			SubCommandDescription:  cmd.Description,
+			SubCommandExtendedHelp: cmd.ExtendedHelp,
+			SubCommandFunctionName: cmd.FunctionName,
+			Parameters:             cmd.Parameters,
+			ReturnsError:           cmd.ReturnsError,
+			ReturnCount:            cmd.ReturnCount,
+			UsageFileName:          fmt.Sprintf("%s_usage.txt", strings.ToLower(cmd.MainCmdName)),
+			SubCommandPackageName:  cmd.CommandPackageName,
+			SubCommandStructName:   "RootCmd",
+			SubCommandName:         "",
+		}
+		if err := generateFile(collector, cmdTemplatesDir, rootUsage.UsageFileName, "usage.txt.gotmpl", rootUsage, false); err != nil {
+			return err
+		}
 		for _, subCmd := range cmd.SubCommands {
-			assignUsageFileNames(cmd.SubCommands)
 			if err := generateSubCommandFiles(collector, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
 			}
@@ -418,12 +437,14 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 			}
 			return res
 		},
-		"slice": func(args ...interface{}) []interface{} {
+		"list": func(args ...interface{}) []interface{} {
 			return args
 		},
 		"append": func(list []interface{}, args ...interface{}) []interface{} {
 			return append(list, args...)
 		},
+		"paramImports":       parameterImports,
+		"paramImportsExcept": parameterImportsExcept,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -454,6 +475,44 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	}
 	return tmpl, nil
 }
+
+type templateImport struct {
+	Alias string
+	Path  string
+}
+
+func parameterImports(params []*model.FunctionParameter) []templateImport {
+	return parameterImportsExcept(params, "")
+}
+
+func parameterImportsExcept(params []*model.FunctionParameter, excludedPath string) []templateImport {
+	seen := map[string]bool{}
+	var imports []templateImport
+	add := func(ref *model.FuncRef) {
+		if ref == nil || ref.ImportPath == "" || ref.ImportPath == excludedPath || seen[ref.ImportPath] {
+			return
+		}
+		seen[ref.ImportPath] = true
+		alias := ""
+		if ref.CommandPackageName != "" && ref.CommandPackageName != path.Base(ref.ImportPath) {
+			alias = ref.CommandPackageName
+		}
+		imports = append(imports, templateImport{Alias: alias, Path: ref.ImportPath})
+	}
+	for _, p := range params {
+		if p.Parser.Type == model.ParserTypeCustom {
+			add(p.Parser.Func)
+		}
+		if p.Generator.Type == model.SourceTypeGenerator {
+			add(p.Generator.Func)
+		}
+	}
+	sort.Slice(imports, func(i, j int) bool {
+		return imports[i].Path < imports[j].Path
+	})
+	return imports
+}
+
 func getGoVersion(fsys fs.FS) string {
 	b, err := fs.ReadFile(fsys, "go.mod")
 	if err != nil {

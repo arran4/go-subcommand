@@ -43,11 +43,6 @@ const (
 	// Usage: (required)
 	AttributeRequired = "required"
 
-	// AttributeGlobal indicates that the parameter is global (inherited from parent).
-	// usage: (global)
-	// Note: This is mapped to Inherited in the model.
-	AttributeGlobal = "global"
-
 	// AttributeGenerator specifies a generator function for the parameter.
 	// Usage: (generator: MyGeneratorFunc)
 	AttributeGenerator = "generator"

@@ -143,9 +143,15 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 *   **Flags:** `-f`, `--flag`. One or more flag aliases.
 *   **Default Value:** `default: value` or `default: "value"`.
+*   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
+*   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
+*   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
+*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.
+
+Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
 ### Supported Types
 
@@ -155,6 +161,8 @@ The following Go types are supported for function parameters:
 *   `int`: Parsed as an integer.
 *   `bool`: Parsed as a boolean flag (no value required, e.g., `--verbose`).
 *   `time.Duration`: Parsed using `time.ParseDuration` (e.g., `10s`, `1h`).
+*   Pointers such as `*int`: preserve the difference between omitted and explicitly provided zero values.
+*   Slices such as `[]string`: support repeatable flags.
 *   `error`: (Return value only) Your function can return an `error`, which will be propagated to the CLI exit code.
 
 ## Advanced Usage
@@ -224,19 +232,21 @@ func ListUsers(...) { ... }
 
 ### Parent Flags (Inheritance)
 
-Subcommands can inherit flags from their parent command without redeclaring the variable. This allows the child command to update the parent's state (like global verbosity or configuration).
-
-Use the `parent-flag: <param_name>` directive.
+Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.
 
 ```go
 // Parent is a subcommand `app parent`
+//
 // Flags:
 //
 //   verbose: -v --verbose
 func Parent(verbose bool) { ... }
 
 // Child is a subcommand `app parent child`
-// parent-flag: verbose
+//
+// Flags:
+//
+//   verbose: (from parent)
 func Child(verbose bool) {
     // verbose parameter here maps to Parent's verbose variable
 }
