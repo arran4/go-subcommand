@@ -8,7 +8,7 @@ Based on recent updates to the codebase (such as the parameter parser refactor a
 2. **#268 parent-flag Directive Not Implemented**: The `(from parent)` directive is now fully implemented. Inherited parameters correctly trace from parent to child commands via the `DeclaredIn` and `Inherited` properties.
 3. **#202 Lack of Custom Flag Parsing (`flag.Func`)**: The `parser: path.Func` directive was added to handle custom logic, satisfying the need for custom parsing.
 4. **#287 Rewrite of flag parser to be "better"**: The `flag.FlagSet` usage has been entirely replaced by a more robust custom parsing loop in the generated code that properly handles short codes, assignments, and slice types.
-5. **#104 Redundant Flag Parsing**: The generator no longer creates redundant standard `flag.FlagSet` objects; it exclusively uses the custom string parsing loop.
+5. **#104 Redundant Flag Parsing**: The argument parsing now exclusively uses custom string parsing loops, resolving the functional redundancy. However, the generator still creates and stores `flag.FlagSet` objects for structural/legacy reasons.
 6. **#12 Strict Flag Validation for Zero Values**: Addressed by the support for pointer types (e.g., `*int`, `*string`), which preserves the difference between omitted values (nil) and explicit zero values.
 7. **#50 Need to be able to specify parent subcommand flags and access them from the children**: Solved via the parent parameter inheritance mechanisms (`from parent`).
 
@@ -41,8 +41,8 @@ Based on recent updates to the codebase (such as the parameter parser refactor a
 
 ### 6. https://github.com/arran4/go-subcommand/issues/114
 **Title:** Global Initialization Hook
-**Status:** (b) Partially resolved
-**Reasoning:** The root commands are initialized correctly before subcommands via the execution loop (e.g. running initialization if `CommandAction` is set at the root). However, an explicit top-level "Global Hook" that *always* guarantees execution before *any* child runs isn't perfectly exposed as a separate hook distinct from the normal command action.
+**Status:** (a) Fully resolved
+**Reasoning:** The root commands are initialized correctly before subcommands via the execution loop. In the generated root `Execute` method, `c.CommandAction(c)` is invoked *before* looking up and executing the child command. This inherently provides the requested global initialization hook, executing before any subcommand logic.
 
 ### 7. https://github.com/arran4/go-subcommand/issues/220
 **Title:** More GNU style processing updates around "short codes"
@@ -50,10 +50,7 @@ Based on recent updates to the codebase (such as the parameter parser refactor a
 **Reasoning:** The generated custom loop now specifically breaks down clustered single letter flags (e.g. `-abc`), handling equals assignment (`-v=123`) properly without using standard `flag.FlagSet`.
 
 ## New Feature Request
-
-### Issue Request: Explicit Global Hook / Pre-Run Middleware
-**Problem:** Issue #114 requested a global initialization hook. While it's partially addressed by `RootCmd.Execute` resolving the state of parent parameters, there is no distinct mechanism to run a standalone initialization hook *before* the leaf command's action logic executes without interfering with sub-command dispatch. The root's `CommandAction` runs if there is no subcommand, but if there *is* a subcommand, the parent logic is skipped.
-**Request:** Add a `PreRun` or `InitHook` capability in the comments (e.g. `// global-hook: mypkg.InitFunc`), which would insert a call right before `cmd().Execute(...)` executes the subcommand.
+*(No partially resolved issues require a feature request at this time.)*
 
 ## Next Suggested Set of Open Issues to Resolve
 
