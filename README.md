@@ -214,6 +214,16 @@ You can define custom short and long flags.
 func Serve(port int) { ... }
 ```
 
+
+### GNU-Style Flag Grouping & Assignments
+
+The generated custom argument parser natively supports GNU-style single-letter short codes grouped together (e.g., `-abc` is parsed as `-a -b -c`). It also correctly handles equals assignment (e.g., `-v=123` or `--flag="value"`).
+
+
+### Required vs Optional Parameters
+
+To enforce that a specific flag must be provided at runtime, mark the parameter with the `required` keyword inside parentheses (e.g., `(required)`). The execution will fail gracefully if a user omits the required parameter. For optional parameters, omitting the flag relies on Go zero-values unless overridden by `default:`.
+
 ### Nesting Commands
 
 Nesting is implicit based on the command path string.
