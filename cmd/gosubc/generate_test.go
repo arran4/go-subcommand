@@ -32,6 +32,8 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--recursive")
 	args = append(args, "--force")
+	args = append(args, "--replace-template")
+	args = append(args, "test")
 
 	err := cmd.Execute(args)
 	if err != nil {

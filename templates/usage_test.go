@@ -30,6 +30,7 @@ func TestUsageTemplate(t *testing.T) {
 		"upper":   strings.ToUpper,
 		"replace": strings.ReplaceAll,
 		"add":     func(a, b int) int { return a + b },
+			"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 	}
 
 	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))

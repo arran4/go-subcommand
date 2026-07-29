@@ -35,7 +35,7 @@ func Sub() {}
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func Sub() {}
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false)
+	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -76,7 +76,7 @@ func Cmd2() {}
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
-	}, false)
+	}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)

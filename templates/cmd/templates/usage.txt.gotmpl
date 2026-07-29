@@ -41,14 +41,14 @@ Subcommands:
 {{- range .ParameterGroups}}
 
 Flags:{{- range .Parameters -}}
-{{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
+{{printf "\n    %-*s %-*s" $maxFlag .FlagString $maxDef .DefaultString}}{{if .Description}} {{wrapFlag $maxFlag $maxDef .FlagString .DefaultString .Description}}{{end}}
 {{- end}}
 {{- end}}
 {{- else -}}
 {{- range .ParameterGroups}}
 
 `{{.CommandName}}` Flags:{{- range .Parameters -}}
-{{printf "\n    %-*s %-*s %s" $maxFlag .FlagString $maxDef .DefaultString .Description}}
+{{printf "\n    %-*s %-*s" $maxFlag .FlagString $maxDef .DefaultString}}{{if .Description}} {{wrapFlag $maxFlag $maxDef .FlagString .DefaultString .Description}}{{end}}
 {{- end}}
 {{- end}}
 {{- end}}

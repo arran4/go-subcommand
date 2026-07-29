@@ -16,6 +16,9 @@ Subcommands:
     skill remove                             removes an AI agent skill.
     skill update                             updates an AI agent skill.
     syntax                                   prints the available forms of function comments
+    template                                 Manage generation templates
+    template export                          Exports the built-in templates
+    template layout                          Displays the generation template layout
     validate                                 validates the subcommand code
 {{else}}
     format     formats the subcommand definitions
@@ -26,5 +29,6 @@ Subcommands:
     scan       lists all available subcommands and their flags
     skill
     syntax     prints the available forms of function comments
+    template   Manage generation templates
     validate   validates the subcommand code
 {{end}}
