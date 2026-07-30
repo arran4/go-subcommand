@@ -8,6 +8,5 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --fail, -f   (default: false)   Make the command fail

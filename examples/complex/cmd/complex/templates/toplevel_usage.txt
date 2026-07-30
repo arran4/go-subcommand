@@ -16,6 +16,5 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --name, -n string   (default: "world")   The name to greet

@@ -264,9 +264,20 @@ func findModuleRoot(path string) (string, error) {
 	}
 }
 
-// GenerateWithFS generates code using provided FS and Writer
-func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, replaceTemplates []string) error {
-	overlayFS, err := buildOverlayFS(TemplatesFS, replaceTemplates)
+// GenerateWithFS generates code using provided FS and Writer. Optional variadic args ops can provide custom dependencies such as readFS (fs.FS).
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, replaceTemplates []string, ops ...any) error {
+	hasFS := false
+	for _, opt := range ops {
+		if _, ok := opt.(fs.FS); ok {
+			hasFS = true
+			break
+		}
+	}
+	if !hasFS && inputFS != nil {
+		ops = append(ops, inputFS)
+	}
+
+	overlayFS, err := buildOverlayFS(TemplatesFS, replaceTemplates, ops...)
 	if err != nil {
 		return fmt.Errorf("failed to build templates overlay: %w", err)
 	}

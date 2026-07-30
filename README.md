@@ -262,6 +262,21 @@ func Child(verbose bool) {
 }
 ```
 
+### Template Customization & Line Wrapping
+
+`gosubc` supports customizing the generated code and usage text templates using the `--replace-template` flag.
+
+You can supply template overlays in three formats:
+*   **Alias File Replacement:** `--replace-template usage=path/to/myusage.gotmpl` (available aliases: `usage`, `man`, `cmd`, `root`, `templates`).
+*   **Folder Overlay:** `--replace-template path/to/templates_dir` overlays a directory containing custom `.gotmpl` files onto default templates.
+*   **txtar Archive Overlay:** `--replace-template path/to/templates.txtar` overlays a `.txtar` archive containing custom template files.
+
+To view or export the built-in templates:
+*   `gosubc template layout`: Displays the directory tree structure of built-in templates.
+*   `gosubc template export [--output <dir>] [--as-txtar]`: Exports all built-in templates to a directory or a single `.txtar` archive file.
+
+Generated CLI usage output automatically wraps parameter descriptions based on the terminal width specified by the `COLUMNS` environment variable (falling back to 80 columns).
+
 ### Man Page Generation
 
 To generate man pages, pass the `--man-dir` flag to `gosubc`.
@@ -280,6 +295,14 @@ Generates the Go code for your CLI.
 
 *   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
 *   `--man-dir <path>`: Directory to write man pages to.
+*   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
+
+### `gosubc template`
+
+Manage generation templates.
+
+*   `gosubc template export [--output <path>] [--as-txtar]`: Export built-in templates.
+*   `gosubc template layout`: Display template structure layout.
 
 ### `gosubc list`
 

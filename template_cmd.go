@@ -10,8 +10,6 @@ import (
 )
 
 // Template is a subcommand `gosubc template` -- Manage generation templates
-//
-// Manage generation templates
 func Template() {}
 
 // TemplateExport is a subcommand `gosubc template export` -- Exports the built-in templates

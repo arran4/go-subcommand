@@ -38,7 +38,6 @@
 Usage: flagsapp test [flags...]
 
 
-
 Flags:
     --simple string                         Simple string flag
     -m, --mu, --multi     (default: true)   Flag with multiple aliases

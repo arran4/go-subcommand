@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"text/template"
@@ -100,7 +101,25 @@ func TestUsageTemplate(t *testing.T) {
 				t.Errorf("Generated content is not a valid template: %v\nContent:\n%s", err, buf.String())
 			}
 
-			if !bytes.Equal(buf.Bytes(), expectedOutput) {
+			if *updateGolden {
+				found := false
+				for i := range archive.Files {
+					if archive.Files[i].Name == "output.txt" {
+						archive.Files[i].Data = buf.Bytes()
+						found = true
+						break
+					}
+				}
+				if !found {
+					archive.Files = append(archive.Files, txtar.File{
+						Name: "output.txt",
+						Data: buf.Bytes(),
+					})
+				}
+				if err := os.WriteFile("testdata/"+entry.Name(), txtar.Format(archive), 0644); err != nil {
+					t.Fatalf("failed to update golden file: %v", err)
+				}
+			} else if !bytes.Equal(buf.Bytes(), expectedOutput) {
 				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
 			}
 		})

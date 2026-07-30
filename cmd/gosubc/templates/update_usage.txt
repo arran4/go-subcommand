@@ -10,7 +10,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --all            (default: false)    Update all installed skills
     --scope string   (default: "user")   The installation scope ('user' or 'project')

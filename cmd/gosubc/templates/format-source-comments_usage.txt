@@ -8,7 +8,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --dir string      (default: ".")    The project root directory containing go.mod
     --path []string   (default: nil)    Paths to search for subcommands (relative to dir)

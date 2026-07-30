@@ -12,9 +12,18 @@ import (
 )
 
 // buildOverlayFS creates an fs.FS from replaceTemplates flags.
-func buildOverlayFS(baseFS fs.FS, replaceTemplates []string) (fs.FS, error) {
+// Optional arguments in ops can pass an fs.FS (e.g. for reading template replacement files in memory).
+func buildOverlayFS(baseFS fs.FS, replaceTemplates []string, ops ...any) (fs.FS, error) {
 	if len(replaceTemplates) == 0 {
 		return baseFS, nil
+	}
+
+	var readFS fs.FS
+	for _, opt := range ops {
+		if f, ok := opt.(fs.FS); ok && f != nil {
+			readFS = f
+			break
+		}
 	}
 
 	overlay := fstest.MapFS{}
@@ -26,7 +35,13 @@ func buildOverlayFS(baseFS fs.FS, replaceTemplates []string) (fs.FS, error) {
 			alias := parts[0]
 			file := parts[1]
 
-			content, err := os.ReadFile(file)
+			var content []byte
+			var err error
+			if readFS != nil {
+				content, err = fs.ReadFile(readFS, filepath.ToSlash(file))
+			} else {
+				content, err = os.ReadFile(file)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to read template replacement file %s: %w", file, err)
 			}
@@ -45,38 +60,65 @@ func buildOverlayFS(baseFS fs.FS, replaceTemplates []string) (fs.FS, error) {
 			case "templates":
 				targetPath = "templates/cmd/templates/templates.go.gotmpl"
 			default:
-				targetPath = "templates/" + alias
+				if strings.HasPrefix(alias, "templates/") {
+					targetPath = alias
+				} else {
+					targetPath = "templates/" + alias
+				}
 			}
 
 			overlay[targetPath] = &fstest.MapFile{Data: content}
 		} else {
 			// format: folder or txtar
-			stat, err := os.Stat(replace)
-			if err != nil {
-				return nil, fmt.Errorf("failed to stat template replacement %s: %w", replace, err)
+			isDir := false
+			if readFS != nil {
+				if stat, err := fs.Stat(readFS, filepath.ToSlash(replace)); err == nil && stat.IsDir() {
+					isDir = true
+				}
+			} else {
+				if stat, err := os.Stat(replace); err == nil && stat.IsDir() {
+					isDir = true
+				}
 			}
 
-			if stat.IsDir() {
+			if isDir {
 				// Overlay folder
-				err := filepath.WalkDir(replace, func(path string, d fs.DirEntry, err error) error {
+				walkFn := func(path string, d fs.DirEntry, err error) error {
 					if err != nil || d.IsDir() {
 						return err
 					}
 					rel, _ := filepath.Rel(replace, path)
-					content, err := os.ReadFile(path)
+					var content []byte
+					if readFS != nil {
+						content, err = fs.ReadFile(readFS, path)
+					} else {
+						content, err = os.ReadFile(path)
+					}
 					if err != nil {
 						return err
 					}
-					// Map to templates/
 					overlay[filepath.ToSlash(filepath.Join("templates", rel))] = &fstest.MapFile{Data: content}
 					return nil
-				})
+				}
+
+				var err error
+				if readFS != nil {
+					err = fs.WalkDir(readFS, filepath.ToSlash(replace), walkFn)
+				} else {
+					err = filepath.WalkDir(replace, walkFn)
+				}
 				if err != nil {
 					return nil, fmt.Errorf("failed to walk template replacement folder %s: %w", replace, err)
 				}
 			} else {
 				// Read as txtar
-				content, err := os.ReadFile(replace)
+				var content []byte
+				var err error
+				if readFS != nil {
+					content, err = fs.ReadFile(readFS, filepath.ToSlash(replace))
+				} else {
+					content, err = os.ReadFile(replace)
+				}
 				if err != nil {
 					return nil, err
 				}

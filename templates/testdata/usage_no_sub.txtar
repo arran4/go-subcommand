@@ -31,7 +31,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     -f              (default: false)   Force action
 

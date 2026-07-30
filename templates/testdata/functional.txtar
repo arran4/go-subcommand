@@ -78,7 +78,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     -v       (default: false)   Enable verbose
     -c int   (default: 0)       Count items

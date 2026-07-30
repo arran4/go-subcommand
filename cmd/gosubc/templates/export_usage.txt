@@ -10,7 +10,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --output, -o string   (default: "templates")   The destination directory or file.
     --as-txtar            (default: false)         Export as a txtar archive instead of a directory.
