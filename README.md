@@ -1,6 +1,8 @@
 # Go Subcommand
 
-**Go Subcommand** generates subcommand code for command-line interfaces (CLIs) in Go from source code comments. By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
+**Go Subcommand** (`gosubc`) is a command-line code generation tool that creates subcommand code for command-line interfaces (CLIs) in Go from source code comments. **It is designed to be installed and run as a standalone executable during your build process (e.g., via `go generate`), not imported as a library dependency in your Go code.**
+
+By leveraging specially formatted code comments, it automatically generates a dependency-less subcommand system, allowing you to focus on your application's core logic instead of boilerplate code.
 
 **Status:** Pre-v1. The API and generated code structure may change.
 
