@@ -10,6 +10,5 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --wait, -w time.Duration   (default: 1s)   How long to wait

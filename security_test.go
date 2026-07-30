@@ -16,7 +16,7 @@ func Evil() {}
 
 	// 2. Run Generate with manDir set
 	// We use "manpages" as the target directory.
-	err := GenerateWithFS(fs, writer, ".", "manpages", "commentv1", nil, false)
+	err := GenerateWithFS(fs, writer, ".", "manpages", "commentv1", nil, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}

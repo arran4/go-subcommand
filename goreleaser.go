@@ -19,7 +19,7 @@ func Goreleaser(dir string, githubWorkflow bool, verificationWorkflow bool, prCr
 }
 
 func GoreleaserWithWriter(writer FileWriter, dir string, githubWorkflow bool, verificationWorkflow bool, prCreationWorkflow bool) error {
-	if err := initTemplates(); err != nil {
+	if err := initTemplates(TemplatesFS); err != nil {
 		return err
 	}
 

@@ -35,7 +35,7 @@ func Sub() {}
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func Sub() {}
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false)
+	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -76,7 +76,7 @@ func Cmd2() {}
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
-	}, false)
+	}, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
@@ -121,3 +121,30 @@ func writeRuntimeFixture(t *testing.T, name, content string) {
 		t.Fatalf("write %q: %v", name, err)
 	}
 }
+
+func TestGenerate_ReplaceTemplates(t *testing.T) {
+	fs := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`package main
+// Root is a subcommand ` + "`app`" + ` -- Custom App
+func Root() {}
+`)},
+		"custom_usage.gotmpl": &fstest.MapFile{Data: []byte("OVERRIDDEN USAGE FOR {{.FullUsageString}}")},
+	}
+
+	writer := NewCollectingFileWriter()
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, []string{"usage=custom_usage.gotmpl"}, fs)
+	if err != nil {
+		t.Fatalf("GenerateWithFS with replaceTemplates failed: %v", err)
+	}
+
+	usageContent, ok := writer.Files["cmd/app/templates/app_usage.txt"]
+	if !ok {
+		t.Fatalf("Expected cmd/app/templates/app_usage.txt to be generated")
+	}
+
+	if string(usageContent) != "OVERRIDDEN USAGE FOR app" {
+		t.Errorf("Expected 'OVERRIDDEN USAGE FOR app', got %q", string(usageContent))
+	}
+}
+

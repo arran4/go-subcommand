@@ -56,7 +56,6 @@ Subcommands:
 {{end}}
 
 
-
 Flags:
     -s              (default: false)   Short flag
     --long string                      This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.

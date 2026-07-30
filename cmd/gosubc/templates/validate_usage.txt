@@ -8,7 +8,6 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --dir string           (default: ".")           The project root directory containing go.mod
     --parser-name string   (default: "commentv1")   Name of the parser to use

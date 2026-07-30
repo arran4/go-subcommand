@@ -1,0 +1,4 @@
+-- cmd/templates/usage.txt.gotmpl --
+CUSTOM USAGE TEMPLATE OVERLAY: {{.FullUsageString}}
+-- cmd/templates/man.gotmpl --
+CUSTOM MAN TEMPLATE OVERLAY
