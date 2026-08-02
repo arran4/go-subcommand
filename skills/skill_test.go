@@ -188,6 +188,66 @@ func TestSkillUpdate_NoOp(t *testing.T) {
 	}
 }
 
+func TestSkillUpdate_All(t *testing.T) {
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	// Setup initial skills
+	tempSource1 := t.TempDir()
+	skillMd1 := filepath.Join(tempSource1, "SKILL.md")
+	_ = os.WriteFile(skillMd1, []byte("# Version 1"), 0644)
+
+	tempSource2 := t.TempDir()
+	skillMd2 := filepath.Join(tempSource2, "SKILL.md")
+	_ = os.WriteFile(skillMd2, []byte("# Version 1"), 0644)
+
+	_ = SkillInstall(tempSource1, "skill_one", "project", "")
+	_ = SkillInstall(tempSource2, "skill_two", "project", "")
+
+	// Modify both skills
+	_ = os.WriteFile(skillMd1, []byte("# Version 2"), 0644)
+	_ = os.WriteFile(skillMd2, []byte("# Version 2"), 0644)
+
+	// Run update --all
+	err := SkillUpdate("", true, "project", "", true)
+	if err != nil {
+		t.Fatalf("Update --all failed: %v", err)
+	}
+
+	expectedPath1 := filepath.Join(tempDest, ".agents", "skills", "skill_one")
+	content1, _ := os.ReadFile(filepath.Join(expectedPath1, "SKILL.md"))
+	if string(content1) != "# Version 2" {
+		t.Fatalf("skill_one should have been updated, content: %s", string(content1))
+	}
+
+	expectedPath2 := filepath.Join(tempDest, ".agents", "skills", "skill_two")
+	content2, _ := os.ReadFile(filepath.Join(expectedPath2, "SKILL.md"))
+	if string(content2) != "# Version 2" {
+		t.Fatalf("skill_two should have been updated, content: %s", string(content2))
+	}
+}
+
+func TestSkillUpdate_Errors(t *testing.T) {
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	// Test no name and no all
+	err := SkillUpdate("", false, "project", "", false)
+	if err == nil || err.Error() != "must specify a skill name or use --all" {
+		t.Fatalf("Expected error 'must specify a skill name or use --all', got: %v", err)
+	}
+
+	// Test all with no skills installed (should return nil and print message)
+	err = SkillUpdate("", true, "project", "", false)
+	if err != nil {
+		t.Fatalf("Expected nil when no skills installed, got: %v", err)
+	}
+}
+
 func TestSkillRemove(t *testing.T) {
 	tempDest := t.TempDir()
 	originalWd, _ := os.Getwd()
