@@ -36,7 +36,7 @@ func Sub() {}
 
 	err = List(dir, "commentv1", []string{}, true)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -44,7 +44,7 @@ func Sub() {}
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if !strings.Contains(output, "Command: app") {
@@ -79,7 +79,7 @@ func Root() {}
 
 	err = Validate(dir, "commentv1", []string{}, true)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -87,7 +87,7 @@ func Root() {}
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if !strings.Contains(output, "Validation successful.") {
