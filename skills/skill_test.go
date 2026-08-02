@@ -230,10 +230,10 @@ func TestSkillList(t *testing.T) {
 
 	err := SkillList("project", "")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	outBytes, _ := io.ReadAll(r)
-	r.Close()
+	_ = r.Close()
 	outStr := string(outBytes)
 
 	if err != nil {
@@ -254,10 +254,10 @@ func TestSkillList(t *testing.T) {
 	go func() {
 		_, _ = io.ReadAll(rInst)
 	}()
-	defer rInst.Close()
+	defer func() { _ = rInst.Close() }()
 	os.Stdout = wInst
 	err = SkillInstall(tempSource, "test_skill", "project", "")
-	wInst.Close()
+	_ = wInst.Close()
 	os.Stdout = oldStdoutInstall
 
 	if err != nil {
@@ -269,10 +269,10 @@ func TestSkillList(t *testing.T) {
 
 	err = SkillList("project", "")
 
-	w2.Close()
+	_ = w2.Close()
 	os.Stdout = oldStdout
 	outBytes2, _ := io.ReadAll(r2)
-	r2.Close()
+	_ = r2.Close()
 	outStr2 := string(outBytes2)
 
 	if err != nil {
@@ -288,17 +288,17 @@ func TestSkillList(t *testing.T) {
 	// 3. Test list when directory exists but metadata is missing
 	// Remove metadata file
 	metaPath := filepath.Join(tempDest, ".agents", "skills", "test_skill", "skill_metadata.json")
-	os.Remove(metaPath)
+	_ = os.Remove(metaPath)
 
 	r3, w3, _ := os.Pipe()
 	os.Stdout = w3
 
 	err = SkillList("project", "")
 
-	w3.Close()
+	_ = w3.Close()
 	os.Stdout = oldStdout
 	outBytes3, _ := io.ReadAll(r3)
-	r3.Close()
+	_ = r3.Close()
 	outStr3 := string(outBytes3)
 
 	if err != nil {
