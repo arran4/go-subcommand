@@ -32,7 +32,7 @@ type FileWriter interface {
 	WriteFile(path string, content []byte, perm os.FileMode) error
 	MkdirAll(path string, perm os.FileMode) error
 	ReadFile(path string) ([]byte, error)
-	ReadDir(path string) ([]fs.DirEntry, error)
+	ReadDir(path string, ops ...any) ([]fs.DirEntry, error)
 }
 
 // OSFileWriter implements FileWriter using os package
@@ -47,7 +47,13 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 func (w *OSFileWriter) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
-func (w *OSFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
+func (w *OSFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
+	for _, opt := range ops {
+		switch o := opt.(type) {
+		case fs.ReadDirFS:
+			return o.ReadDir(path)
+		}
+	}
 	return os.ReadDir(path)
 }
 
@@ -81,7 +87,7 @@ func (w *CollectingFileWriter) ReadFile(path string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
+func (w *CollectingFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
 	// Simple implementation: scan Files for entries with the given prefix
 	var entries []fs.DirEntry
 	// Ensure path has a trailing slash for prefix matching, unless it's just "."
