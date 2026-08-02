@@ -9,6 +9,12 @@ import (
 // resolveSkillPath determines where a skill should be installed based on agent and scope.
 // If scope is "project", it installs in the current working directory's .agents/skills/.
 // If scope is "user", it installs in the user's home directory under .agents/skills/ (or an agent-specific path).
+// Getwd is a wrapper around os.Getwd to allow for testing overrides.
+var Getwd = os.Getwd
+
+// UserHomeDir is a wrapper around os.UserHomeDir to allow for testing overrides.
+var UserHomeDir = os.UserHomeDir
+
 func resolveSkillPath(agentName, scope, skillName string) (string, error) {
 	root, err := resolveSkillRoot(agentName, scope)
 	if err != nil {
@@ -23,13 +29,13 @@ func resolveSkillRoot(agentName, scope string) (string, error) {
 
 	switch scope {
 	case "project":
-		wd, err := os.Getwd()
+		wd, err := Getwd()
 		if err != nil {
 			return "", fmt.Errorf("failed to get working directory: %w", err)
 		}
 		baseDir = filepath.Join(wd, ".agents")
 	case "user":
-		home, err := os.UserHomeDir()
+		home, err := UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
