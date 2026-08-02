@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"bytes"
+	"io"
+	"strings"
 )
 
 func TestSkillInstall(t *testing.T) {
@@ -212,5 +215,78 @@ func TestSkillRemove(t *testing.T) {
 
 	if _, err := os.Stat(expectedPath); !os.IsNotExist(err) {
 		t.Fatalf("Skill directory was not removed.")
+	}
+}
+
+func TestSkillInspect(t *testing.T) {
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	tempSource := t.TempDir()
+	skillMd := filepath.Join(tempSource, "SKILL.md")
+	_ = os.WriteFile(skillMd, []byte("# Inspectable"), 0644)
+
+	err := SkillInstall(tempSource, "inspect_skill", "project", "")
+	if err != nil {
+		t.Fatalf("Initial install failed: %v", err)
+	}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = SkillInspect("inspect_skill", "project", "")
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("Inspect failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "Skill:       inspect_skill") {
+		t.Errorf("Expected output to contain skill name, got: %s", output)
+	}
+	if !strings.Contains(output, "Scope:       project") {
+		t.Errorf("Expected output to contain scope, got: %s", output)
+	}
+
+	// Test missing metadata
+	expectedPath := filepath.Join(tempDest, ".agents", "skills", "inspect_skill")
+	metaPath := filepath.Join(expectedPath, "skill_metadata.json")
+	_ = os.Remove(metaPath)
+
+	oldStdout2 := os.Stdout
+	r2, w2, _ := os.Pipe()
+	os.Stdout = w2
+
+	err = SkillInspect("inspect_skill", "project", "")
+
+	w2.Close()
+	os.Stdout = oldStdout2
+
+	if err != nil {
+		t.Fatalf("Inspect failed without metadata: %v", err)
+	}
+
+	var buf2 bytes.Buffer
+	io.Copy(&buf2, r2)
+	output2 := buf2.String()
+
+	if !strings.Contains(output2, "no metadata is available") {
+		t.Errorf("Expected fallback message for missing metadata, got: %s", output2)
+	}
+
+	// Inspect non-existent skill
+	err = SkillInspect("non_existent_skill", "project", "")
+	if err == nil {
+		t.Fatal("Expected error for non-existent skill, got nil")
 	}
 }
