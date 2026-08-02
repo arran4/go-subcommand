@@ -16,8 +16,11 @@ import (
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-//	ops:		(parser: ParseAny)	Optional dependency injection arguments
-func Validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
+func Validate(dir string, parserName string, paths []string, recursive bool) error {
+	return validate(dir, parserName, paths, recursive)
+}
+
+func validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	_, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
@@ -44,8 +47,11 @@ func Validate(dir string, parserName string, paths []string, recursive bool, ops
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-//	ops:		(parser: ParseAny)	Optional dependency injection arguments
-func List(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
+func List(dir string, parserName string, paths []string, recursive bool) error {
+	return list(dir, parserName, paths, recursive)
+}
+
+func list(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
@@ -68,6 +74,3 @@ func List(dir string, parserName string, paths []string, recursive bool, ops ...
 	}
 	return nil
 }
-
-// parseAny is a dummy parser for dependency injection
-func ParseAny(s string) (any, error) { return s, nil }
