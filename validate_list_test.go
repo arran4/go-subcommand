@@ -41,7 +41,7 @@ func TestList(t *testing.T) {
 		// Test against the project root
 		err := List(".", "commentv1", []string{"."}, false)
 
-		w.Close()
+		_ = w.Close()
 		os.Stdout = oldStdout
 
 		if err != nil {
@@ -49,7 +49,7 @@ func TestList(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		buf.ReadFrom(r)
+		_, _ = buf.ReadFrom(r)
 		output := buf.String()
 
 		if !strings.Contains(output, "Command: gosubc") {
