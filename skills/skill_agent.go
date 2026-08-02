@@ -10,6 +10,15 @@ import (
 // If scope is "project", it installs in the current working directory's .agents/skills/.
 // If scope is "user", it installs in the user's home directory under .agents/skills/ (or an agent-specific path).
 func resolveSkillPath(agentName, scope, skillName string) (string, error) {
+	root, err := resolveSkillRoot(agentName, scope)
+	if err != nil {
+		return "", err
+	}
+	return validateSafePath(root, filepath.Join(root, skillName))
+}
+
+// resolveSkillRoot returns the root directory for all skills for a given agent and scope.
+func resolveSkillRoot(agentName, scope string) (string, error) {
 	var baseDir string
 
 	switch scope {
@@ -39,16 +48,5 @@ func resolveSkillPath(agentName, scope, skillName string) (string, error) {
 		return "", fmt.Errorf("invalid scope: %s (must be 'user' or 'project')", scope)
 	}
 
-	root := filepath.Join(baseDir, "skills")
-	return validateSafePath(root, filepath.Join(root, skillName))
-}
-
-// resolveSkillRoot returns the root directory for all skills for a given agent and scope.
-func resolveSkillRoot(agentName, scope string) (string, error) {
-	// A small hack: resolve for a dummy name, then take the parent dir
-	dummyPath, err := resolveSkillPath(agentName, scope, "dummy")
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(dummyPath), nil
+	return filepath.Join(baseDir, "skills"), nil
 }
