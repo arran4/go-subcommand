@@ -214,3 +214,30 @@ func TestSkillRemove(t *testing.T) {
 		t.Fatalf("Skill directory was not removed.")
 	}
 }
+
+func TestSkillRemove_Errors(t *testing.T) {
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	// Empty name
+	if err := SkillRemove("", "project", ""); err == nil {
+		t.Error("SkillRemove accepted an empty skill name")
+	}
+
+	// Invalid scope
+	if err := SkillRemove("skill", "invalid", ""); err == nil {
+		t.Error("SkillRemove accepted an invalid scope")
+	}
+
+	// Path traversal
+	if err := SkillRemove("../malicious", "project", ""); err == nil {
+		t.Error("SkillRemove accepted a path traversal attempt")
+	}
+
+	// Skill not installed
+	if err := SkillRemove("missing_skill", "project", ""); err == nil {
+		t.Error("SkillRemove accepted a missing skill")
+	}
+}
