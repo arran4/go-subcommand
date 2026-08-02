@@ -240,7 +240,7 @@ func TestSkillInspect(t *testing.T) {
 
 	err = SkillInspect("inspect_skill", "project", "")
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
@@ -248,7 +248,7 @@ func TestSkillInspect(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if !strings.Contains(output, "Skill:       inspect_skill") {
@@ -269,7 +269,7 @@ func TestSkillInspect(t *testing.T) {
 
 	err = SkillInspect("inspect_skill", "project", "")
 
-	w2.Close()
+	_ = w2.Close()
 	os.Stdout = oldStdout2
 
 	if err != nil {
@@ -277,7 +277,7 @@ func TestSkillInspect(t *testing.T) {
 	}
 
 	var buf2 bytes.Buffer
-	io.Copy(&buf2, r2)
+	_, _ = io.Copy(&buf2, r2)
 	output2 := buf2.String()
 
 	if !strings.Contains(output2, "no metadata is available") {
