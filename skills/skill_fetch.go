@@ -57,7 +57,7 @@ func fetchRemote(source string) (string, string, error) {
 		repoURL = "https://github.com/" + source
 	}
 
-	cmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempDir)
+	cmd := exec.Command("git", "clone", "--depth", "1", "--", repoURL, tempDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		_ = os.RemoveAll(tempDir)
 		return "", "", fmt.Errorf("failed to clone remote repository %s: %s", repoURL, string(output))
