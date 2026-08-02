@@ -32,7 +32,7 @@ func Validate(dir string, parserName string, paths []string, recursive bool, ops
 			break
 		}
 	}
-	fmt.Fprintln(out, "Validation successful.")
+	_, _ = fmt.Fprintln(out, "Validation successful.")
 	return nil
 }
 
@@ -61,9 +61,9 @@ func List(dir string, parserName string, paths []string, recursive bool, ops ...
 		}
 	}
 	for _, cmd := range dataModel.Commands {
-		fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
+		_, _ = fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
 		for _, subCmd := range cmd.SubCommands {
-			fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
+			_, _ = fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
 		}
 	}
 	return nil
