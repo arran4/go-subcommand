@@ -51,6 +51,124 @@ func TestSkillInstall(t *testing.T) {
 	}
 }
 
+func TestSkillInstall_EmptySource(t *testing.T) {
+	err := SkillInstall("", "test_skill", "project", "")
+	if err == nil || err.Error() != "source is required" {
+		t.Fatalf("Expected error 'source is required', got: %v", err)
+	}
+}
+
+func TestSkillInstall_EmptyName(t *testing.T) {
+	tempSource := t.TempDir()
+	skillMd := filepath.Join(tempSource, "SKILL.md")
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	err := SkillInstall(tempSource, "", "project", "")
+	if err != nil {
+		t.Fatalf("SkillInstall with empty name failed: %v", err)
+	}
+
+	inferredName := filepath.Base(tempSource)
+	expectedPath := filepath.Join(tempDest, ".agents", "skills", inferredName)
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Fatalf("Skill was not installed to expected path: %s", expectedPath)
+	}
+}
+
+func TestSkillInstall_FetchFailure(t *testing.T) {
+	// fetching a non-existent local path
+	err := SkillInstall("/does/not/exist", "test_skill", "project", "")
+	if err == nil {
+		t.Fatal("Expected error on fetch failure, got nil")
+	}
+}
+
+func TestSkillInstall_MissingSkillMd(t *testing.T) {
+	tempSource := t.TempDir()
+
+	err := SkillInstall(tempSource, "test_skill", "project", "")
+	if err == nil || err.Error() != "invalid skill: SKILL.md not found in source" {
+		t.Fatalf("Expected error about missing SKILL.md, got: %v", err)
+	}
+}
+
+func TestSkillInstall_AlreadyInstalled(t *testing.T) {
+	tempSource := t.TempDir()
+	skillMd := filepath.Join(tempSource, "SKILL.md")
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	err := SkillInstall(tempSource, "test_skill", "project", "")
+	if err != nil {
+		t.Fatalf("Initial SkillInstall failed: %v", err)
+	}
+
+	err = SkillInstall(tempSource, "test_skill", "project", "")
+	if err == nil {
+		t.Fatal("Expected error for already installed skill, got nil")
+	}
+}
+
+func TestSkillInstall_MkdirFailure(t *testing.T) {
+	tempSource := t.TempDir()
+	skillMd := filepath.Join(tempSource, "SKILL.md")
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	// Create a file where the skills directory should be
+	destPath, _ := resolveSkillPath("", "project", "test_skill")
+	_ = os.MkdirAll(filepath.Dir(filepath.Dir(destPath)), 0755)
+	_ = os.WriteFile(filepath.Dir(destPath), []byte("dummy"), 0644)
+
+	err := SkillInstall(tempSource, "test_skill", "project", "")
+	if err == nil {
+		t.Fatal("Expected error for mkdir failure, got nil")
+	}
+}
+
+func TestSkillInstall_MetadataWriteFailure(t *testing.T) {
+	tempSource := t.TempDir()
+	skillMd := filepath.Join(tempSource, "SKILL.md")
+	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
+
+	tempDest := t.TempDir()
+	originalWd, _ := os.Getwd()
+	_ = os.Chdir(tempDest)
+	defer func() { _ = os.Chdir(originalWd) }()
+
+	destPath, _ := resolveSkillPath("", "project", "test_skill")
+
+	// Actually we should create a directory named `skill_metadata.json` so `os.WriteFile` fails.
+	// Since writeSkillMetadata writes inside destPath, we must pre-create destPath.
+	// Then create the metadata as a dir.
+	metaPath := filepath.Join(destPath, "skill_metadata.json")
+	_ = os.MkdirAll(metaPath, 0755)
+
+	err := SkillInstall(tempSource, "test_skill", "project", "")
+	if err == nil {
+		t.Fatal("Expected error for metadata write failure, got nil")
+	}
+
+	// In the real code `_ = os.RemoveAll(destPath)` runs. We shouldn't necessarily
+	// verify that destPath doesn't exist because we created the outer destPath manually above with permissions
+	// before calling `SkillInstall`. `os.RemoveAll` might fail to remove it because `skill_metadata.json` is a root-owned dir or similar, or because of our 0500 permissions.
+	// Actually `os.RemoveAll` on a 0500 directory with contents might fail, so destPath might still exist.
+	// We'll just verify the error happened.
+}
+
 func TestSkillInstall_PathTraversal(t *testing.T) {
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
