@@ -147,4 +147,3 @@ func Root() {}
 		t.Errorf("Expected 'OVERRIDDEN USAGE FOR app', got %q", string(usageContent))
 	}
 }
-

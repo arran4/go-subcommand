@@ -218,9 +218,10 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 //
 // This command supports customizing templates via the --replace-template flag.
 // You can provide multiple replacements in the following formats:
-//   --replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
-//   --replace-template <folder>          Overlay a folder containing templates onto the default templates
-//   --replace-template <txtar>           Overlay a txtar archive containing templates
+//
+//	--replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
+//	--replace-template <folder>          Overlay a folder containing templates onto the default templates
+//	--replace-template <txtar>           Overlay a txtar archive containing templates
 //
 // Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
 //
@@ -450,11 +451,11 @@ func initTemplates(fsys fs.FS) error {
 
 func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	tmpl := template.New("").Funcs(template.FuncMap{
-		"lower":   strings.ToLower,
-		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":   strings.ToUpper,
-		"replace": strings.ReplaceAll,
-		"add":     func(a, b int) int { return a + b },
+		"lower":    strings.ToLower,
+		"title":    func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":    strings.ToUpper,
+		"replace":  strings.ReplaceAll,
+		"add":      func(a, b int) int { return a + b },
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 		"until": func(n int) []int {
 			res := make([]int, n)
@@ -471,6 +472,8 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		},
 		"paramImports":       parameterImports,
 		"paramImportsExcept": parameterImportsExcept,
+		"commandImports":     commandImports,
+		"subCommandImports":  subCommandImports,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -534,9 +537,81 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		}
 	}
 	sort.Slice(imports, func(i, j int) bool {
-		return imports[i].Path < imports[j].Path
+		return deduplicateAndSortImports(imports)[i].Path < imports[j].Path
 	})
-	return imports
+	return deduplicateAndSortImports(imports)
+}
+
+func deduplicateAndSortImports(imports []templateImport) []templateImport {
+	seen := make(map[string]templateImport)
+	for _, imp := range imports {
+		if _, ok := seen[imp.Path]; !ok {
+			seen[imp.Path] = imp
+		} else {
+			if imp.Alias != "" && seen[imp.Path].Alias == "" {
+				seen[imp.Path] = imp
+			}
+		}
+	}
+
+	nameCounts := make(map[string]int)
+	for path, imp := range seen {
+		name := imp.Alias
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		nameCounts[name]++
+	}
+
+	var finalImports []templateImport
+	for path, imp := range seen {
+		name := imp.Alias
+		if name == "" {
+			name = filepath.Base(path)
+		}
+
+		if nameCounts[name] > 1 && imp.Alias == "" {
+			imp.Alias = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(path, "/", "x"), ".", "x"), "-", "x")
+		}
+		finalImports = append(finalImports, imp)
+	}
+
+	sort.Slice(finalImports, func(i, j int) bool {
+		iStd := !strings.Contains(finalImports[i].Path, ".")
+		jStd := !strings.Contains(finalImports[j].Path, ".")
+
+		if iStd && !jStd {
+			return true
+		}
+		if !iStd && jStd {
+			return false
+		}
+		return finalImports[i].Path < finalImports[j].Path
+	})
+
+	return finalImports
+}
+
+func subCommandImports(cmd *model.SubCommand, excludedPath string) []templateImport {
+	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
+		alias := cmd.ImportAlias()
+		if cmd.HasAction() || cmd.CallPackage() != "" {
+			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
+		}
+	}
+	return deduplicateAndSortImports(imports)
+}
+
+func commandImports(cmd *model.Command, excludedPath string) []templateImport {
+	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
+		alias := cmd.ImportAlias()
+		if cmd.HasAction() || cmd.CallPackage() != "" {
+			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
+		}
+	}
+	return deduplicateAndSortImports(imports)
 }
 
 func getGoVersion(fsys fs.FS) string {

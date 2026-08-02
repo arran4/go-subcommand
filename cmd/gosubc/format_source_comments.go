@@ -3,16 +3,15 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/cmd"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
-
-	"errors"
-	go_subcommand "github.com/arran4/go-subcommand"
-	"github.com/arran4/go-subcommand/cmd"
 )
 
 var _ Cmd = (*FormatSourceComments)(nil)
