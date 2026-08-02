@@ -151,14 +151,14 @@ func Root() {}
 func TestCollectingFileWriter_ReadDir(t *testing.T) {
 	writer := NewCollectingFileWriter()
 
-	writer.WriteFile(filepath.Join("dir", "file1.txt"), []byte("content1"), 0o644)
-	writer.WriteFile(filepath.Join("dir", "file2.txt"), []byte("content2"), 0o644)
-	writer.WriteFile(filepath.Join("dir", "subdir", "file3.txt"), []byte("content3"), 0o644)
-	writer.MkdirAll(filepath.Join("dir", "emptydir"), 0o755)
+	_ = writer.WriteFile(filepath.Join("dir", "file1.txt"), []byte("content1"), 0o644)
+	_ = writer.WriteFile(filepath.Join("dir", "file2.txt"), []byte("content2"), 0o644)
+	_ = writer.WriteFile(filepath.Join("dir", "subdir", "file3.txt"), []byte("content3"), 0o644)
+	_ = writer.MkdirAll(filepath.Join("dir", "emptydir"), 0o755)
 	// In collecting file writer, directory is just stored in Dirs, but let's check how it handles.
 	// ReadDir for CollectingFileWriter uses w.Files to find entries.
 	// Let's also check a file in root
-	writer.WriteFile("rootfile.txt", []byte("root"), 0o644)
+	_ = writer.WriteFile("rootfile.txt", []byte("root"), 0o644)
 
 	entries, err := writer.ReadDir("dir")
 	if err != nil {
