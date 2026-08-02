@@ -2,6 +2,9 @@ package go_subcommand
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
 
 	"github.com/arran4/go-subcommand/parsers"
 )
@@ -14,15 +17,32 @@ import (
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-func Validate(dir string, parserName string, paths []string, recursive bool) error {
-	_, err := parse(dir, parserName, &parsers.ParseOptions{
+func Validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
+	var fsys fs.FS = os.DirFS(dir)
+	var out io.Writer = os.Stdout
+
+	for _, opt := range ops {
+		switch o := opt.(type) {
+		case fs.FS:
+			fsys = o
+		case io.Writer:
+			out = o
+		}
+	}
+
+	p, err := parsers.Get(parserName)
+	if err != nil {
+		return err
+	}
+
+	_, err = p.Parse(fsys, ".", &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Println("Validation successful.")
+	fmt.Fprintln(out, "Validation successful.")
 	return nil
 }
 
@@ -34,8 +54,25 @@ func Validate(dir string, parserName string, paths []string, recursive bool) err
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-func List(dir string, parserName string, paths []string, recursive bool) error {
-	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
+func List(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
+	var fsys fs.FS = os.DirFS(dir)
+	var out io.Writer = os.Stdout
+
+	for _, opt := range ops {
+		switch o := opt.(type) {
+		case fs.FS:
+			fsys = o
+		case io.Writer:
+			out = o
+		}
+	}
+
+	p, err := parsers.Get(parserName)
+	if err != nil {
+		return err
+	}
+
+	dataModel, err := p.Parse(fsys, ".", &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
 	})
@@ -43,9 +80,9 @@ func List(dir string, parserName string, paths []string, recursive bool) error {
 		return err
 	}
 	for _, cmd := range dataModel.Commands {
-		fmt.Printf("Command: %s\n", cmd.MainCmdName)
+		fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
 		for _, subCmd := range cmd.SubCommands {
-			fmt.Printf("  Subcommand: %s\n", subCmd.SubCommandSequence())
+			fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
 		}
 	}
 	return nil

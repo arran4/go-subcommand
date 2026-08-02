@@ -2,49 +2,51 @@ package go_subcommand
 
 import (
 	"bytes"
-	"io"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"golang.org/x/tools/txtar"
 )
 
-func TestList(t *testing.T) {
-	dir := t.TempDir()
-
-	modContent := "module example.com/test\n\ngo 1.22\n"
-	err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(modContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write go.mod: %v", err)
+// ArchiveToMapFS converts a txtar archive into a fstest.MapFS
+func ArchiveToMapFS(ar *txtar.Archive) fstest.MapFS {
+	out := fstest.MapFS{}
+	for _, f := range ar.Files {
+		name := path.Clean(strings.TrimPrefix(f.Name, "/"))
+		if name == "." {
+			continue
+		}
+		out[name] = &fstest.MapFile{Data: append([]byte(nil), f.Data...)}
 	}
+	return out
+}
 
-	content := `package main
+func TestList(t *testing.T) {
+	fixture := `
+-- go.mod --
+module example.com/test
+
+go 1.22
+-- main.go --
+package main
 // Root is a subcommand ` + "`app`" + `
 func Root() {}
 
 // Sub is a subcommand ` + "`app sub`" + `
 func Sub() {}
 `
-	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write main.go: %v", err)
-	}
+	ar := txtar.Parse([]byte(fixture))
+	fsys := ArchiveToMapFS(ar)
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err = List(dir, "commentv1", []string{}, true)
-
-	_ = w.Close()
-	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	err := List(".", "commentv1", []string{}, true, fsys, &buf)
 
 	if err != nil {
 		t.Fatalf("List returned unexpected error: %v", err)
 	}
 
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if !strings.Contains(output, "Command: app") {
@@ -56,38 +58,26 @@ func Sub() {}
 }
 
 func TestValidate(t *testing.T) {
-	dir := t.TempDir()
+	fixture := `
+-- go.mod --
+module example.com/test
 
-	modContent := "module example.com/test\n\ngo 1.22\n"
-	err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(modContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write go.mod: %v", err)
-	}
-
-	content := `package main
+go 1.22
+-- main.go --
+package main
 // Root is a subcommand ` + "`app`" + `
 func Root() {}
 `
-	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write main.go: %v", err)
-	}
+	ar := txtar.Parse([]byte(fixture))
+	fsys := ArchiveToMapFS(ar)
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err = Validate(dir, "commentv1", []string{}, true)
-
-	_ = w.Close()
-	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	err := Validate(".", "commentv1", []string{}, true, fsys, &buf)
 
 	if err != nil {
 		t.Fatalf("Validate returned unexpected error: %v", err)
 	}
 
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if !strings.Contains(output, "Validation successful.") {
@@ -96,14 +86,16 @@ func Root() {}
 }
 
 func TestList_Error(t *testing.T) {
-	err := List("non_existent_dir", "invalidparser", []string{}, true)
+	var buf bytes.Buffer
+	err := List(".", "invalidparser", []string{}, true, &buf)
 	if err == nil {
 		t.Error("Expected error for invalid parser, got nil")
 	}
 }
 
 func TestValidate_Error(t *testing.T) {
-	err := Validate("non_existent_dir", "invalidparser", []string{}, true)
+	var buf bytes.Buffer
+	err := Validate(".", "invalidparser", []string{}, true, &buf)
 	if err == nil {
 		t.Error("Expected error for invalid parser, got nil")
 	}
