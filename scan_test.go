@@ -41,11 +41,11 @@ func Sub(flag1 string) {}
 
 	err := Scan(dir, "commentv1", nil, true)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if err != nil {
