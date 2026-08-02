@@ -148,3 +148,54 @@ func Root() {}
 	}
 }
 
+func TestOSFileWriter_ReadDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a few files and subdirectories
+	if err := os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("content1"), 0o644); err != nil {
+		t.Fatalf("Failed to create file1: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "file2.txt"), []byte("content2"), 0o644); err != nil {
+		t.Fatalf("Failed to create file2: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+
+	writer := &OSFileWriter{}
+
+	// Test happy path
+	entries, err := writer.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Errorf("Expected 3 entries, got %d", len(entries))
+	}
+
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+
+	expectedNames := []string{"file1.txt", "file2.txt", "subdir"}
+	for _, expectedName := range expectedNames {
+		found := false
+		for _, name := range names {
+			if name == expectedName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected entry %q not found in %v", expectedName, names)
+		}
+	}
+
+	// Test error path
+	_, err = writer.ReadDir(filepath.Join(dir, "non-existent-dir"))
+	if err == nil {
+		t.Errorf("Expected error for non-existent directory, got nil")
+	}
+}
