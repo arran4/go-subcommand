@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/arran4/go-subcommand/parsers"
 )
@@ -14,15 +16,23 @@ import (
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-func Validate(dir string, parserName string, paths []string, recursive bool) error {
+//	ops:		(parser: ParseAny)	Optional dependency injection arguments
+func Validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	_, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	})
+	}, ops...)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Validation successful.")
+	var out io.Writer = os.Stdout
+	for _, opt := range ops {
+		if w, ok := opt.(io.Writer); ok {
+			out = w
+			break
+		}
+	}
+	fmt.Fprintln(out, "Validation successful.")
 	return nil
 }
 
@@ -34,19 +44,30 @@ func Validate(dir string, parserName string, paths []string, recursive bool) err
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
-func List(dir string, parserName string, paths []string, recursive bool) error {
+//	ops:		(parser: ParseAny)	Optional dependency injection arguments
+func List(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	})
+	}, ops...)
 	if err != nil {
 		return err
 	}
+	var out io.Writer = os.Stdout
+	for _, opt := range ops {
+		if w, ok := opt.(io.Writer); ok {
+			out = w
+			break
+		}
+	}
 	for _, cmd := range dataModel.Commands {
-		fmt.Printf("Command: %s\n", cmd.MainCmdName)
+		fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
 		for _, subCmd := range cmd.SubCommands {
-			fmt.Printf("  Subcommand: %s\n", subCmd.SubCommandSequence())
+			fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
 		}
 	}
 	return nil
 }
+
+// parseAny is a dummy parser for dependency injection
+func ParseAny(s string) (any, error) { return s, nil }

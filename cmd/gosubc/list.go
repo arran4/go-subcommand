@@ -24,6 +24,7 @@ type List struct {
 	parserName    string
 	paths         []string
 	recursive     bool
+	ops           []any
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *List) error
 }
@@ -145,6 +146,21 @@ func (c *List) Execute(args []string) error {
 			return cmd().Execute(remainingArgs[1:])
 		}
 	}
+	// Handle vararg ops
+	{
+		varArgStart := 0
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		for _, arg := range varArgs {
+			v, err := go_subcommand.ParseAny(arg)
+			if err != nil {
+				return fmt.Errorf("invalid any argument for ops: %s", arg)
+			}
+			c.ops = append(c.ops, any(v))
+		}
+	}
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
@@ -176,7 +192,7 @@ func (c *RootCmd) NewList() *List {
 
 	v.CommandAction = func(c *List) error {
 
-		err := go_subcommand.List(c.dir, c.parserName, c.paths, c.recursive)
+		err := go_subcommand.List(c.dir, c.parserName, c.paths, c.recursive, c.ops...)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

@@ -432,15 +432,26 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 }
 
 // Helper to bridge legacy parse calls
-func parse(dir string, parserName string, options *parsers.ParseOptions) (*model.DataModel, error) {
+// Helper to bridge legacy parse calls
+func parse(dir string, parserName string, options *parsers.ParseOptions, ops ...any) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
+	}
+	var fsys fs.FS
+	for _, opt := range ops {
+		if f, ok := opt.(fs.FS); ok {
+			fsys = f
+			break
+		}
+	}
+	if fsys == nil {
+		fsys = os.DirFS(dir)
 	}
 	p, err := parsers.Get(parserName)
 	if err != nil {
 		return nil, err
 	}
-	return p.Parse(os.DirFS(dir), ".", options)
+	return p.Parse(fsys, ".", options)
 }
 func initTemplates(fsys fs.FS) error {
 	var err error
