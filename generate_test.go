@@ -148,3 +148,50 @@ func Root() {}
 	}
 }
 
+
+func TestOSFileWriter_MkdirAll(t *testing.T) {
+	writer := &OSFileWriter{}
+	dir := t.TempDir()
+
+	t.Run("single directory", func(t *testing.T) {
+		path := filepath.Join(dir, "single")
+		err := writer.MkdirAll(path, 0755)
+		if err != nil {
+			t.Fatalf("MkdirAll failed: %v", err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat failed: %v", err)
+		}
+		if !info.IsDir() {
+			t.Errorf("Expected directory, got file")
+		}
+	})
+
+	t.Run("nested directory", func(t *testing.T) {
+		path := filepath.Join(dir, "nested", "dir")
+		err := writer.MkdirAll(path, 0755)
+		if err != nil {
+			t.Fatalf("MkdirAll failed: %v", err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat failed: %v", err)
+		}
+		if !info.IsDir() {
+			t.Errorf("Expected directory, got file")
+		}
+	})
+
+	t.Run("error case", func(t *testing.T) {
+		path := filepath.Join(dir, "file_as_dir")
+		err := os.WriteFile(path, []byte("test"), 0644)
+		if err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+		err = writer.MkdirAll(path, 0755)
+		if err == nil {
+			t.Errorf("Expected error when calling MkdirAll on existing file, got nil")
+		}
+	})
+}
