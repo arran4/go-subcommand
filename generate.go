@@ -471,6 +471,8 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		},
 		"paramImports":       parameterImports,
 		"paramImportsExcept": parameterImportsExcept,
+		"commandImports":     commandImports,
+		"subCommandImports":  subCommandImports,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -536,6 +538,28 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 	sort.Slice(imports, func(i, j int) bool {
 		return imports[i].Path < imports[j].Path
 	})
+	return imports
+}
+
+func subCommandImports(cmd *model.SubCommand, excludedPath string) []templateImport {
+	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
+		alias := cmd.ImportAlias()
+		if cmd.HasAction() || cmd.CallPackage() != "" {
+			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
+		}
+	}
+	return imports
+}
+
+func commandImports(cmd *model.Command, excludedPath string) []templateImport {
+	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
+		alias := cmd.ImportAlias()
+		if cmd.HasAction() || cmd.CallPackage() != "" {
+			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
+		}
+	}
 	return imports
 }
 

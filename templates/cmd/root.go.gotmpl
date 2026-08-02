@@ -12,13 +12,10 @@ import (
 	{{- end }}
 	"strings"
 	"sync"
-{{- template "common_imports" (list .Parameters true .ImportPath) }}
+{{- template "common_imports" (list . true .ImportPath) }}
 
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
 	{{- if .FunctionName}}
-	{{- if .ImportPath}}
-	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
-	{{- end}}
 	{{- if .ReturnsError}}
 	"errors"
 	"{{.PackagePath}}/cmd"

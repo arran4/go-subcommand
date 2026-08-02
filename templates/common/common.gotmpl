@@ -1,5 +1,6 @@
 {{- define "common_imports" -}}
-	{{- $params := index . 0 -}}
+	{{- $cmd := index . 0 -}}
+	{{- $params := $cmd.Parameters -}}
 	{{- $needStrconvForFlags := index . 1 -}}
 	{{- $excludedImport := "" -}}
 	{{- if gt (len .) 2 }}{{ $excludedImport = index . 2 }}{{ end -}}
@@ -39,15 +40,26 @@
 	{{- if $hasDuration }}
 	"time"
 	{{- end }}
-	{{- range paramImportsExcept $params $excludedImport }}
+	{{- $isSubCmd := false }}
+	{{- if eq (printf "%T" $cmd) "*model.SubCommand" }}{{ $isSubCmd = true }}{{ end }}
+	{{- if $isSubCmd }}
+	{{- range subCommandImports $cmd $excludedImport }}
 	{{- if .Alias }}
 	{{.Alias}} "{{.Path}}"
 	{{- else }}
 	"{{.Path}}"
 	{{- end }}
 	{{- end }}
+	{{- else }}
+	{{- range commandImports $cmd $excludedImport }}
+	{{- if .Alias }}
+	{{.Alias}} "{{.Path}}"
+	{{- else }}
+	"{{.Path}}"
+	{{- end }}
+	{{- end }}
+	{{- end }}
 {{- end -}}
-
 {{- define "flag_definitions" -}}
 {{- $set := index . 0 -}}
 {{- $struct := index . 1 -}}

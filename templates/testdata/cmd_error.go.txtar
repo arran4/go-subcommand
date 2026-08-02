@@ -21,14 +21,13 @@ cmd.go.gotmpl
 package main
 
 import (
+	"errors"
+	"example.com/mypkg"
+	"example.com/myproject/cmd"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
-
-	"errors"
-	"example.com/mypkg"
-	"example.com/myproject/cmd"
 )
 
 var _ Cmd = (*MyCmd)(nil)
