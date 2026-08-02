@@ -12,7 +12,7 @@ func TestFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	if err := os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte("module github.com/test/mod\n\ngo 1.22"), 0644); err != nil {
 		t.Fatal(err)
@@ -29,8 +29,10 @@ func MyCmd(verbose bool, paths []string) {}
 	}
 
 	cwd, _ := os.Getwd()
-	os.Chdir(tempDir)
-	defer os.Chdir(cwd)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
 
 	err = Format(".", true, nil, true)
 	if err != nil {
@@ -56,7 +58,7 @@ func TestFormat_NotInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	if err := os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte("module github.com/test/mod\n\ngo 1.22"), 0644); err != nil {
 		t.Fatal(err)
@@ -73,8 +75,10 @@ func MyCmd(verbose bool) {}
 	}
 
 	cwd, _ := os.Getwd()
-	os.Chdir(tempDir)
-	defer os.Chdir(cwd)
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
 
 	err = Format(".", false, nil, true)
 	if err != nil {
