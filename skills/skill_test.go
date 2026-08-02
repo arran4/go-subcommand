@@ -16,11 +16,10 @@ func TestSkillInstall(t *testing.T) {
 	// We can't easily mock user home or wd in the current implementation without refactoring.
 	// We'll run it and check if it errors out for now.
 	// Actually, we can temporarily change the working directory.
-
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	err := SkillInstall(tempSource, "test_skill", "project", "")
 	if err != nil {
@@ -62,11 +61,10 @@ func TestSkillInstall_EmptyName(t *testing.T) {
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
 	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
-
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	err := SkillInstall(tempSource, "", "project", "")
 	if err != nil {
@@ -101,11 +99,10 @@ func TestSkillInstall_AlreadyInstalled(t *testing.T) {
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
 	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
-
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	err := SkillInstall(tempSource, "test_skill", "project", "")
 	if err != nil {
@@ -122,11 +119,10 @@ func TestSkillInstall_MkdirFailure(t *testing.T) {
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
 	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
-
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	// Create a file where the skills directory should be
 	destPath, _ := resolveSkillPath("", "project", "test_skill")
@@ -143,11 +139,10 @@ func TestSkillInstall_MetadataWriteFailure(t *testing.T) {
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
 	_ = os.WriteFile(skillMd, []byte("# Test Skill"), 0644)
-
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	destPath, _ := resolveSkillPath("", "project", "test_skill")
 
@@ -176,9 +171,9 @@ func TestSkillInstall_PathTraversal(t *testing.T) {
 
 	// Attempt to install to an unsafe name (path traversal)
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	err := SkillInstall(tempSource, "../malicious_skill", "project", "")
 	expectedEscapedPath := filepath.Join(tempDest, ".agents", "malicious_skill")
@@ -248,9 +243,9 @@ func TestValidateSafePath(t *testing.T) {
 
 func TestSkillUpdate_Success(t *testing.T) {
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	// Setup initial skill
 	tempSource := t.TempDir()
@@ -283,9 +278,9 @@ func TestSkillUpdate_Success(t *testing.T) {
 
 func TestSkillUpdate_NoOp(t *testing.T) {
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
@@ -308,9 +303,9 @@ func TestSkillUpdate_NoOp(t *testing.T) {
 
 func TestSkillRemove(t *testing.T) {
 	tempDest := t.TempDir()
-	originalWd, _ := os.Getwd()
-	_ = os.Chdir(tempDest)
-	defer func() { _ = os.Chdir(originalWd) }()
+	originalGetwd := Getwd
+	Getwd = func() (string, error) { return tempDest, nil }
+	defer func() { Getwd = originalGetwd }()
 
 	tempSource := t.TempDir()
 	skillMd := filepath.Join(tempSource, "SKILL.md")
