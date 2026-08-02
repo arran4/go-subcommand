@@ -274,10 +274,8 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 						Text:  "// " + nl,
 						Slash: pos,
 					}
-					// Fix empty lines to be just "//"
-					if strings.TrimSpace(nl) == "" {
-						c.Text = "//"
-					}
+					// Fix empty lines and trailing spaces
+					c.Text = strings.TrimRight(c.Text, " 	")
 					newComments = append(newComments, c)
 				}
 
