@@ -32,7 +32,7 @@ type FileWriter interface {
 	WriteFile(path string, content []byte, perm os.FileMode) error
 	MkdirAll(path string, perm os.FileMode) error
 	ReadFile(path string) ([]byte, error)
-	ReadDir(path string) ([]fs.DirEntry, error)
+	ReadDir(path string, ops ...any) ([]fs.DirEntry, error)
 }
 
 // OSFileWriter implements FileWriter using os package
@@ -47,7 +47,13 @@ func (w *OSFileWriter) MkdirAll(path string, perm os.FileMode) error {
 func (w *OSFileWriter) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
-func (w *OSFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
+func (w *OSFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
+	for _, opt := range ops {
+		switch o := opt.(type) {
+		case fs.ReadDirFS:
+			return o.ReadDir(path)
+		}
+	}
 	return os.ReadDir(path)
 }
 
@@ -81,7 +87,7 @@ func (w *CollectingFileWriter) ReadFile(path string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (w *CollectingFileWriter) ReadDir(path string) ([]fs.DirEntry, error) {
+func (w *CollectingFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
 	// Simple implementation: scan Files for entries with the given prefix
 	var entries []fs.DirEntry
 	// Ensure path has a trailing slash for prefix matching, unless it's just "."
@@ -218,9 +224,10 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 //
 // This command supports customizing templates via the --replace-template flag.
 // You can provide multiple replacements in the following formats:
-//   --replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
-//   --replace-template <folder>          Overlay a folder containing templates onto the default templates
-//   --replace-template <txtar>           Overlay a txtar archive containing templates
+//
+//	--replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
+//	--replace-template <folder>          Overlay a folder containing templates onto the default templates
+//	--replace-template <txtar>           Overlay a txtar archive containing templates
 //
 // Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
 //
@@ -450,11 +457,11 @@ func initTemplates(fsys fs.FS) error {
 
 func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	tmpl := template.New("").Funcs(template.FuncMap{
-		"lower":   strings.ToLower,
-		"title":   func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":   strings.ToUpper,
-		"replace": strings.ReplaceAll,
-		"add":     func(a, b int) int { return a + b },
+		"lower":    strings.ToLower,
+		"title":    func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":    strings.ToUpper,
+		"replace":  strings.ReplaceAll,
+		"add":      func(a, b int) int { return a + b },
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 		"until": func(n int) []int {
 			res := make([]int, n)

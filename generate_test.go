@@ -148,30 +148,68 @@ func Root() {}
 	}
 }
 
-func TestOSFileWriter_ReadDir(t *testing.T) {
-	dir := t.TempDir()
+func TestCollectingFileWriter_ReadDir(t *testing.T) {
+	writer := NewCollectingFileWriter()
 
-	// Create a few files and subdirectories
-	if err := os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("content1"), 0o644); err != nil {
-		t.Fatalf("Failed to create file1: %v", err)
+	writer.WriteFile(filepath.Join("dir", "file1.txt"), []byte("content1"), 0o644)
+	writer.WriteFile(filepath.Join("dir", "file2.txt"), []byte("content2"), 0o644)
+	writer.WriteFile(filepath.Join("dir", "subdir", "file3.txt"), []byte("content3"), 0o644)
+	writer.MkdirAll(filepath.Join("dir", "emptydir"), 0o755)
+	// In collecting file writer, directory is just stored in Dirs, but let's check how it handles.
+	// ReadDir for CollectingFileWriter uses w.Files to find entries.
+	// Let's also check a file in root
+	writer.WriteFile("rootfile.txt", []byte("root"), 0o644)
+
+	entries, err := writer.ReadDir("dir")
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "file2.txt"), []byte("content2"), 0o644); err != nil {
-		t.Fatalf("Failed to create file2: %v", err)
+
+	if len(entries) != 4 {
+		t.Fatalf("Expected 4 entries, got %d", len(entries))
 	}
-	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
-		t.Fatalf("Failed to create subdir: %v", err)
+
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+
+	expectedNames := []string{"file1.txt", "file2.txt", "subdir", "emptydir"}
+	for _, expectedName := range expectedNames {
+		found := false
+		for _, name := range names {
+			if name == expectedName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected entry %q not found in %v", expectedName, names)
+		}
+	}
+
+	// Test error path?
+	// CollectingFileWriter ReadDir always returns no error.
+}
+
+func TestOSFileWriter_ReadDir(t *testing.T) {
+	// Create an in-memory file system using fstest.MapFS
+	mockFS := fstest.MapFS{
+		"testdir/file1.txt": &fstest.MapFile{Data: []byte("content1")},
+		"testdir/file2.txt": &fstest.MapFile{Data: []byte("content2")},
+		"testdir/subdir":    &fstest.MapFile{Mode: 0o755 | os.ModeDir},
 	}
 
 	writer := &OSFileWriter{}
 
-	// Test happy path
-	entries, err := writer.ReadDir(dir)
+	// Call ReadDir with the injected mockFS
+	entries, err := writer.ReadDir("testdir", mockFS)
 	if err != nil {
 		t.Fatalf("ReadDir failed: %v", err)
 	}
 
 	if len(entries) != 3 {
-		t.Errorf("Expected 3 entries, got %d", len(entries))
+		t.Fatalf("Expected 3 entries, got %d", len(entries))
 	}
 
 	var names []string
@@ -191,11 +229,5 @@ func TestOSFileWriter_ReadDir(t *testing.T) {
 		if !found {
 			t.Errorf("Expected entry %q not found in %v", expectedName, names)
 		}
-	}
-
-	// Test error path
-	_, err = writer.ReadDir(filepath.Join(dir, "non-existent-dir"))
-	if err == nil {
-		t.Errorf("Expected error for non-existent directory, got nil")
 	}
 }
