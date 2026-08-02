@@ -10,11 +10,7 @@ import (
 	"slices"
 	{{- end }}
 	"strings"
-{{- template "common_imports" (list .Parameters true .ImportPath) }}
-{{- if .ImportPath}}
-
-	{{if .ImportAlias}}{{.ImportAlias}} {{end}}"{{.ImportPath}}"
-{{- end}}
+{{- template "common_imports" (list . true .ImportPath) }}
 	{{- if and .SubCommandFunctionName .ReturnsError}}
 	"errors"
 	"{{.PackagePath}}/cmd"

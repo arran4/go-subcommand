@@ -100,8 +100,10 @@ type Command struct {
 	ReturnCount int
 }
 
+// FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
+
 func (c *Command) ImportAlias() string {
-	if c.CommandPackageName == "" || c.CommandPackageName == "main" {
+	if c == nil || c.CommandPackageName == "" || c.CommandPackageName == "main" {
 		return ""
 	}
 	if c.ImportPath == "" {
@@ -114,7 +116,21 @@ func (c *Command) ImportAlias() string {
 	return ""
 }
 
-// FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
+func (c *Command) CallPackage() string {
+	if c == nil || c.CommandPackageName == "" || c.CommandPackageName == "main" {
+		return ""
+	}
+	alias := c.ImportAlias()
+	if alias != "" {
+		return alias
+	}
+	return c.CommandPackageName
+}
+
+func (c *Command) HasAction() bool {
+	return c != nil && c.FunctionName != ""
+}
+
 type FunctionParameter struct {
 	// Name is the name of the parameter in the function signature.
 	Name string
@@ -351,7 +367,7 @@ type SubCommand struct {
 }
 
 func (sc *SubCommand) ImportAlias() string {
-	if sc.SubCommandPackageName == "" || sc.SubCommandPackageName == "main" {
+	if sc == nil || sc.SubCommandPackageName == "" || sc.SubCommandPackageName == "main" {
 		return ""
 	}
 	if sc.ImportPath == "" {
@@ -362,6 +378,21 @@ func (sc *SubCommand) ImportAlias() string {
 		return sc.SubCommandPackageName
 	}
 	return ""
+}
+
+func (sc *SubCommand) CallPackage() string {
+	if sc == nil || sc.SubCommandPackageName == "" || sc.SubCommandPackageName == "main" {
+		return ""
+	}
+	alias := sc.ImportAlias()
+	if alias != "" {
+		return alias
+	}
+	return sc.SubCommandPackageName
+}
+
+func (sc *SubCommand) HasAction() bool {
+	return sc != nil && sc.SubCommandFunctionName != ""
 }
 
 func (sc *SubCommand) SubCommandSequence() string {

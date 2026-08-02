@@ -28,7 +28,6 @@ import (
 	"errors"
 	"example.com/myproject/cmd"
 	"example.com/myproject/cmd/mycmd/templates"
-	"example.com/myproject/rootpkg"
 )
 
 type Cmd interface {

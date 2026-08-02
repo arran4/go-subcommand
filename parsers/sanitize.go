@@ -15,7 +15,10 @@ func ToKebabCase(s string) string {
 	if err != nil {
 		return s
 	}
-	res, _ := strings2.ToKebabCase(words, strings2.OptionCaseMode(strings2.CMWhispering))
+	res, err := strings2.ToKebabCase(words, strings2.OptionCaseMode(strings2.CMWhispering))
+	if err != nil {
+		return s
+	}
 	return res
 }
 
@@ -52,7 +55,6 @@ func SanitizeToIdentifier(name string) string {
 
 	return res
 }
-
 
 // NameAllocator manages the assignment of unique identifier names.
 type NameAllocator struct {
