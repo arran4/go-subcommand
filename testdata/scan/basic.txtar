@@ -1,0 +1,28 @@
+test: basic scan scenario
+
+-- options.json --
+{
+	"dir": ".",
+	"parser_name": "commentv1",
+	"recursive": true
+}
+
+-- input/go.mod --
+module example.com/test
+go 1.22
+-- input/main.go --
+package main
+// Root is a subcommand `app` -- Some root description
+func Root() {}
+
+// Sub is a subcommand `app sub` -- Some description
+//
+// Flags:
+//
+//	flag1:	--flag1	(default: "val")	Some flag
+func Sub(flag1 string) {}
+-- expected/output.txt --
+Command: app
+  Subcommand: sub
+    Flags:
+      --flag1 string (default: "val") Some flag
