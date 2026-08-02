@@ -17,8 +17,9 @@ import (
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
+//	ops:		(parser: ParseAny)		Internal options
 func Validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
-	var fsys fs.FS = os.DirFS(dir)
+	fsys := fs.FS(os.DirFS(dir))
 	var out io.Writer = os.Stdout
 
 	for _, opt := range ops {
@@ -42,7 +43,7 @@ func Validate(dir string, parserName string, paths []string, recursive bool, ops
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "Validation successful.")
+	_, _ = fmt.Fprintln(out, "Validation successful.")
 	return nil
 }
 
@@ -54,8 +55,9 @@ func Validate(dir string, parserName string, paths []string, recursive bool, ops
 //	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
+//	ops:		(parser: ParseAny)		Internal options
 func List(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
-	var fsys fs.FS = os.DirFS(dir)
+	fsys := fs.FS(os.DirFS(dir))
 	var out io.Writer = os.Stdout
 
 	for _, opt := range ops {
@@ -80,9 +82,9 @@ func List(dir string, parserName string, paths []string, recursive bool, ops ...
 		return err
 	}
 	for _, cmd := range dataModel.Commands {
-		fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
+		_, _ = fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
 		for _, subCmd := range cmd.SubCommands {
-			fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
+			_, _ = fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
 		}
 	}
 	return nil
