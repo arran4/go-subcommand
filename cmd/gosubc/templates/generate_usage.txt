@@ -5,6 +5,7 @@ generates the subcommand code
 
 This command supports customizing templates via the --replace-template flag.
 You can provide multiple replacements in the following formats:
+
 --replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
 --replace-template <folder>          Overlay a folder containing templates onto the default templates
 --replace-template <txtar>           Overlay a txtar archive containing templates
