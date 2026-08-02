@@ -29,7 +29,7 @@ func TestHelpSyntax(t *testing.T) {
 	}
 
 	// Close the writer so the reader knows it's done
-	w.Close()
+	_ = w.Close()
 
 	// Read the output
 	var buf bytes.Buffer
