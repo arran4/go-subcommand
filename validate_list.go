@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/arran4/go-subcommand/parsers"
 )
@@ -15,14 +17,25 @@ import (
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
 func Validate(dir string, parserName string, paths []string, recursive bool) error {
+	return validate(dir, parserName, paths, recursive)
+}
+
+func validate(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	_, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	})
+	}, ops...)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Validation successful.")
+	var out io.Writer = os.Stdout
+	for _, opt := range ops {
+		if w, ok := opt.(io.Writer); ok {
+			out = w
+			break
+		}
+	}
+	_, _ = fmt.Fprintln(out, "Validation successful.")
 	return nil
 }
 
@@ -35,17 +48,28 @@ func Validate(dir string, parserName string, paths []string, recursive bool) err
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
 func List(dir string, parserName string, paths []string, recursive bool) error {
+	return list(dir, parserName, paths, recursive)
+}
+
+func list(dir string, parserName string, paths []string, recursive bool, ops ...any) error {
 	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	})
+	}, ops...)
 	if err != nil {
 		return err
 	}
+	var out io.Writer = os.Stdout
+	for _, opt := range ops {
+		if w, ok := opt.(io.Writer); ok {
+			out = w
+			break
+		}
+	}
 	for _, cmd := range dataModel.Commands {
-		fmt.Printf("Command: %s\n", cmd.MainCmdName)
+		_, _ = fmt.Fprintf(out, "Command: %s\n", cmd.MainCmdName)
 		for _, subCmd := range cmd.SubCommands {
-			fmt.Printf("  Subcommand: %s\n", subCmd.SubCommandSequence())
+			_, _ = fmt.Fprintf(out, "  Subcommand: %s\n", subCmd.SubCommandSequence())
 		}
 	}
 	return nil
