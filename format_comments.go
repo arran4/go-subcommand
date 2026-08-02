@@ -179,15 +179,19 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 					// Name:
 					namePart := p.Name + ":"
 					// Flags:
-					flagsPart := ""
-					for _, f := range p.FlagAliases {
-						prefix := "-"
-						if len(f) > 1 {
-							prefix = "--"
+					var flagsBuilder strings.Builder
+					for j, f := range p.FlagAliases {
+						if j > 0 {
+							flagsBuilder.WriteByte(' ')
 						}
-						flagsPart += prefix + f + " "
+						if len(f) > 1 {
+							flagsBuilder.WriteString("--")
+						} else {
+							flagsBuilder.WriteString("-")
+						}
+						flagsBuilder.WriteString(f)
 					}
-					flagsPart = strings.TrimSpace(flagsPart)
+					flagsPart := flagsBuilder.String()
 
 					// Default:
 					defaultPart := ""
