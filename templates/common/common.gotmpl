@@ -78,7 +78,8 @@
 			{{- else if eq .Type "[]string" }}{{ $default = "nil" }}
 			{{- else if or (eq .Type "int") (eq .Type "int64") (eq .Type "int32") (eq .Type "int16") (eq .Type "int8") (eq .Type "uint") (eq .Type "uint64") (eq .Type "uint32") (eq .Type "uint16") (eq .Type "uint8") (eq .Type "float64") (eq .Type "float32") }}{{ $default = "0" }}{{ end -}}
 		{{- else -}}
-			{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+			{{- if isDefaultExpression .Default }}{{ $default = .Default }}
+			{{- else if eq .Type "string" }}{{ $default = printf "%q" .Default }}
 			{{- else }}{{ $default = .Default }}{{ end -}}
 		{{- end -}}
 
@@ -128,11 +129,15 @@
 		return nil
 	})
 					{{- else if $param.IsDuration }}
+						{{- if isDefaultExpression $param.Default }}
+	{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+						{{- else }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
 	} else {
 		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
 	}
+						{{- end }}
 					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "string") (eq $param.BaseType "bool") (eq $param.BaseType "uint") (eq $param.BaseType "uint64") (eq $param.BaseType "int64") (eq $param.BaseType "float64") }}
 						{{- $varType := $param.BaseType | title }}
 	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")

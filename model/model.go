@@ -160,6 +160,8 @@ type FunctionParameter struct {
 	Generator GeneratorConfig
 	// Parser holds configuration for value parsing.
 	Parser ParserConfig
+	// DefaultExpr holds metadata if the default value is a function call or constant expression.
+	DefaultExpr *FuncRef
 	// Inherited indicates if the parameter was inherited from a parent command.
 	Inherited bool
 	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
