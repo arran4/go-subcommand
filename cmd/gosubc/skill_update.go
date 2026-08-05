@@ -145,15 +145,14 @@ func (c *SkillUpdate) Execute(args []string) error {
 			return cmd().Execute(remainingArgs[1:])
 		}
 	}
-	if len(remainingArgs) < 1 {
-		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
-	}
 	// Handle positional argument name
 	{
 		argIndex := 0
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
 			c.name = argVal
+		} else {
+			c.name = ""
 		}
 	}
 

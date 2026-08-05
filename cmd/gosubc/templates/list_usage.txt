@@ -12,4 +12,4 @@ Subcommands:
 
 Flags:
     --scope string   (default: "user")   The installation scope ('user' or 'project')
-    --agent string                       Explicitly target a specific agent (e.g. 'codex', 'claude')
+    --agent string   (default: "")       Explicitly target a specific agent (e.g. 'codex', 'claude')

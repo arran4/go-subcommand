@@ -140,6 +140,7 @@ func TestParseAttributes(t *testing.T) {
 			attrs: "default: 123",
 			wantParam: ParsedParam{
 				Default: "123",
+				HasDefaultValue: true,
 			},
 		},
 		{
@@ -147,6 +148,7 @@ func TestParseAttributes(t *testing.T) {
 			attrs: `default: "foo"`,
 			wantParam: ParsedParam{
 				Default: "foo",
+				HasDefaultValue: true,
 			},
 		},
 		{
@@ -155,6 +157,7 @@ func TestParseAttributes(t *testing.T) {
 			wantParam: ParsedParam{
 				Flags:   []string{"f"},
 				Default: "false",
+				HasDefaultValue: true,
 			},
 		},
 		{

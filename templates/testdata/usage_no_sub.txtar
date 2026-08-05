@@ -35,4 +35,4 @@ Flags:
     -f              (default: false)   Force action
 
 Positional Arguments:
-    file       Target file
+    <file>     Target file

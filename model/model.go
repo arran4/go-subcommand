@@ -140,6 +140,8 @@ type FunctionParameter struct {
 	FlagAliases []string
 	// Default is the default value for the parameter if not provided.
 	Default string
+	// HasDefaultValue indicates if a default value was explicitly provided.
+	HasDefaultValue bool
 	// Description is the help text for the parameter.
 	Description string
 	// IsPositional indicates if the parameter is a positional argument (not a flag).
@@ -167,6 +169,68 @@ type FunctionParameter struct {
 	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
 	// It is parser metadata and is intentionally excluded from serialized models.
 	InheritedFrom string `json:"-"`
+}
+
+
+func (dm *DataModel) Validate() error {
+	for _, cmd := range dm.Commands {
+		if err := cmd.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (cmd *Command) Validate() error {
+	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
+		return err
+	}
+	for _, sc := range cmd.SubCommands {
+		if err := sc.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sc *SubCommand) Validate() error {
+	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
+		return err
+	}
+	for _, child := range sc.SubCommands {
+		if err := child.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateParameters(params []*FunctionParameter, cmdName string) error {
+	var hasOptionalPos bool
+	var hasVarArg bool
+	for _, p := range params {
+		if !p.IsPositional {
+			continue
+		}
+
+		if p.IsVarArg {
+			hasVarArg = true
+			continue
+		}
+
+		if hasVarArg {
+			return fmt.Errorf("command %s: positional argument %s appears after a variadic argument", cmdName, p.Name)
+		}
+
+		if p.HasDefaultValue {
+			hasOptionalPos = true
+		} else {
+			if hasOptionalPos {
+				return fmt.Errorf("command %s: required positional argument %s appears after an optional positional argument", cmdName, p.Name)
+			}
+		}
+	}
+	return nil
 }
 
 func (p *FunctionParameter) FlagString() string {
@@ -218,12 +282,22 @@ func (p *FunctionParameter) DefaultString() string {
 	if p.Required {
 		return "(required)"
 	}
-	if p.Default == "" {
+	// For flags, we historically printed empty string if Default is empty string and HasDefaultValue is false
+	// Let's restore the original logic for formatting flag output correctly.
+	if p.Default == "" && !p.HasDefaultValue {
 		return ""
 	}
 	def := p.Default
 	if p.Type == "string" && !strings.HasPrefix(def, "\"") {
 		def = fmt.Sprintf("%q", def)
+	}
+	if p.Type == "string" && def == "\"\"" && !p.HasDefaultValue {
+		return ""
+	}
+	if def == "" && p.HasDefaultValue {
+		def = "\"\""
+	} else if def == "" {
+		return ""
 	}
 	return fmt.Sprintf("(default: %s)", def)
 }
@@ -671,6 +745,8 @@ func (sc *SubCommand) FullUsageString() string {
 		if p.IsPositional {
 			if p.IsVarArg {
 				parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
+			} else if p.HasDefaultValue {
+				parts = append(parts, fmt.Sprintf("[%s]", p.Name))
 			} else {
 				parts = append(parts, fmt.Sprintf("<%s>", p.Name))
 			}

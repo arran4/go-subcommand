@@ -309,6 +309,10 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 
+	if err := dataModel.Validate(); err != nil {
+		return err
+	}
+
 	dataModel.GoVersion = getGoVersion(inputFS)
 
 	collector := NewCollectingFileWriter()

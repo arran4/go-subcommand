@@ -67,7 +67,13 @@ Flags:
 Positional Arguments:
 {{- range .Parameters}}
 {{- if .IsPositional}}
-    {{ .Name | printf "%-10s"}} {{.Description}}
+    {{- if .IsVarArg}}
+    {{ printf "[%s...]" .Name | printf "%-10s"}} {{.Description}}
+    {{- else if .HasDefaultValue}}
+    {{ printf "[%s]" .Name | printf "%-10s"}} {{.Description}}
+    {{- else}}
+    {{ printf "<%s>" .Name | printf "%-10s"}} {{.Description}}
+    {{- end}}
 {{- end}}
 {{- end}}
 {{- end}}

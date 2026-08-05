@@ -161,17 +161,21 @@
 {{- define "positional_args_parsing" -}}
 {{- $params := . -}}
 {{- $posArgs := 0 }}
+{{- $reqPosArgs := 0 }}
 	{{- range $params }}
 		{{- if .IsPositional }}
 			{{- if not .IsVarArg }}
 				{{- $posArgs = add $posArgs 1 }}
+				{{- if not .HasDefaultValue }}
+					{{- $reqPosArgs = add $reqPosArgs 1 }}
+				{{- end }}
 			{{- end }}
 		{{- end }}
 	{{- end }}
 
-	{{- if gt $posArgs 0 }}
-	if len(remainingArgs) < {{$posArgs}} {
-		return fmt.Errorf("expected at least {{$posArgs}} positional arguments, got %d", len(remainingArgs))
+	{{- if gt $reqPosArgs 0 }}
+	if len(remainingArgs) < {{$reqPosArgs}} {
+		return fmt.Errorf("expected at least {{$reqPosArgs}} positional arguments, got %d", len(remainingArgs))
 	}
 	{{- end }}
 
@@ -221,6 +225,32 @@
 				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", argIndex, argVal)
 			}
 			c.{{.Name}} = {{.CastCode "v"}}
+			{{- end }}
+		} else {
+			{{- if .HasDefaultValue }}
+				{{- $default := .Default }}
+				{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+				{{- else if isDefaultExpression .Default }}{{ $default = .Default }}
+				{{- end }}
+				{{- if .HasCustomParser }}
+			parsed, err := {{.ParserCall $default}}
+			if err != nil {
+				return fmt.Errorf("invalid default value for {{.Name}}: %w", err)
+			}
+			c.{{.Name}} = {{.CastCode "parsed"}}
+				{{- else if and (eq .Type "time.Duration") (not (isDefaultExpression .Default)) }}
+			if d, err := time.ParseDuration("{{.Default}}"); err == nil {
+				c.{{.Name}} = d
+			}
+				{{- else if and .IsString (not .HasCustomParser) }}
+			c.{{.Name}} = {{$default}}
+				{{- else }}
+			v, err := {{.ParserCall $default}}
+			if err != nil {
+				return fmt.Errorf("invalid default value for {{.Name}}: %w", err)
+			}
+			c.{{.Name}} = {{.CastCode "v"}}
+				{{- end }}
 			{{- end }}
 		}
 	}

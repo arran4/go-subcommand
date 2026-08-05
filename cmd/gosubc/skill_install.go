@@ -121,8 +121,8 @@ func (c *SkillInstall) Execute(args []string) error {
 			return cmd().Execute(remainingArgs[1:])
 		}
 	}
-	if len(remainingArgs) < 2 {
-		return fmt.Errorf("expected at least 2 positional arguments, got %d", len(remainingArgs))
+	if len(remainingArgs) < 1 {
+		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
 	}
 	// Handle positional argument source
 	{
@@ -130,6 +130,7 @@ func (c *SkillInstall) Execute(args []string) error {
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
 			c.source = argVal
+		} else {
 		}
 	}
 	// Handle positional argument name
@@ -138,6 +139,8 @@ func (c *SkillInstall) Execute(args []string) error {
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
 			c.name = argVal
+		} else {
+			c.name = ""
 		}
 	}
 
