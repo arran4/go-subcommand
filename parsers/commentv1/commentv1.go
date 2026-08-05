@@ -657,7 +657,7 @@ var (
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
-	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[^),]+))`)
+	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?|[^),]+))`)
 	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	reFlag            = regexp.MustCompile(`-[\w-]+`)
@@ -676,6 +676,7 @@ type ParsedParam struct {
 	Required           bool
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
+	DefaultExpr        *model.FuncRef
 	Order              int `json:"-"`
 }
 

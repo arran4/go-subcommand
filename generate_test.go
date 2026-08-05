@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -229,5 +230,43 @@ func TestOSFileWriter_ReadDir(t *testing.T) {
 		if !found {
 			t.Errorf("Expected entry %q not found in %v", expectedName, names)
 		}
+	}
+}
+
+func TestGenerate_DefaultExpressions(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go": &fstest.MapFile{Data: []byte(`package main
+// Root is a subcommand ` + "`app`" + `
+// Flags:
+//   cores: (default: runtime.NumCPU())
+//   limit: (default: math.MaxInt32)
+func Root(cores int, limit int) {}
+`)},
+	}
+
+	writer := NewCollectingFileWriter()
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, nil)
+	if err != nil {
+		t.Fatalf("GenerateWithFS failed: %v", err)
+	}
+
+	content, ok := writer.Files["cmd/app/root.go"]
+	if !ok {
+		t.Fatalf("root.go not generated")
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "\"runtime\"") {
+		t.Errorf("Missing import for runtime")
+	}
+	if !strings.Contains(s, "\"math\"") {
+		t.Errorf("Missing import for math")
+	}
+	if !strings.Contains(s, "runtime.NumCPU()") {
+		t.Errorf("Missing assignment for cores expression: %s", s)
+	}
+	if !strings.Contains(s, "math.MaxInt32") {
+		t.Errorf("Missing assignment for limit expression: %s", s)
 	}
 }

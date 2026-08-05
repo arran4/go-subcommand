@@ -278,6 +278,23 @@ that can handle missing tokens`,
 			wantOk:                 true,
 		},
 		{
+			name: "Default Expression",
+			text: `Cmd is a subcommand ` + "`app expr`" + `
+Flags:
+  cores: (default: runtime.NumCPU()) Number of cores
+  max: (default: math.MaxInt32) Max limit
+  path: (default: os.Getenv("PATH")) Path string`,
+			wantCmdName:            "app",
+			wantSubCommandSequence: []string{"expr"},
+			wantDescription:        "",
+			wantParams: map[string]ParsedParam{
+				"cores": {Flags: nil, Default: "runtime.NumCPU()", Description: "Number of cores"},
+				"max":   {Flags: nil, Default: "math.MaxInt32", Description: "Max limit"},
+				"path":  {Flags: nil, Default: "os.Getenv(\"PATH\")", Description: "Path string"},
+			},
+			wantOk: true,
+		},
+		{
 			name:            "Implicit Command Name",
 			text:            "Parent is a subcommand that Does work in a directory",
 			wantCmdName:     "",
