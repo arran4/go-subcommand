@@ -298,4 +298,3 @@ func TestGenerate_Clean(t *testing.T) {
 		t.Errorf("Generated main.go was not created after clean")
 	}
 }
-
