@@ -86,6 +86,7 @@ func TestParserRegression(t *testing.T) {
 
 			if funcDecl == nil {
 				t.Fatalf("No function with doc comment found in input.go")
+				return
 			}
 
 			// 3. Extract params using the parser

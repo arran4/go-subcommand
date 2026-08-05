@@ -159,6 +159,7 @@ func ParseLocal(value string) (string, error) { return value, nil }
 	localParser := child.Parameters[1].Parser.Func
 	if localParser == nil {
 		t.Fatal("local parser was not recorded")
+		return
 	}
 	if localParser.ImportPath != "example.com/project/internal" || localParser.CommandPackageName != "app" || localParser.FunctionName != "ParseLocal" {
 		t.Errorf("local parser reference = %#v", localParser)
