@@ -279,6 +279,7 @@ func TestIssue20_NestedSubcommandsFlattened_Model(t *testing.T) {
 	}
 	if admin == nil {
 		t.Fatal("Expected 'admin' subcommand, but it was flattened or missing")
+		return
 	}
 
 	found := false
