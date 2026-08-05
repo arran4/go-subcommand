@@ -129,6 +129,7 @@ func (c *SkillInspect) Execute(args []string) error {
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
 			c.name = argVal
+		} else {
 		}
 	}
 

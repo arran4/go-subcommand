@@ -711,6 +711,74 @@ func MyCmd(id int, name string, files ...string) {}
 	}
 }
 
+
+func TestOptionalPositionalArgs(t *testing.T) {
+	src := "package main\n" +
+		"// MyCmd is a subcommand " + "\x60" + "app mycmd" + "\x60\n" +
+		"// req: @1 Required arg\n" +
+		"// opt1: @2 (default: \"hello\") Optional arg 1\n" +
+		"// opt2: @3 (default: \"\") Optional arg 2 (explicit empty string)\n" +
+		"func MyCmd(req string, opt1 string, opt2 string) {}\n"
+
+	fs := setupProject(t, src)
+	writer := runGenerateInMemory(t, fs)
+
+	cmdPath := "cmd/app/mycmd.go"
+	codeBytes, ok := writer.Files[cmdPath]
+	if !ok {
+		t.Fatalf("Generated command file not found: %s", cmdPath)
+	}
+
+	code := string(codeBytes)
+	if !strings.Contains(code, "expected at least 1 positional arguments") {
+		t.Errorf("Missing positional count validation for required only")
+	}
+	if !strings.Contains(code, "c.opt1 = \"hello\"") {
+		t.Errorf("Missing default assignment for omitted optional positional arg")
+	}
+	if !strings.Contains(code, "c.opt2 = \"\"") {
+		t.Errorf("Missing default assignment for omitted optional positional arg (empty string)")
+	}
+
+	usagePath := "cmd/app/templates/mycmd_usage.txt"
+	usageContent, ok := writer.Files[usagePath]
+	if !ok {
+		t.Fatalf("Usage file not found: %s", usagePath)
+	}
+	usage := string(usageContent)
+	if !strings.Contains(usage, "<req>") {
+		t.Errorf("Usage string missing <req>: %s", usage)
+	}
+	if !strings.Contains(usage, "[opt1]") {
+		t.Errorf("Usage string missing [opt1]: %s", usage)
+	}
+	if !strings.Contains(usage, "[opt2]") {
+		t.Errorf("Usage string missing [opt2]: %s", usage)
+	}
+}
+
+func TestPositionalArgsValidationOrder(t *testing.T) {
+	src := "package main\n" +
+		"// MyCmd is a subcommand " + "\x60" + "app mycmd" + "\x60\n" +
+		"// opt: @1 (default: \"hello\") Optional arg\n" +
+		"// req: @2 Required arg\n" +
+		"func MyCmd(opt string, req string) {}\n"
+
+	fs := setupProject(t, src)
+	dataModel, err := parse(".", "commentv1", &parsers.ParseOptions{
+		SearchPaths: []string{"."},
+		Recursive:   true,
+	}, fs)
+	if err == nil {
+		err = dataModel.Validate()
+	}
+	if err == nil {
+		t.Errorf("Expected validation error for required positional after optional")
+	} else if !strings.Contains(err.Error(), "required positional argument req appears after an optional positional argument") {
+		t.Errorf("Unexpected error message: %v", err)
+	}
+}
+
 func TestIssue42_MissingHelpUsageInGuide(t *testing.T) {
 	src := `package main
 

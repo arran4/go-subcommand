@@ -429,8 +429,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
-							if c.Default != "" {
+							if c.HasDefaultValue {
 								fp.Default = c.Default
+								fp.HasDefaultValue = true
 							}
 							if c.Description != "" {
 								fp.Description = c.Description
@@ -464,8 +465,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
-							if c.Default != "" {
+							if c.HasDefaultValue {
 								fp.Default = c.Default
+								fp.HasDefaultValue = true
 							}
 							if c.Description != "" {
 								fp.Description = c.Description
@@ -499,8 +501,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if len(c.Flags) > 0 {
 								fp.FlagAliases = c.Flags
 							}
-							if c.Default != "" {
+							if c.HasDefaultValue {
 								fp.Default = c.Default
+								fp.HasDefaultValue = true
 							}
 							if c.Description != "" {
 								fp.Description = c.Description
@@ -666,6 +669,7 @@ var (
 type ParsedParam struct {
 	Flags              []string
 	Default            string
+	HasDefaultValue    bool
 	Description        string
 	IsPositional       bool
 	PositionalArgIndex int
@@ -1068,6 +1072,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			}
 		case AttributeDefault:
 			p.Default = val
+			p.HasDefaultValue = true
 			if strings.HasPrefix(p.Default, "\"") && strings.HasSuffix(p.Default, "\"") {
 				p.Default = strings.Trim(p.Default, "\"")
 			}
@@ -1093,6 +1098,7 @@ func parseParamDetails(text string) ParsedParam {
 	loc := reDefaultValue.FindStringSubmatchIndex(text)
 	if loc != nil {
 		p.Default = strings.TrimSpace(text[loc[2]:loc[3]])
+		p.HasDefaultValue = true
 		text = text[:loc[0]] + text[loc[1]:]
 	}
 
