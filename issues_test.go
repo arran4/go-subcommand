@@ -20,6 +20,9 @@ var issue330Source string
 //go:embed testdata/issue18.go
 var issue18Source string
 
+//go:embed testdata/dashdash.go
+var dashdashSource string
+
 // setupProject returns an in-memory FS
 func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
 	return fstest.MapFS{
@@ -57,7 +60,7 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 	assertContains(t, rootGo, `required flag --config not provided`, "required root flag should be validated")
 	if action := strings.Index(rootGo, "if c.CommandAction != nil"); action == -1 {
 		t.Fatal("root command action missing")
-	} else if dispatch := strings.Index(rootGo, "if len(remainingArgs) > 0"); dispatch == -1 {
+	} else if dispatch := strings.Index(rootGo, "if !dashDashSeen && len(remainingArgs) > 0"); dispatch == -1 {
 		t.Fatal("root command dispatch missing")
 	} else if action > dispatch {
 		t.Fatalf("root command action should run before subcommand dispatch\nroot.go:\n%s", rootGo)
@@ -99,6 +102,21 @@ func assertNotContains(t *testing.T, s, substr, msg string) {
 	if strings.Contains(s, substr) {
 		t.Fatalf("%s: found unexpected %q in:\n%s", msg, substr, s)
 	}
+}
+
+func TestDashDashExecutionLogic(t *testing.T) {
+	input := setupProject(t, dashdashSource)
+	writer := runGenerateInMemory(t, input)
+
+	rootGo := string(mustGeneratedFile(t, writer, "cmd/app/root.go"))
+	assertContains(t, rootGo, `dashDashSeen := false`, "dashDashSeen variable should be tracked")
+	assertContains(t, rootGo, `if arg == "--" {`, "dash dash should be evaluated")
+	assertContains(t, rootGo, `dashDashSeen = true`, "dashDashSeen should be set to true")
+	assertContains(t, rootGo, `if !dashDashSeen && len(remainingArgs) > 0 {`, "subcommand dispatch should check dashDashSeen")
+
+	cmdGo := string(mustGeneratedFile(t, writer, "cmd/app/command.go"))
+	assertContains(t, cmdGo, `dashDashSeen := false`, "dashDashSeen variable should be tracked in subcommand")
+	assertContains(t, cmdGo, `if !dashDashSeen && len(remainingArgs) > 0 {`, "subcommand dispatch should check dashDashSeen in subcommand")
 }
 
 func TestIssue18_MoreBasicTypes(t *testing.T) {
@@ -710,7 +728,6 @@ func MyCmd(id int, name string, files ...string) {}
 		t.Errorf("Usage string incorrect format: %s", usage)
 	}
 }
-
 
 func TestOptionalPositionalArgs(t *testing.T) {
 	src := "package main\n" +

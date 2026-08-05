@@ -171,7 +171,6 @@ type FunctionParameter struct {
 	InheritedFrom string `json:"-"`
 }
 
-
 func (dm *DataModel) Validate() error {
 	for _, cmd := range dm.Commands {
 		if err := cmd.Validate(); err != nil {

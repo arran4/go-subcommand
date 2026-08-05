@@ -139,7 +139,7 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Default",
 			attrs: "default: 123",
 			wantParam: ParsedParam{
-				Default: "123",
+				Default:         "123",
 				HasDefaultValue: true,
 			},
 		},
@@ -147,7 +147,7 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Default Quoted",
 			attrs: `default: "foo"`,
 			wantParam: ParsedParam{
-				Default: "foo",
+				Default:         "foo",
 				HasDefaultValue: true,
 			},
 		},
@@ -155,8 +155,8 @@ func TestParseAttributes(t *testing.T) {
 			name:  "Mixed Legacy Comma",
 			attrs: `-f, default: false`,
 			wantParam: ParsedParam{
-				Flags:   []string{"f"},
-				Default: "false",
+				Flags:           []string{"f"},
+				Default:         "false",
 				HasDefaultValue: true,
 			},
 		},
