@@ -11,20 +11,18 @@
 The `gosubc` command line tool (`cmd/gosubc`) is self-hosting: it uses the library features to generate its own command structure.
 
 *   **Regenerating `gosubc`:**
-    The code in `cmd/gosubc` is generated. To update it (e.g., after modifying templates or the parser), you must run the generator on itself:
+    The code in `cmd/gosubc` is generated. To update it and clear existing generated files safely (version-safe), run:
     ```bash
-    go run ./cmd/gosubc generate
+    go run ./cmd/gosubc generate --clean
     ```
-    This command runs the *current* CLI code to parse the *current* project sources and regenerate the `cmd/gosubc/*.go` files.
+    This command runs the *current* CLI code to parse the *current* project sources, clean version-marked generated files, and regenerate the `cmd/gosubc/*.go` files.
 
 *   **Generating Examples:**
-    Examples typically include a `//go:generate` directive (e.g., `examples/complex`, `examples/returns`). This directive usually attempts to use a locally installed `gosubc` or falls back to `go run`.
-
-    **Important:** Because examples are standalone modules that may rely on the local root module, it is recommended to use `go work` to ensure `go generate` can locate dependencies correctly without publishing changes.
+    Examples include a `//go:generate` directive. Run generation directly inside each isolated example directory:
     ```bash
-    go work init . ./examples/returns ./examples/complex ./examples/defaultexpr
-    go generate ./examples/...
-    rm go.work go.work.sum # Cleanup
+    (cd examples/complex && go generate ./...)
+    (cd examples/returns && go generate ./...)
+    (cd examples/defaultexpr && go generate ./...)
     ```
     *Note: `examples/basic1` may not include this directive and might be maintained manually.*
 
@@ -43,13 +41,8 @@ To ensure the integrity of the codebase and generated artifacts, follow these ve
     ```
 
 3.  **Verify Examples:**
-    The examples are standalone modules. To verify them, you may need to run tests inside their directories or use a `go.work` file.
+    The examples are standalone modules. Verify them by running tests directly inside each isolated directory:
     ```bash
-    # Option 1: Using go.work (recommended for dev)
-    go work init . ./examples/basic1 ./examples/complex ./examples/returns ./examples/defaultexpr
-    go test ./...
-
-    # Option 2: Individual verification
     (cd examples/basic1 && go test ./...)
     (cd examples/complex && go test ./...)
     (cd examples/returns && go test ./...)

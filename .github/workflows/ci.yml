@@ -368,62 +368,27 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install gosubc
-        run: go install ./cmd/gosubc
+      - name: Run generation with --clean
+        run: go run ./cmd/gosubc generate --clean
 
-      - name: Clean generated files
+      - name: Verify Examples (go run & test)
         run: |
-          # Clean generated Go files in cmd/gosubc (preserving directory structure if needed)
-          rm -f cmd/gosubc/*.go
-          # Clean generated templates directory
-          rm -rf cmd/gosubc/templates
+          (cd examples/basic1 && go test ./...)
+          (cd examples/complex && go test ./...)
+          (cd examples/defaultexpr && go test ./...)
+          (cd examples/returns && go test ./...)
 
-      - name: Run generation
-        run: gosubc generate
-
-      - name: Build
-        run: |
-          go build .
-          go build ./cmd/gosubc
-
-          cd examples/basic1
-          go build .
-          cd ../..
-
-          cd examples/complex
-          go build .
-          cd ../..
-
-          cd examples/defaultexpr
-          go build .
-          cd ../..
-
-          cd examples/returns
-          go build .
-          cd ../..
-
-      - name: Verify (Vet & Lint)
+      - name: Verify (Vet)
         run: |
           go vet .
           go vet ./cmd/gosubc
           go vet ./templates
 
-          # Vet examples
-          cd examples/basic1
-          go vet ./...
-          cd ../..
+          (cd examples/basic1 && go vet ./...)
+          (cd examples/complex && go vet ./...)
+          (cd examples/defaultexpr && go vet ./...)
+          (cd examples/returns && go vet ./...)
 
-          cd examples/complex
-          go vet ./...
-          cd ../..
-
-          cd examples/defaultexpr
-          go vet ./...
-          cd ../..
-
-          cd examples/returns
-          go vet ./...
-          cd ../..
 
 
       - name: golangci-lint
@@ -557,13 +522,9 @@ jobs:
               exit 1
           fi
 
-          # Build the generated app
-          echo "Building generated app..."
-          go build -o testapp ./cmd/testapp
-
-          # Run the generated app
+          # Run the generated app using go run
           echo "Running generated app..."
-          OUTPUT=$(./testapp hello --name "Integration")
+          OUTPUT=$(go run ./cmd/testapp hello --name "Integration")
           EXPECTED="Hello, Integration!"
 
           if [ "$OUTPUT" != "$EXPECTED" ]; then

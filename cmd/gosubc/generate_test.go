@@ -32,6 +32,7 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--recursive")
 	args = append(args, "--force")
+	args = append(args, "--clean")
 	args = append(args, "--replace-template")
 	args = append(args, "test")
 
@@ -58,6 +59,9 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.force != true {
 		t.Errorf("Expected force to be true, got '%v'", cmd.force)
+	}
+	if cmd.clean != true {
+		t.Errorf("Expected clean to be true, got '%v'", cmd.clean)
 	}
 }
 

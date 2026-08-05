@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
+//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate --clean || go run github.com/arran4/go-subcommand/cmd/gosubc generate --clean"
 
 // SimpleError is a subcommand `returns simple`
 // Returns a simple error if the flag is set.

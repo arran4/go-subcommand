@@ -36,7 +36,7 @@ func Sub() {}
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, nil)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -46,7 +46,7 @@ func Sub() {}
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, nil)
+	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func Cmd2() {}
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
-	}, false, nil)
+	}, false, false, nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -96,12 +96,13 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, nil); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
 
 	cmd := exec.Command("go", "test", "./...")
+
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -134,7 +135,7 @@ func Root() {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, []string{"usage=custom_usage.gotmpl"}, fs)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, fs)
 	if err != nil {
 		t.Fatalf("GenerateWithFS with replaceTemplates failed: %v", err)
 	}
@@ -246,7 +247,7 @@ func Root(cores int, limit int) {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, nil)
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil)
 	if err != nil {
 		t.Fatalf("GenerateWithFS failed: %v", err)
 	}
@@ -270,3 +271,31 @@ func Root(cores int, limit int) {}
 		t.Errorf("Missing assignment for limit expression: %s", s)
 	}
 }
+
+func TestGenerate_Clean(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/cleantest\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	customFile := filepath.Join(dir, "cmd", "app", "custom.go")
+	writeRuntimeFixture(t, customFile, "package app\n// Custom user file\n")
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil); err != nil {
+		t.Fatalf("Generate with clean failed: %v", err)
+	}
+
+	if _, err := os.Stat(customFile); os.IsNotExist(err) {
+		t.Errorf("Custom user file custom.go was deleted by --clean!")
+	}
+
+	generatedFile := filepath.Join(dir, "cmd", "app", "main.go")
+	if _, err := os.Stat(generatedFile); os.IsNotExist(err) {
+		t.Errorf("Generated main.go was not created after clean")
+	}
+}
+
