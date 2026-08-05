@@ -22,7 +22,7 @@ The `gosubc` command line tool (`cmd/gosubc`) is self-hosting: it uses the libra
 
     **Important:** Because examples are standalone modules that may rely on the local root module, it is recommended to use `go work` to ensure `go generate` can locate dependencies correctly without publishing changes.
     ```bash
-    go work init . ./examples/returns ./examples/complex
+    go work init . ./examples/returns ./examples/complex ./examples/defaultexpr
     go generate ./examples/...
     rm go.work go.work.sum # Cleanup
     ```
@@ -46,13 +46,14 @@ To ensure the integrity of the codebase and generated artifacts, follow these ve
     The examples are standalone modules. To verify them, you may need to run tests inside their directories or use a `go.work` file.
     ```bash
     # Option 1: Using go.work (recommended for dev)
-    go work init . ./examples/basic1 ./examples/complex ./examples/returns
+    go work init . ./examples/basic1 ./examples/complex ./examples/returns ./examples/defaultexpr
     go test ./...
 
     # Option 2: Individual verification
     (cd examples/basic1 && go test ./...)
     (cd examples/complex && go test ./...)
     (cd examples/returns && go test ./...)
+    (cd examples/defaultexpr && go test ./...)
     ```
 
 4.  **Regenerate Tooling (Optional):**

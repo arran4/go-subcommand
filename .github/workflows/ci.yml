@@ -394,6 +394,14 @@ jobs:
           go build .
           cd ../..
 
+          cd examples/defaultexpr
+          go build .
+          cd ../..
+
+          cd examples/returns
+          go build .
+          cd ../..
+
       - name: Verify (Vet & Lint)
         run: |
           go vet .
@@ -409,9 +417,14 @@ jobs:
           go vet ./...
           cd ../..
 
+          cd examples/defaultexpr
+          go vet ./...
+          cd ../..
+
           cd examples/returns
           go vet ./...
           cd ../..
+
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9

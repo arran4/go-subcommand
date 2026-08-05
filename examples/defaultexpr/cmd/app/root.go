@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/arran4/go-subcommand/examples/defaultexpr"
 	"io"
 	"math"
 	"os"
@@ -112,7 +113,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.CommandAction = func(c *RootCmd) error {
 
-		Root(c.cores, c.limit)
+		defaultexpr.Root(c.cores, c.limit)
 		return nil
 	}
 
