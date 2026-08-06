@@ -348,7 +348,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	return nil
 }
 
-func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) New{{.SubCommandStructName}}() *{{.SubCommandStructName}} {
+func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {{.ConstructorMethodName}}() *{{.SubCommandStructName}} {
 	set := flag.NewFlagSet("{{.SubCommandName | lower}}", flag.ContinueOnError)
 	v := &{{.SubCommandStructName}}{
 		{{if .Parent}}{{.Parent.SubCommandStructName}}: c,{{else}}RootCmd: c,{{end}}
@@ -387,7 +387,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) N
 	{{end}}
 	{{range .SubCommands}}
 	{
-		subCmd := NewLazyCommand(func() Cmd { return v.New{{.SubCommandStructName}}() })
+		subCmd := NewLazyCommand(func() Cmd { return v.{{.ConstructorMethodName}}() })
 		v.SubCommands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		v.SubCommands["{{. | lower}}"] = subCmd

@@ -5,6 +5,7 @@ root.go.gotmpl
     "GoVersion": "1.21",
     "SubCommandName": "app",
     "SubCommandStructName": "RootCmd",
+    "ConstructorMethodName": "NewRootCmd",
     "SubCommandFunctionName": "Root",
     "MainCmdName": "app",
     "Parameters": [
@@ -30,6 +31,7 @@ root.go.gotmpl
             "GoVersion": "1.21",
             "SubCommandName": "child",
             "SubCommandStructName": "ChildCmd",
+            "ConstructorMethodName": "NewChildCmd",
             "SubCommandFunctionName": "Child",
             "MainCmdName": "app",
             "Parameters": [
@@ -55,6 +57,7 @@ root.go.gotmpl
             "GoVersion": "1.21",
             "SubCommandName": "command",
             "SubCommandStructName": "CommandCmd",
+            "ConstructorMethodName": "NewCommandCmd",
             "SubCommandFunctionName": "Command",
             "MainCmdName": "app",
             "Parameters": [

@@ -23,13 +23,13 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.New{{.SubCommandStructName}}()
+	cmd := parent.{{.ConstructorMethodName}}()
 	{{else}}
 	parent := &RootCmd{
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.New{{.SubCommandStructName}}()
+	cmd := parent.{{.ConstructorMethodName}}()
 	{{end}}
 
 	{{if .SubCommandFunctionName}}
@@ -167,13 +167,13 @@ func Test{{.SubCommandStructName}}_ExecuteHelpAndUnknownFlags(t *testing.T) {
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.New{{.SubCommandStructName}}()
+	cmd := parent.{{.ConstructorMethodName}}()
 	{{else}}
 	parent := &RootCmd{
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
-	cmd := parent.New{{.SubCommandStructName}}()
+	cmd := parent.{{.ConstructorMethodName}}()
 	{{end}}
 
 	if err := cmd.Execute([]string{"--help"}); err != nil {

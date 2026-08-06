@@ -3,6 +3,7 @@
   "PackageName": "main",
   "SubCommandName": "",
   "SubCommandStructName": "RootCmd",
+  "ConstructorMethodName": "NewRootCmd",
   "FunctionName": "RootFunc",
   "SubCommandDescription": "Root command description",
   "SubCommandPackageName": "main",

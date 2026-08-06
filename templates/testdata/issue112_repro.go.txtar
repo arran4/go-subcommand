@@ -3,6 +3,7 @@
   "PackageName": "main",
   "SubCommandName": "testcmd",
   "SubCommandStructName": "TestCmd",
+  "ConstructorMethodName": "NewTestCmd",
   "SubCommandFunctionName": "",
   "ImportPath": "",
   "Parameters": []

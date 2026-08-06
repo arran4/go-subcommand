@@ -1,20 +1,111 @@
+-- tests.txt --
+ShouldRunTestStrict
 -- input.json --
 {
+  "MainCmdName": "app",
   "PackageName": "main",
-  "MainCmdName": "mycmd",
-  "Version": "1.0.0",
-  "Parameters": [
-    {
-      "Name": "verbose",
-      "Type": "bool",
-      "Description": "Enable verbose output"
-    }
-  ],
   "SubCommands": [
     {
-      "SubCommandName": "sub1",
-      "SubCommandStructName": "Sub1",
-      "ConstructorMethodName": "NewSub1"
+      "ConstructorMethodName": "NewFooBar",
+      "SubCommandFunctionName": "foo_bar_3",
+      "SubCommandName": "FooBar",
+      "SubCommandStructName": "FooBar"
+    },
+    {
+      "ConstructorMethodName": "NewBar",
+      "SubCommandFunctionName": "",
+      "SubCommandName": "bar",
+      "SubCommandStructName": "Bar",
+      "SubCommands": [
+        {
+          "ConstructorMethodName": "NewBarFoo",
+          "SubCommandFunctionName": "foo2",
+          "SubCommandName": "foo",
+          "SubCommandStructName": "BarFoo"
+        }
+      ]
+    },
+    {
+      "ConstructorMethodName": "NewBaz",
+      "SubCommandFunctionName": "",
+      "SubCommandName": "baz",
+      "SubCommandStructName": "Baz",
+      "SubCommands": [
+        {
+          "ConstructorMethodName": "NewBazFoo",
+          "SubCommandFunctionName": "foo3",
+          "SubCommandName": "foo",
+          "SubCommandStructName": "BazFoo"
+        }
+      ]
+    },
+    {
+      "ConstructorMethodName": "NewDeep",
+      "SubCommandFunctionName": "",
+      "SubCommandName": "deep",
+      "SubCommandStructName": "Deep",
+      "SubCommands": [
+        {
+          "ConstructorMethodName": "NewDeepNested",
+          "SubCommandFunctionName": "",
+          "SubCommandName": "nested",
+          "SubCommandStructName": "DeepNested",
+          "SubCommands": [
+            {
+              "ConstructorMethodName": "NewDeepNestedFoo",
+              "SubCommandFunctionName": "foo4",
+              "SubCommandName": "foo",
+              "SubCommandStructName": "DeepNestedFoo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ConstructorMethodName": "NewFoo",
+      "SubCommandFunctionName": "foo1",
+      "SubCommandName": "foo",
+      "SubCommandStructName": "Foo"
+    },
+    {
+      "ConstructorMethodName": "NewFooBar2",
+      "SubCommandFunctionName": "foo_bar_1",
+      "SubCommandName": "foo-bar",
+      "SubCommandStructName": "FooBar2"
+    },
+    {
+      "ConstructorMethodName": "NewFooBar3",
+      "SubCommandFunctionName": "foo_bar_2",
+      "SubCommandName": "foo_bar",
+      "SubCommandStructName": "FooBar3"
+    },
+    {
+      "ConstructorMethodName": "NewLazy",
+      "SubCommandFunctionName": "",
+      "SubCommandName": "lazy",
+      "SubCommandStructName": "Lazy",
+      "SubCommands": [
+        {
+          "ConstructorMethodName": "NewLazyCommand",
+          "SubCommandFunctionName": "new_lazy_command",
+          "SubCommandName": "command",
+          "SubCommandStructName": "LazyCommand"
+        }
+      ]
+    },
+    {
+      "ConstructorMethodName": "NewUser",
+      "SubCommandFunctionName": "",
+      "SubCommandName": "user",
+      "SubCommandStructName": "User",
+      "SubCommands": [
+        {
+          "ConstructorMethodName": "NewUserError2",
+          "SubCommandFunctionName": "new_user_error",
+          "SubCommandName": "error",
+          "SubCommandStructName": "UserError2"
+        }
+      ]
     }
   ]
 }
@@ -30,11 +121,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 
-	"/cmd/mycmd/templates"
+	"/cmd/app/templates"
 )
 
 type Cmd interface {
@@ -92,19 +182,18 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
-	verbose       bool
 	CommandAction func(c *RootCmd) error
 }
 
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
@@ -125,11 +214,57 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.BoolVar(&c.verbose, "verbose", false, "Enable verbose output")
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFooBar() })
+		c.Commands["foobar"] = subCmd
+
+	}
 
 	{
-		subCmd := NewLazyCommand(func() Cmd { return c.NewSub1() })
-		c.Commands["sub1"] = subCmd
+		subCmd := NewLazyCommand(func() Cmd { return c.NewBar() })
+		c.Commands["bar"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewBaz() })
+		c.Commands["baz"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewDeep() })
+		c.Commands["deep"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFoo() })
+		c.Commands["foo"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFooBar2() })
+		c.Commands["foo-bar"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewFooBar3() })
+		c.Commands["foo_bar"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewLazy() })
+		c.Commands["lazy"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewUser() })
+		c.Commands["user"] = subCmd
 
 	}
 	c.Commands["help"] = func() Cmd {
@@ -203,17 +338,6 @@ func (c *RootCmd) Execute(args []string) error {
 			_ = value
 			_ = hasValue
 			switch name {
-
-			case "verbose":
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.verbose = b
-				} else {
-					c.verbose = true
-				}
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -227,7 +351,6 @@ func (c *RootCmd) Execute(args []string) error {
 					return nil
 				}
 				found := false
-
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)
 				}

@@ -2,7 +2,8 @@
 {
   "MainCmdName": "myapp",
   "SubCommandName": "sub1",
-  "SubCommandStructName": "Sub1",
+"SubCommandStructName": "Sub1",
+"ConstructorMethodName": "NewSub1",
   "SubCommandFunctionName": "Sub1Func",
   "SubCommandDescription": "Sub1 command description",
   "Parameters": [
