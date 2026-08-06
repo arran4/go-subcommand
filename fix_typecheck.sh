@@ -1,0 +1,58 @@
+cat << 'DIFF' | patch -p1
+--- a/template_recursive_test.go
++++ b/template_recursive_test.go
+@@ -8,9 +8,9 @@
+
+ func TestRecursiveTemplates(t *testing.T) {
+	overlay := fstest.MapFS{
+-		"templates/root.gotmpl":          {Data: []byte("root template")},
+-		"templates/subdir/nested.gotmpl": {Data: []byte("nested template")},
+-		"templates/subdir/ignore.txt":    {Data: []byte("should be ignored")},
++		"templates/root.gotmpl":          &fstest.MapFile{Data: []byte("root template")},
++		"templates/subdir/nested.gotmpl": &fstest.MapFile{Data: []byte("nested template")},
++		"templates/subdir/ignore.txt":    &fstest.MapFile{Data: []byte("should be ignored")},
+	}
+
+	templates, err := ParseTemplates(overlay)
+--- a/parsers/commentv1/commentv1.go
++++ b/parsers/commentv1/commentv1.go
+@@ -224,15 +224,15 @@
+
+	for name, sct := range node.SubCommands {
+-		sct.Command = cmd
+-		sct.Parent = parent
+-		sct.SubCommandName = name
++		sct.SubCommand.Command = cmd
++		sct.SubCommand.Parent = parent
++		sct.SubCommand.SubCommandName = name
+-		allocateName := sct.SubCommandName
++		allocateName := sct.SubCommand.SubCommandName
+		if allocateName == "" {
+			allocateName = "root"
+		}
+-		sct.SubCommandStructName = allocator.Allocate(allocateName)
+-		sct.ConstructorMethodName = allocator.Allocate("New" + sct.SubCommandStructName)
++		sct.SubCommand.SubCommandStructName = allocator.Allocate(allocateName)
++		sct.SubCommand.ConstructorMethodName = allocator.Allocate("New" + sct.SubCommand.SubCommandStructName)
+		c.SubCommands = append(c.SubCommands, sct.SubCommand)
+		sct.buildSubCommandNodes(allocator, cmd, sct.SubCommand)
+	}
+--- a/parsers/commentv1/commentv1_test.go
++++ b/parsers/commentv1/commentv1_test.go
+@@ -68,12 +68,12 @@
+			}
+
+-			if current.ImportPath != tt.importPath {
+-				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.ImportPath)
++			if current.SubCommand.ImportPath != tt.importPath {
++				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.SubCommand.ImportPath)
+			}
+
+-			if current.SubCommandPackageName != tt.packageName {
+-				t.Errorf("Expected SubCommandPackageName '%s', got '%s'", tt.packageName, current.SubCommandPackageName)
++			if current.SubCommand.SubCommandPackageName != tt.packageName {
++				t.Errorf("Expected SubCommandPackageName '%s', got '%s'", tt.packageName, current.SubCommand.SubCommandPackageName)
+			}
+		})
+	}
+DIFF

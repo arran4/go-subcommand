@@ -301,7 +301,7 @@ func TestGenerate_Clean(t *testing.T) {
 
 func TestGetProvenance(t *testing.T) {
 	os.Setenv("SOURCE_DATE_EPOCH", "1234567890")
-	defer os.Unsetenv("SOURCE_DATE_EPOCH")
+	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
 
 	prov := GetProvenance([]string{"usage=foo.txt"}, true, true)
 	if prov == nil {
@@ -326,15 +326,15 @@ func TestGetProvenanceExtensive(t *testing.T) {
 	}
 
 	// Test opt-in timestamp without epoch
-	os.Unsetenv("SOURCE_DATE_EPOCH")
+	_ = os.Unsetenv("SOURCE_DATE_EPOCH")
 	prov = GetProvenance(nil, false, true)
 	if prov.Timestamp == "" {
 		t.Error("Expected timestamp to be generated")
 	}
 
 	// Test with SOURCE_DATE_EPOCH
-	os.Setenv("SOURCE_DATE_EPOCH", "987654321")
-	defer os.Unsetenv("SOURCE_DATE_EPOCH")
+	_ = os.Setenv("SOURCE_DATE_EPOCH", "987654321")
+	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
 	prov = GetProvenance(nil, false, false) // should override the missing timestamp flag
 	if prov.Timestamp != "987654321" {
 		t.Errorf("Expected 987654321, got %v", prov.Timestamp)

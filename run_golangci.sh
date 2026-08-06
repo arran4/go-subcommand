@@ -1,0 +1,3 @@
+#!/bin/bash
+wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.1
+$(go env GOPATH)/bin/golangci-lint run ./...
