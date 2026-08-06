@@ -6,11 +6,13 @@
   "SubCommands": [
     {
       "SubCommandName": "sub1",
-      "SubCommandStructName": "Sub1"
+      "SubCommandStructName": "Sub1",
+      "ConstructorMethodName": "NewSub1"
     },
     {
       "SubCommandName": "sub2",
-      "SubCommandStructName": "Sub2"
+      "SubCommandStructName": "Sub2",
+      "ConstructorMethodName": "NewSub2"
     }
   ]
 }

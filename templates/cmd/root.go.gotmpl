@@ -143,7 +143,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{{end}}
 	{{range .SubCommands}}
 	{
-		subCmd := NewLazyCommand(func() Cmd { return c.New{{.SubCommandStructName}}() })
+		subCmd := NewLazyCommand(func() Cmd { return c.{{.ConstructorMethodName}}() })
 		c.Commands["{{.SubCommandName | lower}}"] = subCmd
 		{{range .Aliases}}
 		c.Commands["{{. | lower}}"] = subCmd

@@ -2,7 +2,8 @@
 {
   "MainCmdName": "myapp",
   "SubCommandName": "root",
-  "SubCommandStructName": "Root",
+"SubCommandStructName": "Root",
+"ConstructorMethodName": "NewRoot",
   "SubCommandDescription": "Root command",
   "Recursive": true,
   "SubCommands": [

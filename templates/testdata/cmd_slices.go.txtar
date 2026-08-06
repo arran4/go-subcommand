@@ -4,6 +4,7 @@
   "PackagePath": "example.com/mypkg",
   "SubCommandName": "myslicecmd",
   "SubCommandStructName": "MySliceCmd",
+  "ConstructorMethodName": "NewMySliceCmd",
   "SubCommandFunctionName": "MySliceFunc",
   "SubCommandDescription": "Slice command",
   "SubCommandPackageName": "mypkg",
@@ -13,7 +14,9 @@
     {
       "Name": "files",
       "Type": "[]string",
-      "FlagAliases": ["f"],
+      "FlagAliases": [
+        "f"
+      ],
       "Description": "Files list",
       "Default": "nil"
     },

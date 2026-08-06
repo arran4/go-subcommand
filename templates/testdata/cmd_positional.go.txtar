@@ -3,6 +3,7 @@
   "PackageName": "main",
   "SubCommandName": "mycmd",
   "SubCommandStructName": "MyCmd",
+  "ConstructorMethodName": "NewMyCmd",
   "SubCommandFunctionName": "MyCmdFunc",
   "SubCommandDescription": "My command description",
   "SubCommandPackageName": "mypkg",
@@ -19,7 +20,9 @@
     {
       "Name": "verbose",
       "Type": "bool",
-      "FlagAliases": ["v"],
+      "FlagAliases": [
+        "v"
+      ],
       "Description": "Enable verbose output"
     }
   ]

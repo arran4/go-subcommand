@@ -415,6 +415,8 @@ type SubCommand struct {
 	Aliases []string
 	// SubCommandStructName is the name of the generated struct for this subcommand.
 	SubCommandStructName string
+	// ConstructorMethodName is the name of the generated constructor method.
+	ConstructorMethodName string
 	// SubCommandFunctionName is the name of the function that implements this subcommand.
 	SubCommandFunctionName string
 	// SubCommandDescription is a short description.

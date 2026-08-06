@@ -3,6 +3,7 @@
   "PackageName": "main",
   "SubCommandName": "mycmd",
   "SubCommandStructName": "MyCmd",
+  "ConstructorMethodName": "NewMyCmd",
   "SubCommandFunctionName": "MyCmdFunc",
   "SubCommandDescription": "My command description",
   "SubCommandPackageName": "mypkg",
@@ -12,7 +13,9 @@
     {
       "Name": "timeout",
       "Type": "time.Duration",
-      "FlagAliases": ["t"],
+      "FlagAliases": [
+        "t"
+      ],
       "Description": "Timeout duration",
       "Default": "1s"
     },
@@ -23,10 +26,10 @@
       "Default": "3"
     },
     {
-        "Name": "config",
-        "Type": "string",
-        "Description": "Config file",
-        "Default": "config.yaml"
+      "Name": "config",
+      "Type": "string",
+      "Description": "Config file",
+      "Default": "config.yaml"
     }
   ]
 }
