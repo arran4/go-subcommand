@@ -14,9 +14,7 @@
     {
       "Name": "files",
       "Type": "[]string",
-      "FlagAliases": [
-        "f"
-      ],
+      "FlagAliases": ["f"],
       "Description": "Files list",
       "Default": "nil"
     },

@@ -13,9 +13,7 @@
     {
       "Name": "verbose",
       "Type": "bool",
-      "FlagAliases": [
-        "v"
-      ],
+      "FlagAliases": ["v"],
       "Description": "Enable verbose output"
     }
   ]
