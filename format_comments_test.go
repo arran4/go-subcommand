@@ -1,6 +1,7 @@
 package go_subcommand
 
 import (
+	_ "embed"
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
@@ -12,11 +13,11 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
+//go:embed testdata/format_regr.txtar
+var formatRegrData []byte
+
 func TestFormatSourceComments(t *testing.T) {
-	archive, err := txtar.ParseFile("testdata/format_regr.txtar")
-	if err != nil {
-		t.Fatal(err)
-	}
+	archive := txtar.Parse(formatRegrData)
 
 	tempDir, err := os.MkdirTemp("", "format_test")
 	if err != nil {
