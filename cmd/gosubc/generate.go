@@ -18,17 +18,19 @@ var _ Cmd = (*Generate)(nil)
 
 type Generate struct {
 	*RootCmd
-	Flags            *flag.FlagSet
-	dir              string
-	manDir           string
-	parserName       string
-	paths            []string
-	recursive        bool
-	force            bool
-	clean            bool
-	replaceTemplates []string
-	SubCommands      map[string]func() Cmd
-	CommandAction    func(c *Generate) error
+	Flags             *flag.FlagSet
+	dir               string
+	manDir            string
+	parserName        string
+	paths             []string
+	recursive         bool
+	force             bool
+	clean             bool
+	replaceTemplates  []string
+	projectProvenance bool
+	timestamp         bool
+	SubCommands       map[string]func() Cmd
+	CommandAction     func(c *Generate) error
 }
 
 type UsageDataGenerate struct {
@@ -165,6 +167,28 @@ func (c *Generate) Execute(args []string) error {
 					}
 				}
 				c.replaceTemplates = append(c.replaceTemplates, value)
+
+			case "projectProvenance", "project-provenance", "project":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.projectProvenance = b
+				} else {
+					c.projectProvenance = true
+				}
+
+			case "timestamp":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.timestamp = b
+				} else {
+					c.timestamp = true
+				}
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -229,11 +253,16 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.BoolVar(&v.clean, "clean", false, "Clean/remove generated files before generating")
 
 	set.Var((*StringSlice)(&v.replaceTemplates), "replace-template", "Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.")
+
+	set.BoolVar(&v.projectProvenance, "project-provenance", false, "Include target Git metadata in provenance")
+	set.BoolVar(&v.projectProvenance, "project", false, "Include target Git metadata in provenance")
+
+	set.BoolVar(&v.timestamp, "timestamp", false, "Include timestamp in provenance")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

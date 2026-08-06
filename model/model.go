@@ -23,6 +23,18 @@ var ReservedKeywords = []string{
 	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
 }
 
+// Provenance holds metadata about the code generation process.
+type Provenance struct {
+	Version           string
+	Commit            string
+	Dirty             bool
+	ReplacedTemplates bool
+	TemplateID        string
+	ProjectCommit     string
+	ProjectDirty      bool
+	Timestamp         string
+}
+
 // DataModel represents the parsed data model of the Go files, containing commands and package information.
 type DataModel struct {
 	// FileSet is the token.FileSet used for parsing.
@@ -33,6 +45,8 @@ type DataModel struct {
 	Commands []*Command
 	// GoVersion is the Go version from go.mod.
 	GoVersion string
+	// Provenance holds code generation metadata.
+	Provenance *Provenance
 }
 
 type SourceType string

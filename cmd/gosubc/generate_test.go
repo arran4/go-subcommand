@@ -35,6 +35,8 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "--clean")
 	args = append(args, "--replace-template")
 	args = append(args, "test")
+	args = append(args, "--project-provenance")
+	args = append(args, "--timestamp")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -62,6 +64,12 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.clean != true {
 		t.Errorf("Expected clean to be true, got '%v'", cmd.clean)
+	}
+	if cmd.projectProvenance != true {
+		t.Errorf("Expected projectProvenance to be true, got '%v'", cmd.projectProvenance)
+	}
+	if cmd.timestamp != true {
+		t.Errorf("Expected timestamp to be true, got '%v'", cmd.timestamp)
 	}
 }
 
