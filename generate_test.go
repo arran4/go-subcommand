@@ -300,7 +300,7 @@ func TestGenerate_Clean(t *testing.T) {
 }
 
 func TestGetProvenance(t *testing.T) {
-	os.Setenv("SOURCE_DATE_EPOCH", "1234567890")
+	_ = os.Setenv("SOURCE_DATE_EPOCH", "1234567890")
 	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
 
 	prov := GetProvenance([]string{"usage=foo.txt"}, true, true)
