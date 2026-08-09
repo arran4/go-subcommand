@@ -2,6 +2,8 @@ package model
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"path"
 	"slices"
@@ -21,6 +23,28 @@ var ReservedKeywords = []string{
 	"const", "fallthrough", "if", "range", "type",
 	"continue", "for", "import", "return", "var",
 	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
+}
+
+// DefaultExpressionFormatters is a registry of formatters for default expressions.
+// It allows extending how specific expressions (like os.Getenv) are formatted in usage output.
+var DefaultExpressionFormatters = []func(ast.Expr) (string, bool){
+	formatGetenv,
+}
+
+func formatGetenv(expr ast.Expr) (string, bool) {
+	if callExpr, ok := expr.(*ast.CallExpr); ok {
+		if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok {
+				if id.Name == "os" && sel.Sel.Name == "Getenv" && len(callExpr.Args) == 1 {
+					if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
+						envName := strings.Trim(lit.Value, "\"")
+						return "$" + envName, true
+					}
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 // DataModel represents the parsed data model of the Go files, containing commands and package information.
@@ -287,7 +311,17 @@ func (p *FunctionParameter) DefaultString() string {
 		return ""
 	}
 	def := p.Default
-	if p.Type == "string" && !strings.HasPrefix(def, "\"") {
+
+	if expr, err := parser.ParseExpr(def); err == nil {
+		for _, formatter := range DefaultExpressionFormatters {
+			if formatted, ok := formatter(expr); ok {
+				def = formatted
+				break
+			}
+		}
+	}
+
+	if p.Type == "string" && !strings.HasPrefix(def, "\"") && !strings.HasPrefix(def, "$") {
 		def = fmt.Sprintf("%q", def)
 	}
 	if p.Type == "string" && def == "\"\"" && !p.HasDefaultValue {
