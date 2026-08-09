@@ -1,4 +1,4 @@
-1. Actually, for `best-fit`, we can create a specific set of tests that skip one argument to verify the best-fit logic really works in the test.
-2. In `cmd_test.go.gotmpl`, when `.PositionalAlgorithm` is `best-fit`, we want to test best-fit explicitly. But how do we dynamically generate an argument list that skips one of the optional parameters to verify best-fit?
-3. It might be easier to simply test the normal path in the main `Execute` test, and generate an *additional* test block `TestMyCmd_Execute_BestFit` for `best-fit` that provides an argument sequence skipping the middle optional if it exists.
-4. Let's revert `cmd_test.go.gotmpl` and add `Test{{.SubCommandStructName}}_Execute_BestFit` if `{{- if eq .PositionalAlgorithm "best-fit" }}`
+1. The user points out that the testing block generated for `best-fit` might fail if there are custom types (since we blindly generate `args = append(args, "test")` etc., which would fail custom parsing if it's expecting an integer, enum, etc., or fail to compile if it can't map properly).
+2. They say "We might have to drop the tested on generated sources requirement... Sorry".
+3. I should revert the generated test for `best-fit` in `templates/cmd/cmd_test.go.gotmpl`. I will simply remove `Test{{.SubCommandStructName}}_Execute_BestFit` block from `cmd_test.go.gotmpl` and then also regenerate / update the testdata.
+4. I will then submit the PR.
