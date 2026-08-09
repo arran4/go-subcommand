@@ -461,18 +461,40 @@ func assignUsageFileNames(subCommands []*model.SubCommand) {
 }
 
 func sanitizeManFileName(mainCmdName, subCmdSequence string) string {
-	safeMain := filepath.Base(mainCmdName)
-	// subCmdSequence is space separated
+	safeMain := sanitizePathPart(mainCmdName)
+	if safeMain == "" {
+		safeMain = "unnamed"
+	}
+
 	parts := strings.Fields(subCmdSequence)
 	var safeParts []string
 	for _, p := range parts {
-		safeParts = append(safeParts, filepath.Base(p))
+		if safeP := sanitizePathPart(p); safeP != "" {
+			safeParts = append(safeParts, safeP)
+		}
 	}
+
 	safeSeq := strings.Join(safeParts, "-")
 	if safeSeq == "" {
 		return fmt.Sprintf("%s.1", safeMain)
 	}
 	return fmt.Sprintf("%s-%s.1", safeMain, safeSeq)
+}
+
+func sanitizePathPart(part string) string {
+	// Replace Windows separators first to normalize if on a non-Windows OS handling Windows paths
+	part = strings.ReplaceAll(part, "\\", "/")
+	// Use filepath.Rel to resolve path traversals securely against root
+	safe, err := filepath.Rel("/", filepath.Join("/", part))
+	if err != nil {
+		safe = part
+	}
+	// Extract just the filename to avoid creating subdirectories
+	safe = filepath.Base(safe)
+	if safe == "." || safe == "/" || safe == "\\" || safe == ".." {
+		return ""
+	}
+	return safe
 }
 
 func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
