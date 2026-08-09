@@ -25,6 +25,28 @@ var ReservedKeywords = []string{
 	"strconv", "time", "flag", "fmt", "os", "strings", "slices",
 }
 
+// DefaultExpressionFormatters is a registry of formatters for default expressions.
+// It allows extending how specific expressions (like os.Getenv) are formatted in usage output.
+var DefaultExpressionFormatters = []func(ast.Expr) (string, bool){
+	formatGetenv,
+}
+
+func formatGetenv(expr ast.Expr) (string, bool) {
+	if callExpr, ok := expr.(*ast.CallExpr); ok {
+		if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok {
+				if id.Name == "os" && sel.Sel.Name == "Getenv" && len(callExpr.Args) == 1 {
+					if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
+						envName := strings.Trim(lit.Value, "\"")
+						return "$" + envName, true
+					}
+				}
+			}
+		}
+	}
+	return "", false
+}
+
 // DataModel represents the parsed data model of the Go files, containing commands and package information.
 type DataModel struct {
 	// FileSet is the token.FileSet used for parsing.
@@ -291,16 +313,10 @@ func (p *FunctionParameter) DefaultString() string {
 	def := p.Default
 
 	if expr, err := parser.ParseExpr(def); err == nil {
-		if callExpr, ok := expr.(*ast.CallExpr); ok {
-			if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
-				if id, ok := sel.X.(*ast.Ident); ok {
-					if id.Name == "os" && sel.Sel.Name == "Getenv" && len(callExpr.Args) == 1 {
-						if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
-							envName := strings.Trim(lit.Value, "\"")
-							def = "$" + envName
-						}
-					}
-				}
+		for _, formatter := range DefaultExpressionFormatters {
+			if formatted, ok := formatter(expr); ok {
+				def = formatted
+				break
 			}
 		}
 	}
