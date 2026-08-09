@@ -332,7 +332,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 		}
 	}
 
-{{- template "positional_args_parsing" .Parameters }}
+{{- template "positional_args_parsing" . }}
 
 	{{if .SubCommandFunctionName}}
 	if c.CommandAction != nil {
