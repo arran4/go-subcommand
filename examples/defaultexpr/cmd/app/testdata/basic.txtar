@@ -1,0 +1,2 @@
+exec app
+stdout 'cores: \d+, limit: 2147483647'

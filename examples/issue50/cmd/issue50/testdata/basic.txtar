@@ -1,0 +1,2 @@
+exec issue50 parent
+stdout 'Parent verbose: false'

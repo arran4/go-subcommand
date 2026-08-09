@@ -1,0 +1,2 @@
+exec returns simple
+stdout 'SimpleError success'

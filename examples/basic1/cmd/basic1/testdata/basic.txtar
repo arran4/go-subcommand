@@ -1,0 +1,2 @@
+exec basic1 example1
+stdout 'Caught me'
