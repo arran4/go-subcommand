@@ -108,6 +108,8 @@ type Command struct {
 	Description string
 	// ExtendedHelp is the long description/help text for the command.
 	ExtendedHelp string
+	// PositionalAlgorithm specifies the matching algorithm for optional positional arguments (e.g., "best-fit" or "greedy").
+	PositionalAlgorithm string
 	// FunctionName is the name of the function definition.
 	FunctionName string
 	// DefinitionFile is the path to the file where the command is defined.
@@ -457,6 +459,8 @@ type SubCommand struct {
 	SubCommandDescription string
 	// SubCommandExtendedHelp is the long help text.
 	SubCommandExtendedHelp string
+	// PositionalAlgorithm specifies the matching algorithm for optional positional arguments (e.g., "best-fit" or "greedy").
+	PositionalAlgorithm string
 	// ImportPath is the import path where the subcommand is defined.
 	ImportPath string
 	// SubCommandPackageName is the package name where the subcommand is defined.
