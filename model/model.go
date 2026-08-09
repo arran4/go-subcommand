@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"path"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -298,11 +297,7 @@ func (p *FunctionParameter) DefaultString() string {
 					if id.Name == "os" && sel.Sel.Name == "Getenv" && len(callExpr.Args) == 1 {
 						if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
 							envName := strings.Trim(lit.Value, "\"")
-							if runtime.GOOS == "windows" {
-								def = "%" + envName + "%"
-							} else {
-								def = "$" + envName
-							}
+							def = "$" + envName
 						}
 					}
 				}
@@ -310,7 +305,7 @@ func (p *FunctionParameter) DefaultString() string {
 		}
 	}
 
-	if p.Type == "string" && !strings.HasPrefix(def, "\"") {
+	if p.Type == "string" && !strings.HasPrefix(def, "\"") && !strings.HasPrefix(def, "$") {
 		def = fmt.Sprintf("%q", def)
 	}
 	if p.Type == "string" && def == "\"\"" && !p.HasDefaultValue {
