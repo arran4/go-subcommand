@@ -2,8 +2,11 @@ package model
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"path"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -287,6 +290,26 @@ func (p *FunctionParameter) DefaultString() string {
 		return ""
 	}
 	def := p.Default
+
+	if expr, err := parser.ParseExpr(def); err == nil {
+		if callExpr, ok := expr.(*ast.CallExpr); ok {
+			if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
+				if id, ok := sel.X.(*ast.Ident); ok {
+					if id.Name == "os" && sel.Sel.Name == "Getenv" && len(callExpr.Args) == 1 {
+						if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
+							envName := strings.Trim(lit.Value, "\"")
+							if runtime.GOOS == "windows" {
+								def = "%" + envName + "%"
+							} else {
+								def = "$" + envName
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if p.Type == "string" && !strings.HasPrefix(def, "\"") {
 		def = fmt.Sprintf("%q", def)
 	}
