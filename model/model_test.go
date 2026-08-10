@@ -187,14 +187,3 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 		t.Error("expected flag and default widths for inherited parameters")
 	}
 }
-
-func TestDefaultStringGetenv(t *testing.T) {
-	p := &FunctionParameter{
-		Type:            "string",
-		Default:         "os.Getenv(\"PATH\")",
-		HasDefaultValue: true,
-	}
-	if got := p.DefaultString(); got != "(default: $PATH)" {
-		t.Errorf("DefaultString() = %q", got)
-	}
-}

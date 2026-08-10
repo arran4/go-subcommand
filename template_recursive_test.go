@@ -8,9 +8,9 @@ import (
 func TestRecursiveTemplateParsing(t *testing.T) {
 	// Create a mock FS with templates in subdirectories
 	mockFS := fstest.MapFS{
-		"templates/root.gotmpl":          {Data: []byte("root template")},
-		"templates/subdir/nested.gotmpl": {Data: []byte("nested template")},
-		"templates/subdir/ignore.txt":    {Data: []byte("should be ignored")},
+		"templates/root.gotmpl":          &fstest.MapFile{Data: []byte("root template")},
+		"templates/subdir/nested.gotmpl": &fstest.MapFile{Data: []byte("nested template")},
+		"templates/subdir/ignore.txt":    &fstest.MapFile{Data: []byte("should be ignored")},
 	}
 
 	tmpl, err := ParseTemplates(mockFS)

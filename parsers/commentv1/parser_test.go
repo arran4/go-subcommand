@@ -184,7 +184,6 @@ func TestParseSubCommandComments(t *testing.T) {
 		wantExtendedHelp       string
 		wantAliases            []string
 		wantParams             map[string]ParsedParam
-		wantPosAlg             string
 		wantOk                 bool
 	}{
 		{
@@ -306,7 +305,7 @@ Flags:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotAliases, gotParams, gotPosAlg, gotOk := ParseSubCommandComments(tt.text)
+			gotCmdName, gotSubCommandSequence, gotDescription, gotExtendedHelp, gotAliases, gotParams, gotOk := ParseSubCommandComments(tt.text)
 			if gotCmdName != tt.wantCmdName {
 				t.Errorf("gotCmdName = %v, want %v", gotCmdName, tt.wantCmdName)
 			}
@@ -348,9 +347,6 @@ Flags:
 				}
 			}
 
-			if gotPosAlg != tt.wantPosAlg {
-				t.Errorf("gotPosAlg = %q, want %q", gotPosAlg, tt.wantPosAlg)
-			}
 			if gotOk != tt.wantOk {
 				t.Errorf("gotOk = %v, want %v", gotOk, tt.wantOk)
 			}

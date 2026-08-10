@@ -91,7 +91,7 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 
 				// Extract existing parameters info to preserve descriptions/defaults not in signature
 				// ParseSubCommandComments returns map[name]ParsedParam
-				_, _, _, _, _, parsedParams, _, _ := commentv1.ParseSubCommandComments(text)
+				_, _, _, _, _, parsedParams, _ := commentv1.ParseSubCommandComments(text)
 
 				var params []*model.FunctionParameter
 				for _, p := range funcDecl.Type.Params.List {
@@ -179,19 +179,15 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 					// Name:
 					namePart := p.Name + ":"
 					// Flags:
-					var flagsBuilder strings.Builder
-					for i, f := range p.FlagAliases {
-						if i > 0 {
-							flagsBuilder.WriteByte(' ')
-						}
+					flagsPart := ""
+					for _, f := range p.FlagAliases {
+						prefix := "-"
 						if len(f) > 1 {
-							flagsBuilder.WriteString("--")
-						} else {
-							flagsBuilder.WriteString("-")
+							prefix = "--"
 						}
-						flagsBuilder.WriteString(f)
+						flagsPart += prefix + f + " "
 					}
-					flagsPart := flagsBuilder.String()
+					flagsPart = strings.TrimSpace(flagsPart)
 
 					// Default:
 					defaultPart := ""
@@ -278,7 +274,7 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 						Text:  "// " + nl,
 						Slash: pos,
 					}
-					// Ensure empty lines are just "//"
+					// Fix empty lines to be just "//"
 					if strings.TrimSpace(nl) == "" {
 						c.Text = "//"
 					}
