@@ -247,18 +247,22 @@ To enforce that a specific flag must be provided at runtime, mark the parameter 
 
 ### Nesting Commands
 
-Nesting is implicit based on the command path string.
+Nesting is implicit based on the command path string. You can nest commands arbitrarily deep (e.g., subcommands, sub-subcommands, etc.) simply by adding more words to the path.
 
 ```go
 // Root command: `app`
 // Child: `app users`
-// Grandchild: `app users create`
+// Grandchild (Sub-subcommand): `app users create`
+// Great-grandchild (Sub-sub-subcommand): `app users create admin`
 
 // CreateUser is a subcommand `app users create`
 func CreateUser(...) { ... }
 
 // ListUsers is a subcommand `app users list`
 func ListUsers(...) { ... }
+
+// CreateAdminUser is a subcommand `app users create admin`
+func CreateAdminUser(...) { ... }
 ```
 
 ### Parent Flags (Inheritance)
