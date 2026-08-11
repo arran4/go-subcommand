@@ -33,13 +33,14 @@ func wrapText(text string, indent int, width int) string {
 		width = indent + 10 // minimum sensible width
 	}
 	avail := width - indent
+	indentStr := "\n" + strings.Repeat(" ", indent)
 
 	var out strings.Builder
 	lines := strings.Split(text, "\n")
 
 	for i, line := range lines {
 		if i > 0 {
-			out.WriteString("\n" + strings.Repeat(" ", indent))
+			out.WriteString(indentStr)
 		}
 
 		words := strings.Fields(line)
@@ -50,7 +51,7 @@ func wrapText(text string, indent int, width int) string {
 		currentLen := 0
 		for j, word := range words {
 			if j > 0 && currentLen+1+len(word) > avail {
-				out.WriteString("\n" + strings.Repeat(" ", indent))
+				out.WriteString(indentStr)
 				currentLen = 0
 			} else if j > 0 {
 				out.WriteString(" ")
