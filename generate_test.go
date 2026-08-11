@@ -304,9 +304,6 @@ func TestGetProvenance(t *testing.T) {
 	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
 
 	prov := GetProvenance([]string{"usage=foo.txt"}, true, true)
-	if prov == nil {
-		t.Fatal("Expected provenance, got nil")
-	}
 	if prov.Timestamp != "1234567890" {
 		t.Errorf("Expected Timestamp 1234567890, got %s", prov.Timestamp)
 	}
@@ -318,9 +315,6 @@ func TestGetProvenance(t *testing.T) {
 func TestGetProvenanceExtensive(t *testing.T) {
 	// Test empty / defaults
 	prov := GetProvenance(nil, false, false)
-	if prov == nil {
-		t.Fatal("Expected prov")
-	}
 	if prov.ProjectCommit != "" || prov.Timestamp != "" || prov.ReplacedTemplates {
 		t.Errorf("Unexpected default provenance values: %+v", prov)
 	}

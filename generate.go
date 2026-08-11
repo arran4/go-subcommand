@@ -328,8 +328,8 @@ func CleanGeneratedFiles(dir string, manDir string) error {
 }
 
 // GetProvenance constructs the provenance metadata.
-func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp bool) *model.Provenance {
-	prov := &model.Provenance{}
+func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp bool) model.Provenance {
+	prov := model.Provenance{}
 
 	// Generator build info
 	if info, ok := debug.ReadBuildInfo(); ok {
@@ -420,7 +420,8 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	dataModel.GoVersion = getGoVersion(inputFS)
-	dataModel.Provenance = GetProvenance(replaceTemplates, projectProvenance, timestamp)
+	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp)
+	dataModel.Provenance = &prov
 
 	collector := NewCollectingFileWriter()
 
