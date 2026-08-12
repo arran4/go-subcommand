@@ -369,7 +369,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run generation with --clean
-        run: go run ./cmd/gosubc generate --clean
+        run: go run ./cmd/gosubc generate --clean --project-provenance=false --timestamp=false
 
       - name: Verify Examples (go run & test)
         run: |
