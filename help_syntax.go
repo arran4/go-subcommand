@@ -58,10 +58,6 @@ Variadic Arguments:
 
   Use '...' or 'min...max' to specify variadic arguments.
 
-Positional Algorithm:
-
-  Use '[positional-algorithm: best-fit]' in your command description to switch to the best-fit matching algorithm for optional positional arguments.
-
   func MyCommand(
       files ...string, // @3... (min: 1)
   ) error { ... }

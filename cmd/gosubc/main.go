@@ -17,6 +17,13 @@ var (
 	date    = "unknown"
 )
 
+// Provenance
+var (
+	GeneratorVersion = "(devel)"
+	GeneratedAt      = ""
+	ProjectCommit    = ""
+)
+
 func main() {
 	root, err := NewRoot("gosubc", version, commit, date)
 	if err != nil {

@@ -17,6 +17,13 @@ var (
 	date    = "unknown"
 )
 
+// Provenance
+var (
+	GeneratorVersion = "{{if .Provenance}}{{ .Provenance.Version }}{{end}}"
+	GeneratedAt      = "{{if .Provenance}}{{ .Provenance.Timestamp }}{{end}}"
+	ProjectCommit    = "{{if .Provenance}}{{ .Provenance.ProjectCommit }}{{end}}"
+)
+
 func main() {
 	root, err := NewRoot("{{.MainCmdName}}", version, commit, date)
 	if err != nil {

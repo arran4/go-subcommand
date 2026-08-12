@@ -1092,7 +1092,7 @@ func (c *RootCmd) Execute(args []string) error {
 
 	{{- if .FunctionName }}
 
-{{- template "positional_args_parsing" . }}
+{{- template "positional_args_parsing" .Parameters }}
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {

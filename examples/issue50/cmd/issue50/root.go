@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/arran4/go-subcommand/examples/issue50"
 	"io"
 	"os"
 	"slices"
@@ -12,7 +13,6 @@ import (
 	"sync"
 
 	"errors"
-	"github.com/arran4/go-subcommand/examples/issue50"
 	"github.com/arran4/go-subcommand/examples/issue50/cmd"
 	"github.com/arran4/go-subcommand/examples/issue50/cmd/issue50/templates"
 )
@@ -171,9 +171,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) error {
 	var remainingArgs []string
+	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
+			dashDashSeen = true
 			remainingArgs = append(remainingArgs, args[i+1:]...)
 			break
 		}
@@ -223,7 +225,7 @@ func (c *RootCmd) Execute(args []string) error {
 		}
 	}
 
-	if len(remainingArgs) > 0 {
+	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}

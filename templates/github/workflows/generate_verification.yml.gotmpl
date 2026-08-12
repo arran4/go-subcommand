@@ -26,7 +26,7 @@ jobs:
         run: go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 
       - name: Run generation
-        run: gosubc generate
+        run: gosubc generate --project-provenance=false --timestamp=false
 
       - name: Check for changes
         run: |

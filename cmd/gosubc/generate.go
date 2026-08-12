@@ -18,17 +18,22 @@ var _ Cmd = (*Generate)(nil)
 
 type Generate struct {
 	*RootCmd
-	Flags            *flag.FlagSet
-	dir              string
-	manDir           string
-	parserName       string
-	paths            []string
-	recursive        bool
-	force            bool
-	clean            bool
-	replaceTemplates []string
-	SubCommands      map[string]func() Cmd
-	CommandAction    func(c *Generate) error
+	Flags             *flag.FlagSet
+	dir               string
+	manDir            string
+	parserName        string
+	paths             []string
+	recursive         bool
+	force             bool
+	clean             bool
+	replaceTemplates  []string
+	projectProvenance bool
+	timestamp         bool
+	provVersion       string
+	provCommit        string
+	provDate          string
+	SubCommands       map[string]func() Cmd
+	CommandAction     func(c *Generate) error
 }
 
 type UsageDataGenerate struct {
@@ -165,6 +170,61 @@ func (c *Generate) Execute(args []string) error {
 					}
 				}
 				c.replaceTemplates = append(c.replaceTemplates, value)
+
+			case "projectProvenance", "project-provenance", "project":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.projectProvenance = b
+				} else {
+					c.projectProvenance = true
+				}
+
+			case "timestamp":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.timestamp = b
+				} else {
+					c.timestamp = true
+				}
+
+			case "provVersion", "prov-version":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.provVersion = value
+
+			case "provCommit", "prov-commit":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.provCommit = value
+
+			case "provDate", "prov-date":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.provDate = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -229,11 +289,22 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.BoolVar(&v.clean, "clean", false, "Clean/remove generated files before generating")
 
 	set.Var((*StringSlice)(&v.replaceTemplates), "replace-template", "Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.")
+
+	set.BoolVar(&v.projectProvenance, "project-provenance", true, "Include target Git metadata in provenance")
+	set.BoolVar(&v.projectProvenance, "project", true, "Include target Git metadata in provenance")
+
+	set.BoolVar(&v.timestamp, "timestamp", true, "Include timestamp in provenance")
+
+	set.StringVar(&v.provVersion, "prov-version", "", "Overwrite provenance version")
+
+	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
+
+	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

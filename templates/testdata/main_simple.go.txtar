@@ -32,6 +32,13 @@ var (
 	date    = "unknown"
 )
 
+// Provenance
+var (
+	GeneratorVersion = ""
+	GeneratedAt      = ""
+	ProjectCommit    = ""
+)
+
 func main() {
 	root, err := NewRoot("mycmd", version, commit, date)
 	if err != nil {

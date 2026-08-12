@@ -287,7 +287,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if s.Recv != nil {
 				continue
 			}
-			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, posAlg, ok := ParseSubCommandComments(s.Doc.Text())
+			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -644,7 +644,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
 				SubCommandName:         subCommandName,
-				PositionalAlgorithm:    posAlg,
 				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection
 				DefinitionFile: filename,
@@ -664,7 +663,6 @@ var (
 	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
 	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
 	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
-	rePosAlg          = regexp.MustCompile(`(?i)[[(]positional-algorithm:\s*([a-zA-Z_-]+)[\])]`)
 	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?|[^),]+))`)
 	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
@@ -691,7 +689,7 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
-func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, positionalAlgorithm string, ok bool) {
+func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	var extendedHelpLines []string
@@ -738,11 +736,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 			rest := strings.TrimSpace(subCmdPart)
 
-			if matches := rePosAlg.FindStringSubmatch(rest); matches != nil {
-				positionalAlgorithm = strings.TrimSpace(matches[1])
-				rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
-			}
-
 			// Check for inline aliases
 			// Format: (aliases: a, b) or (aka: a, b)
 			// Regex to capture content inside parens
@@ -759,11 +752,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 				rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
 			}
 
-			if matches := rePosAlg.FindStringSubmatch(rest); matches != nil {
-				positionalAlgorithm = strings.TrimSpace(matches[1])
-				rest = strings.TrimSpace(strings.Replace(rest, matches[0], "", 1))
-			}
-
 			if strings.HasPrefix(rest, "that ") {
 				description = strings.TrimPrefix(rest, "that ")
 			} else if strings.HasPrefix(rest, "-- ") {
@@ -775,10 +763,6 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		lowerTrimmedLine := strings.ToLower(trimmedLine)
-		if matches := rePosAlg.FindStringSubmatch(trimmedLine); matches != nil {
-			positionalAlgorithm = strings.TrimSpace(matches[1])
-			continue
-		}
 		if strings.HasPrefix(lowerTrimmedLine, DirectiveAliasesPrefix) || strings.HasPrefix(lowerTrimmedLine, DirectiveAliasPrefix) {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {

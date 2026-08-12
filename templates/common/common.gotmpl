@@ -159,8 +159,7 @@
 {{- end -}}
 
 {{- define "positional_args_parsing" -}}
-{{- $params := .Parameters -}}
-{{- $algo := .PositionalAlgorithm -}}
+{{- $params := . -}}
 {{- $posArgs := 0 }}
 {{- $reqPosArgs := 0 }}
 	{{- range $params }}
@@ -179,116 +178,6 @@
 		return fmt.Errorf("expected at least {{$reqPosArgs}} positional arguments, got %d", len(remainingArgs))
 	}
 	{{- end }}
-
-	{{- if eq $algo "best-fit" }}
-	// best-fit algorithm for optional positional arguments
-	{{- if gt $posArgs 0 }}
-	currentArgIndex := 0
-	{{- end }}
-	{{- range $params }}
-		{{- if .IsPositional }}
-			{{- if .IsVarArg }}
-	// Handle vararg {{.Name}}
-	{
-		varArgs := remainingArgs[currentArgIndex:]
-		{{- if gt .VarArgMin 0}}
-		if len(varArgs) < {{.VarArgMin}} {
-			return fmt.Errorf("expected at least {{.VarArgMin}} arguments for {{.Name}}, got %d", len(varArgs))
-		}
-		{{- end }}
-		{{- if gt .VarArgMax 0}}
-		if len(varArgs) > {{.VarArgMax}} {
-			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
-		}
-		{{- end }}
-		{{- if and .IsString (not .HasCustomParser) }}
-		c.{{.Name}} = varArgs
-		{{- else }}
-		for _, arg := range varArgs {
-			v, err := {{.ParserCall "arg"}}
-			if err != nil {
-				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}}: %s", arg)
-			}
-			c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
-		}
-		{{- end }}
-		currentArgIndex += len(varArgs)
-	}
-			{{- else }}
-	// Handle positional argument {{.Name}} (best-fit)
-	{
-		var assigned bool
-		{{- if not .HasDefaultValue }}
-		// Required positional
-		if currentArgIndex < len(remainingArgs) {
-			argVal := remainingArgs[currentArgIndex]
-			{{- if and .IsString (not .HasCustomParser) }}
-			c.{{.Name}} = argVal
-			assigned = true
-			{{- else }}
-			v, err := {{.ParserCall "argVal"}}
-			if err != nil {
-				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", currentArgIndex, argVal)
-			}
-			c.{{.Name}} = {{.CastCode "v"}}
-			assigned = true
-			{{- end }}
-			if assigned {
-				currentArgIndex++
-			}
-		}
-		{{- else }}
-		// Optional positional
-		if currentArgIndex < len(remainingArgs) {
-			argVal := remainingArgs[currentArgIndex]
-			{{- if and .IsString (not .HasCustomParser) }}
-			c.{{.Name}} = argVal
-			assigned = true
-			{{- else }}
-			v, err := {{.ParserCall "argVal"}}
-			if err == nil {
-				c.{{.Name}} = {{.CastCode "v"}}
-				assigned = true
-			}
-			{{- end }}
-			if assigned {
-				currentArgIndex++
-			}
-		}
-		if !assigned {
-			{{- if .HasDefaultValue }}
-				{{- $default := .Default }}
-				{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
-				{{- else if isDefaultExpression .Default }}{{ $default = .Default }}
-				{{- end }}
-				{{- if .HasCustomParser }}
-			parsed, err := {{.ParserCall $default}}
-			if err != nil {
-				return fmt.Errorf("invalid default value for {{.Name}}: %w", err)
-			}
-			c.{{.Name}} = {{.CastCode "parsed"}}
-				{{- else if and (eq .Type "time.Duration") (not (isDefaultExpression .Default)) }}
-			if d, err := time.ParseDuration("{{.Default}}"); err == nil {
-				c.{{.Name}} = d
-			}
-				{{- else if and .IsString (not .HasCustomParser) }}
-			c.{{.Name}} = {{$default}}
-				{{- else }}
-			v, err := {{.ParserCall $default}}
-			if err != nil {
-				return fmt.Errorf("invalid default value for {{.Name}}: %w", err)
-			}
-			c.{{.Name}} = {{.CastCode "v"}}
-				{{- end }}
-			{{- end }}
-		}
-		{{- end }}
-	}
-			{{- end }}
-		{{- end }}
-	{{- end }}
-
-	{{- else }}
 
 	{{- range $params }}
 		{{- if .IsPositional }}
@@ -367,8 +256,6 @@
 	}
 			{{- end }}
 		{{- end }}
-	{{- end }}
-
 	{{- end }}
 {{- end -}}
 

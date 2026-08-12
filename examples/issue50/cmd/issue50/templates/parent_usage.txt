@@ -11,6 +11,5 @@ Subcommands:
     usage        Print this usage message
 
 
-
 Flags:
     --verbose, -v    Verbosity level
