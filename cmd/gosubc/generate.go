@@ -192,11 +192,38 @@ func (c *Generate) Execute(args []string) error {
 				} else {
 					c.timestamp = true
 				}
-			case "prov-version":
+
+			case "provVersion", "prov-version":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
 				c.provVersion = value
-			case "prov-commit":
+
+			case "provCommit", "prov-commit":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
 				c.provCommit = value
-			case "prov-date":
+
+			case "provDate", "prov-date":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
 				c.provDate = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
@@ -267,8 +294,11 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.BoolVar(&v.projectProvenance, "project", true, "Include target Git metadata in provenance")
 
 	set.BoolVar(&v.timestamp, "timestamp", true, "Include timestamp in provenance")
+
 	set.StringVar(&v.provVersion, "prov-version", "", "Overwrite provenance version")
+
 	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
+
 	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
 	set.Usage = v.Usage
 

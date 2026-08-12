@@ -37,6 +37,12 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--project-provenance")
 	args = append(args, "--timestamp")
+	args = append(args, "--prov-version")
+	args = append(args, "test")
+	args = append(args, "--prov-commit")
+	args = append(args, "test")
+	args = append(args, "--prov-date")
+	args = append(args, "test")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -70,6 +76,15 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.timestamp != true {
 		t.Errorf("Expected timestamp to be true, got '%v'", cmd.timestamp)
+	}
+	if cmd.provVersion != "test" {
+		t.Errorf("Expected provVersion to be 'test', got '%v'", cmd.provVersion)
+	}
+	if cmd.provCommit != "test" {
+		t.Errorf("Expected provCommit to be 'test', got '%v'", cmd.provCommit)
+	}
+	if cmd.provDate != "test" {
+		t.Errorf("Expected provDate to be 'test', got '%v'", cmd.provDate)
 	}
 }
 

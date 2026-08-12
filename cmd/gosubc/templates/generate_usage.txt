@@ -28,3 +28,6 @@ Flags:
     --replace-template []string                                Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
     --project-provenance, --project   (default: true)          Include target Git metadata in provenance
     --timestamp                       (default: true)          Include timestamp in provenance
+    --prov-version string             (default: "")            Overwrite provenance version
+    --prov-commit string              (default: "")            Overwrite provenance commit
+    --prov-date string                (default: "")            Overwrite provenance date
