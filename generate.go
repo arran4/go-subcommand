@@ -248,7 +248,10 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 //	replaceTemplates:	--replace-template			Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
 //	projectProvenance: --project-provenance (default: true) Include target-project Git metadata in provenance
 //	timestamp:         --timestamp (default: true) Include timestamp in provenance
-func Generate(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool) error {
+//	provVersion:       --prov-version    (default: "") Overwrite provenance version
+//	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
+//	provDate:          --prov-date       (default: "") Overwrite provenance date
+func Generate(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error {
 	if dir == "." {
 		if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
 			if root, err := findModuleRoot("."); err == nil {
@@ -259,7 +262,7 @@ func Generate(dir string, manDir string, parserName string, paths []string, recu
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	}, force, clean, replaceTemplates, projectProvenance, timestamp)
+	}, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate)
 }
 
 func findModuleRoot(path string) (string, error) {
@@ -328,7 +331,7 @@ func CleanGeneratedFiles(dir string, manDir string) error {
 }
 
 // GetProvenance constructs the provenance metadata.
-func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp bool) model.Provenance {
+func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) model.Provenance {
 	prov := model.Provenance{}
 
 	// Generator build info
@@ -342,6 +345,14 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 				prov.Dirty = true
 			}
 		}
+	}
+
+	if provVersion != "" {
+		prov.Version = provVersion
+	}
+	if provCommit != "" {
+		prov.Commit = provCommit
+		prov.ProjectCommit = provCommit
 	}
 
 	// Target project info
@@ -358,7 +369,9 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 	}
 
 	// Timestamp
-	if ts := os.Getenv("SOURCE_DATE_EPOCH"); ts != "" {
+	if provDate != "" {
+		prov.Timestamp = provDate
+	} else if ts := os.Getenv("SOURCE_DATE_EPOCH"); ts != "" {
 		prov.Timestamp = ts
 	} else if timestamp {
 		prov.Timestamp = time.Now().UTC().Format(time.RFC3339)
@@ -373,7 +386,7 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 }
 
 // GenerateWithFS generates code using provided FS and Writer. Optional variadic args ops can provide custom dependencies such as readFS (fs.FS).
-func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, ops ...any) error {
+func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error {
 	if clean {
 		if err := CleanGeneratedFiles(dir, manDir); err != nil {
 			return fmt.Errorf("failed to clean generated files: %w", err)
@@ -420,7 +433,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	dataModel.GoVersion = getGoVersion(inputFS)
-	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp)
+	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate)
 	dataModel.Provenance = &prov
 
 	collector := NewCollectingFileWriter()

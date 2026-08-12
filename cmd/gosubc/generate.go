@@ -29,6 +29,9 @@ type Generate struct {
 	replaceTemplates  []string
 	projectProvenance bool
 	timestamp         bool
+	provVersion       string
+	provCommit        string
+	provDate          string
 	SubCommands       map[string]func() Cmd
 	CommandAction     func(c *Generate) error
 }
@@ -189,6 +192,12 @@ func (c *Generate) Execute(args []string) error {
 				} else {
 					c.timestamp = true
 				}
+			case "prov-version":
+				c.provVersion = value
+			case "prov-commit":
+				c.provCommit = value
+			case "prov-date":
+				c.provDate = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -258,11 +267,14 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.BoolVar(&v.projectProvenance, "project", true, "Include target Git metadata in provenance")
 
 	set.BoolVar(&v.timestamp, "timestamp", true, "Include timestamp in provenance")
+	set.StringVar(&v.provVersion, "prov-version", "", "Overwrite provenance version")
+	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
+	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

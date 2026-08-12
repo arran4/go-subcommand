@@ -36,7 +36,7 @@ func Sub() {}
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -46,7 +46,7 @@ func Sub() {}
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false)
+	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func Cmd2() {}
 	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
-	}, false, false, nil, false, false)
+	}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
@@ -135,7 +135,7 @@ func Root() {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, fs)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, "", "", "", fs)
 	if err != nil {
 		t.Fatalf("GenerateWithFS with replaceTemplates failed: %v", err)
 	}
@@ -247,7 +247,7 @@ func Root(cores int, limit int) {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false)
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("GenerateWithFS failed: %v", err)
 	}
@@ -278,14 +278,14 @@ func TestGenerate_Clean(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
 	customFile := filepath.Join(dir, "cmd", "app", "custom.go")
 	writeRuntimeFixture(t, customFile, "package app\n// Custom user file\n")
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil, false, false); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate with clean failed: %v", err)
 	}
 
@@ -303,7 +303,7 @@ func TestGetProvenance(t *testing.T) {
 	_ = os.Setenv("SOURCE_DATE_EPOCH", "1234567890")
 	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
 
-	prov := GetProvenance([]string{"usage=foo.txt"}, true, true)
+	prov := GetProvenance([]string{"usage=foo.txt"}, true, true, "", "", "")
 	if prov.Timestamp != "1234567890" {
 		t.Errorf("Expected Timestamp 1234567890, got %s", prov.Timestamp)
 	}
@@ -314,14 +314,14 @@ func TestGetProvenance(t *testing.T) {
 
 func TestGetProvenanceExtensive(t *testing.T) {
 	// Test empty / defaults
-	prov := GetProvenance(nil, false, false)
+	prov := GetProvenance(nil, false, false, "", "", "")
 	if prov.ProjectCommit != "" || prov.Timestamp != "" || prov.ReplacedTemplates {
 		t.Errorf("Unexpected default provenance values: %+v", prov)
 	}
 
 	// Test opt-in timestamp without epoch
 	_ = os.Unsetenv("SOURCE_DATE_EPOCH")
-	prov = GetProvenance(nil, false, true)
+	prov = GetProvenance(nil, false, true, "", "", "")
 	if prov.Timestamp == "" {
 		t.Error("Expected timestamp to be generated")
 	}
@@ -329,13 +329,13 @@ func TestGetProvenanceExtensive(t *testing.T) {
 	// Test with SOURCE_DATE_EPOCH
 	_ = os.Setenv("SOURCE_DATE_EPOCH", "987654321")
 	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
-	prov = GetProvenance(nil, false, false) // should override the missing timestamp flag
+	prov = GetProvenance(nil, false, false, "", "", "") // should override the missing timestamp flag
 	if prov.Timestamp != "987654321" {
 		t.Errorf("Expected 987654321, got %v", prov.Timestamp)
 	}
 
 	// Test template replacments
-	prov = GetProvenance([]string{"a=b", "c=d"}, false, false)
+	prov = GetProvenance([]string{"a=b", "c=d"}, false, false, "", "", "")
 	if !prov.ReplacedTemplates {
 		t.Error("Expected replaced templates to be true")
 	}
