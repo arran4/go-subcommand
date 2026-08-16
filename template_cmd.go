@@ -49,7 +49,7 @@ func exportDir(output string) error {
 			return err
 		}
 
-		return os.WriteFile(targetPath, content, 0644)
+		return os.WriteFile(targetPath, content, 0600)
 	})
 
 	if err != nil {
@@ -90,7 +90,7 @@ func exportTxtar(output string) error {
 	}
 
 	content := txtar.Format(archive)
-	if err := os.WriteFile(output, content, 0644); err != nil {
+	if err := os.WriteFile(output, content, 0600); err != nil {
 		return fmt.Errorf("failed to write txtar file %s: %w", output, err)
 	}
 
