@@ -6,12 +6,6 @@
 	{{- if gt (len .) 2 }}{{ $excludedImport = index . 2 }}{{ end -}}
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
-	{{- $hasFileIO := false }}
-	{{- range $params }}
-	{{- if or .IsWriter .IsReader .IsFile }}
-	{{- $hasFileIO = true }}
-	{{- end }}
-	{{- end }}
 	{{- range $params }}
 	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") (eq .Type "*time.Duration") (eq .Type "[]*time.Duration") }}
 	{{- $hasDuration = true }}
@@ -42,10 +36,6 @@
 	{{- end }}
 	{{- if $hasStrconv }}
 	"strconv"
-	{{- end }}
-	{{- if $hasFileIO }}
-	"io"
-	"os"
 	{{- end }}
 	{{- if $hasDuration }}
 	"time"
@@ -221,9 +211,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = append(c.{{.Name}}, f)
 			}
 			{{- else if or .IsReader .IsFile }}
@@ -236,9 +224,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = append(c.{{.Name}}, f)
 			}
 		{{- else }}
@@ -267,9 +253,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = f
 			}
 			{{- else if or .IsReader .IsFile }}
@@ -280,9 +264,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = f
 			}
 			{{- else }}
@@ -318,9 +300,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = f
 			}
 				{{- else if or .IsReader .IsFile }}
@@ -331,9 +311,7 @@
 				if err != nil {
 					return err
 				}
-				{{- if .IsCloser }}
-				closers = append(closers, f)
-				{{- end }}
+				cleanups = append(cleanups, f.Close)
 				c.{{.Name}} = f
 			}
 				{{- else }}

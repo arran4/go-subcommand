@@ -718,6 +718,21 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 				}
 			}
 		}
+		if p.DefaultExpr != nil {
+			add(p.DefaultExpr)
+		}
+		if p.IsWriter() || p.IsReader() || p.IsFile() {
+			if !seen["os"] {
+				seen["os"] = true
+				imports = append(imports, templateImport{Path: "os"})
+			}
+		}
+		if p.Type == "io.Writer" || p.Type == "io.Reader" || p.Type == "io.ReadCloser" || p.Type == "io.WriteCloser" || p.Type == "[]io.Writer" || p.Type == "[]io.Reader" || p.Type == "[]io.ReadCloser" || p.Type == "[]io.WriteCloser" {
+			if !seen["io"] {
+				seen["io"] = true
+				imports = append(imports, templateImport{Path: "io"})
+			}
+		}
 	}
 	sort.Slice(imports, func(i, j int) bool {
 		return deduplicateAndSortImports(imports)[i].Path < imports[j].Path

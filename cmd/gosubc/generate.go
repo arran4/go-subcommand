@@ -3,13 +3,12 @@
 package main
 
 import (
-	"os"
-	"io"
 	"errors"
 	"flag"
 	"fmt"
 	go_subcommand "github.com/arran4/go-subcommand"
 	"github.com/arran4/go-subcommand/cmd"
+	"os"
 	"slices"
 	"strconv"
 	"strings"

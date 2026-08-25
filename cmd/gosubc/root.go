@@ -3,10 +3,10 @@
 package main
 
 import (
-	"io"
-	"os"
 	"flag"
 	"fmt"
+	"io"
+	"os"
 	"slices"
 	"strings"
 	"sync"

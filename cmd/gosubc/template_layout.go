@@ -3,10 +3,10 @@
 package main
 
 import (
-	"os"
 	"flag"
 	"fmt"
 	go_subcommand "github.com/arran4/go-subcommand"
+	"os"
 	"slices"
 	"strings"
 )

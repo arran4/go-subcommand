@@ -3,12 +3,12 @@
 package main
 
 import (
-	"os"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/arran4/go-subcommand/cmd"
 	"github.com/arran4/go-subcommand/skills"
+	"os"
 	"slices"
 	"strings"
 )
