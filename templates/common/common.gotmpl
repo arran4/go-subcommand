@@ -6,6 +6,12 @@
 	{{- if gt (len .) 2 }}{{ $excludedImport = index . 2 }}{{ end -}}
 	{{- $hasDuration := false }}
 	{{- $hasStrconv := false }}
+	{{- $hasFileIO := false }}
+	{{- range $params }}
+	{{- if or .IsWriter .IsReader .IsFile }}
+	{{- $hasFileIO = true }}
+	{{- end }}
+	{{- end }}
 	{{- range $params }}
 	{{- if or (eq .Type "time.Duration") (eq .Type "[]time.Duration") (eq .Type "*time.Duration") (eq .Type "[]*time.Duration") }}
 	{{- $hasDuration = true }}
@@ -36,6 +42,10 @@
 	{{- end }}
 	{{- if $hasStrconv }}
 	"strconv"
+	{{- end }}
+	{{- if $hasFileIO }}
+	"io"
+	"os"
 	{{- end }}
 	{{- if $hasDuration }}
 	"time"
@@ -201,6 +211,36 @@
 		{{- end }}
 		{{- if and .IsString (not .HasCustomParser) }}
 		c.{{.Name}} = varArgs
+			{{- else if .IsWriter }}
+			for _, arg := range varArgs {
+				if arg == "-" || arg == "stdout" {
+					c.{{.Name}} = append(c.{{.Name}}, os.Stdout)
+					continue
+				}
+				f, err := os.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = append(c.{{.Name}}, f)
+			}
+			{{- else if or .IsReader .IsFile }}
+			for _, arg := range varArgs {
+				if arg == "-" || arg == "stdin" {
+					c.{{.Name}} = append(c.{{.Name}}, os.Stdin)
+					continue
+				}
+				f, err := os.Open(arg)
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = append(c.{{.Name}}, f)
+			}
 		{{- else }}
 		for _, arg := range varArgs {
 			v, err := {{.ParserCall "arg"}}
@@ -219,6 +259,32 @@
 			argVal := remainingArgs[argIndex]
 			{{- if and .IsString (not .HasCustomParser) }}
 			c.{{.Name}} = argVal
+			{{- else if .IsWriter }}
+			if argVal == "-" || argVal == "stdout" {
+				c.{{.Name}} = os.Stdout
+			} else {
+				f, err := os.OpenFile(argVal, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = f
+			}
+			{{- else if or .IsReader .IsFile }}
+			if argVal == "-" || argVal == "stdin" {
+				c.{{.Name}} = os.Stdin
+			} else {
+				f, err := os.Open(argVal)
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = f
+			}
 			{{- else }}
 			v, err := {{.ParserCall "argVal"}}
 			if err != nil {
@@ -244,6 +310,32 @@
 			}
 				{{- else if and .IsString (not .HasCustomParser) }}
 			c.{{.Name}} = {{$default}}
+				{{- else if .IsWriter }}
+			if {{$default}} == "-" || {{$default}} == "stdout" {
+				c.{{.Name}} = os.Stdout
+			} else {
+				f, err := os.OpenFile({{$default}}, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = f
+			}
+				{{- else if or .IsReader .IsFile }}
+			if {{$default}} == "-" || {{$default}} == "stdin" {
+				c.{{.Name}} = os.Stdin
+			} else {
+				f, err := os.Open({{$default}})
+				if err != nil {
+					return err
+				}
+				{{- if .IsCloser }}
+				closers = append(closers, f)
+				{{- end }}
+				c.{{.Name}} = f
+			}
 				{{- else }}
 			v, err := {{.ParserCall $default}}
 			if err != nil {

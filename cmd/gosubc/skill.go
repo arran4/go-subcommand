@@ -3,9 +3,9 @@
 package main
 
 import (
+	"os"
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 )

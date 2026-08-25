@@ -347,6 +347,30 @@ func (p *FunctionParameter) IsDuration() bool {
 	return p.BaseType() == "time.Duration"
 }
 
+func (p *FunctionParameter) IsWriter() bool {
+	return p.BaseType() == "io.Writer" || p.BaseType() == "io.WriteCloser"
+}
+
+func (p *FunctionParameter) IsWriterLegacy() bool {
+	return p.BaseType() == "io.Writer" || p.BaseType() == "io.WriteCloser" || p.BaseType() == "os.File"
+}
+
+func (p *FunctionParameter) IsReader() bool {
+	return p.BaseType() == "io.Reader" || p.BaseType() == "io.ReadCloser"
+}
+
+func (p *FunctionParameter) IsReaderLegacy() bool {
+	return p.BaseType() == "io.Reader" || p.BaseType() == "io.ReadCloser" || p.BaseType() == "os.File"
+}
+
+func (p *FunctionParameter) IsCloser() bool {
+	return p.BaseType() == "io.WriteCloser" || p.BaseType() == "io.ReadCloser" || p.BaseType() == "os.File"
+}
+
+func (p *FunctionParameter) IsFile() bool {
+	return p.BaseType() == "os.File"
+}
+
 func (p *FunctionParameter) HasCustomParser() bool {
 	return p.Parser.Type == ParserTypeCustom && p.Parser.Func != nil && p.Parser.Func.FunctionName != ""
 }
@@ -360,6 +384,10 @@ func (p *FunctionParameter) ParserCall(valName string) string {
 	}
 
 	t := p.BaseType()
+	if p.IsWriter() || p.IsReader() || p.IsFile() {
+		// Handled specially in templates
+		return ""
+	}
 	if t == "int" {
 		return fmt.Sprintf("strconv.Atoi(%s)", valName)
 	}
@@ -411,6 +439,10 @@ func (p *FunctionParameter) TypeDescription() string {
 		return "boolean"
 	case "time.Duration":
 		return "duration"
+	case "io.Writer", "io.WriteCloser", "os.File":
+		return "file path (or '-' for stdout)"
+	case "io.Reader", "io.ReadCloser":
+		return "file path (or '-' for stdin)"
 	default:
 		return t
 	}

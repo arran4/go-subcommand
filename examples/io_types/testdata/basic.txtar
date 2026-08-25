@@ -1,0 +1,11 @@
+exec io_types copy-file input.txt output.txt
+cmp output.txt expected.txt
+
+exec io_types inspect-file input.txt
+stdout 'File size: 14'
+
+-- input.txt --
+Hello World!
+
+-- expected.txt --
+Hello World!

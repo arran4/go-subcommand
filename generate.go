@@ -783,6 +783,9 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) []templateImp
 			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
 		}
 	}
+	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
+		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
+	}
 	return deduplicateAndSortImports(imports)
 }
 
@@ -793,6 +796,9 @@ func commandImports(cmd *model.Command, excludedPath string) []templateImport {
 		if cmd.HasAction() || cmd.CallPackage() != "" {
 			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
 		}
+	}
+	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
+		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
 	}
 	return deduplicateAndSortImports(imports)
 }
