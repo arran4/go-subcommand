@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 // App is a subcommand `io_types`
@@ -23,14 +22,14 @@ func RunCopyFile(
 	return nil
 }
 
-// RunInspectFile is a subcommand `io_types inspect-file` that inspects an os.File
+// RunInspectFile is a subcommand `io_types inspect-file` that inspects an io.Reader
 func RunInspectFile(
-	file *os.File, // @1 The file to inspect
+	file io.Reader, // @1 The file to inspect
 ) error {
-	fi, err := file.Stat()
+	b, err := io.ReadAll(file)
 	if err != nil {
-		return fmt.Errorf("stat failed: %w", err)
+		return fmt.Errorf("read failed: %w", err)
 	}
-	fmt.Printf("File size: %d\n", fi.Size())
+	fmt.Printf("File size: %d\n", len(b))
 	return nil
 }

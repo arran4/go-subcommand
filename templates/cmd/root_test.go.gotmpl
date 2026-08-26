@@ -45,7 +45,7 @@ func TestRoot_Execute(t *testing.T) {
 					args = append(args, "1s")
 					{{- else if .IsWriter}}
 					args = append(args, "-")
-					{{- else if or .IsReader .IsFile}}
+					{{- else if .IsReader}}
 					args = append(args, "-")
 					{{- end}}
 				{{- end}}
@@ -61,7 +61,7 @@ func TestRoot_Execute(t *testing.T) {
 			args = append(args, "1s")
 			{{- else if .IsWriter}}
 			args = append(args, "-")
-			{{- else if or .IsReader .IsFile}}
+			{{- else if .IsReader}}
 			args = append(args, "-")
 			{{- end}}
 		{{- end}}
@@ -76,7 +76,7 @@ func TestRoot_Execute(t *testing.T) {
 			args = append(args, "1s")
 			{{- else if .IsWriter}}
 			args = append(args, "-")
-			{{- else if or .IsReader .IsFile}}
+			{{- else if .IsReader}}
 			args = append(args, "-")
 			{{- end}}
 		{{- end}}

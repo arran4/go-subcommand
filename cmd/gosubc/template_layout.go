@@ -5,10 +5,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	go_subcommand "github.com/arran4/go-subcommand"
 	"os"
 	"slices"
 	"strings"
+
+	go_subcommand "github.com/arran4/go-subcommand"
 )
 
 var _ Cmd = (*TemplateLayout)(nil)

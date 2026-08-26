@@ -2,19 +2,20 @@
 
 package main
 
+{{$imports := subCommandImports . .ImportPath}}
 import (
-	"flag"
-	"fmt"
-	"os"
-	{{- if minGoVersion "1.21" .GoVersion }}
+{{- range $imports.Standard}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
+{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
-	{{- end }}
-	"strings"
-{{- template "common_imports" (list . true .ImportPath) }}
-	{{- if and .SubCommandFunctionName .ReturnsError}}
-	"errors"
-	"{{.PackagePath}}/cmd"
-	{{- end}}
+{{- end}}
+
+{{- if $imports.Other}}
+{{end}}
+{{- range $imports.Other}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
 )
 
 var _ Cmd = (*{{.SubCommandStructName}})(nil)

@@ -243,6 +243,12 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 			}
 		}
 	}
+
+	for _, p := range params {
+		if p.IsFile() {
+			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
+		}
+	}
 	return nil
 }
 
@@ -439,7 +445,7 @@ func (p *FunctionParameter) TypeDescription() string {
 		return "boolean"
 	case "time.Duration":
 		return "duration"
-	case "io.Writer", "io.WriteCloser", "os.File":
+	case "io.Writer", "io.WriteCloser":
 		return "file path (or '-' for stdout)"
 	case "io.Reader", "io.ReadCloser":
 		return "file path (or '-' for stdin)"

@@ -18,6 +18,7 @@ root.go.gotmpl
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -25,7 +26,6 @@ import (
 	"strings"
 	"sync"
 
-	"errors"
 	"example.com/myproject/cmd"
 	"example.com/myproject/cmd/mycmd/templates"
 )

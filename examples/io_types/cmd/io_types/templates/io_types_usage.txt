@@ -4,10 +4,10 @@ Usage: io_types <subcommand>
 Subcommands:
 {{if .Recursive}}
     copy-file                                copies a file
-    inspect-file                             inspects an os.File
+    inspect-file                             inspects an io.Reader
 {{else}}
     copy-file  copies a file
-    inspect-file inspects an os.File
+    inspect-file inspects an io.Reader
 {{end}}
     help         Print this help message
     usage        Print this usage message

@@ -18,7 +18,6 @@ root.go.gotmpl
 package main
 
 import (
-	"example.com/myproject/rootpkg"
 	"flag"
 	"fmt"
 	"io"
@@ -27,6 +26,7 @@ import (
 	"sync"
 
 	"example.com/myproject/cmd/mycmd/templates"
+	"example.com/myproject/rootpkg"
 )
 
 type Cmd interface {

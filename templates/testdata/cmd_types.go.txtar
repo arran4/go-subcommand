@@ -39,13 +39,14 @@ cmd.go.gotmpl
 package main
 
 import (
-	"example.com/mypkg"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"example.com/mypkg"
 )
 
 var _ Cmd = (*MyCmd)(nil)

@@ -2,25 +2,21 @@
 
 package main
 
+{{$imports := commandImports . .ImportPath}}
 import (
-	"flag"
-	"fmt"
-	"io"
-	"os"
-	{{- if minGoVersion "1.21" .GoVersion }}
+{{- range $imports.Standard}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
+{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
-	{{- end }}
-	"strings"
-	"sync"
-{{- template "common_imports" (list . true .ImportPath) }}
+{{- end}}
 
+{{- if or $imports.Other .PackagePath}}
+{{end}}
+{{- range $imports.Other}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
-	{{- if .FunctionName}}
-	{{- if .ReturnsError}}
-	"errors"
-	"{{.PackagePath}}/cmd"
-	{{- end }}
-	{{- end }}
 )
 
 type Cmd interface {

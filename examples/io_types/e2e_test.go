@@ -1,26 +1,29 @@
-package main
+package main_test
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/testscript"
-	"github.com/arran4/go-subcommand/examples/io_types/cmd/io_types"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testscript.RunMain(m, map[string]func() int{
-		"io_types": func() int {
-			cmd, err := io_types.NewRoot("io_types", "dev", "HEAD", "today")
-			if err != nil {
-				return 1
-			}
-			if err := cmd.Execute(os.Args[1:]); err != nil {
-				return 1
-			}
-			return 0
-		},
-	}))
+	tmpDir, err := os.MkdirTemp("", "testscript")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	binPath := filepath.Join(tmpDir, "io_types")
+	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/io_types")
+	if err := cmd.Run(); err != nil {
+		panic(err)
+	}
+
+	os.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	os.Exit(m.Run())
 }
 
 func TestScripts(t *testing.T) {
