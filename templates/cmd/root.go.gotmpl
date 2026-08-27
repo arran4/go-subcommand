@@ -2,26 +2,32 @@
 
 package main
 
+{{$imports := commandImports . .ImportPath}}
 import (
-	"flag"
-	"fmt"
-	"io"
-	"os"
-	{{- if minGoVersion "1.21" .GoVersion }}
+{{- range $imports.Standard}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
+{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
-	{{- end }}
-	"strings"
-	"sync"
-{{- template "common_imports" (list . true .ImportPath) }}
+{{- end}}
 
+{{- if or $imports.Other .PackagePath}}
+{{end}}
+{{- range $imports.Other}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
 	"{{.PackagePath}}/cmd/{{.MainCmdName}}/templates"
-	{{- if .FunctionName}}
-	{{- if .ReturnsError}}
-	"errors"
-	"{{.PackagePath}}/cmd"
-	{{- end }}
-	{{- end }}
 )
+
+{{- if .HasIOParameters}}
+var generatedOpenReader = func(name string) (io.ReadCloser, error) {
+	return os.Open(name)
+}
+
+var generatedOpenWriter = func(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+}
+{{- end}}
 
 type Cmd interface {
 	Execute(args []string) error
@@ -79,7 +85,7 @@ type RootCmd struct {
 	Commit   string
 	Date     string
 	{{- range .Parameters}}
-	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
 	CommandAction func(c *RootCmd) error
 }
@@ -117,9 +123,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.CommandAction = func(c *RootCmd) error {
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
-		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- else }}
-    err := {{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+    err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
     if err != nil {
       if errors.Is(err, cmd.ErrPrintHelp) {
@@ -136,7 +142,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
 		{{else}}
-		{{if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{end -}}
 		return nil
 	}
@@ -209,6 +215,20 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) error {
+	{{- $hasFile := false }}
+	{{- range .Parameters }}
+	{{- if or .IsWriter .IsReader }}
+	{{- $hasFile = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasFile }}
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			_ = cleanups[i]()
+		}
+	}()
+	{{- end }}
 	{{- range .Parameters }}
 	{{- if .HasGenerator }}
 	{

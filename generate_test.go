@@ -21,6 +21,12 @@ var issueRuntimeParserSource string
 //go:embed testdata/issue_runtime_test.go
 var issueRuntimeTestSource string
 
+//go:embed testdata/alias_io.go
+var aliasIOSource string
+
+//go:embed testdata/alias_root_io.go
+var aliasRootIOSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fs := fstest.MapFS{
 		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -111,6 +117,71 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 			t.Fatalf("generated module tests failed: %v\n%s", err, output)
 		}
 		t.Fatalf("generated module tests failed: %v\n%s\nGenerated test:\n%s", err, output, generatedTest)
+	}
+}
+
+func TestGenerate_AliasedIOCompiles(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasio\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasIOSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	generatedPath := filepath.Join(dir, "cmd", "aliasio", "run.go")
+	generated, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatalf("read generated command: %v", err)
+	}
+	generatedSource := string(generated)
+	if got := strings.Count(generatedSource, `"io"`); got != 1 {
+		t.Fatalf("io import count = %d, want 1\n%s", got, generatedSource)
+	}
+	for _, typeName := range []string{"io.Reader", "io.Writer", "io.ReadCloser", "io.WriteCloser"} {
+		if !strings.Contains(generatedSource, typeName) {
+			t.Errorf("generated source missing %s\n%s", typeName, generatedSource)
+		}
+	}
+
+	cmd := exec.Command("go", "test", "./...")
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated aliased module did not compile: %v\n%s", err, output)
+	}
+}
+
+func TestGenerate_AliasedRootIOCompiles(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasroot\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasRootIOSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	generatedPath := filepath.Join(dir, "cmd", "aliasroot", "root.go")
+	generated, err := os.ReadFile(generatedPath)
+	if err != nil {
+		t.Fatalf("read generated root command: %v", err)
+	}
+	generatedSource := string(generated)
+	if got := strings.Count(generatedSource, `"io"`); got != 1 {
+		t.Fatalf("root io import count = %d, want 1\n%s", got, generatedSource)
+	}
+	if strings.Contains(generatedSource, `stream "io"`) {
+		t.Fatalf("root command retained conflicting io alias\n%s", generatedSource)
+	}
+	for _, typeName := range []string{"io.Reader", "io.Writer"} {
+		if !strings.Contains(generatedSource, typeName) {
+			t.Errorf("generated root source missing %s\n%s", typeName, generatedSource)
+		}
+	}
+
+	cmd := exec.Command("go", "test", "./...")
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated aliased root module did not compile: %v\n%s", err, output)
 	}
 }
 

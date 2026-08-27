@@ -17,14 +17,13 @@ root.go.gotmpl
 package main
 
 import (
+	"/cmd/myroot/templates"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
-
-	"/cmd/myroot/templates"
 )
 
 type Cmd interface {

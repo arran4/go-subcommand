@@ -56,6 +56,27 @@ func TestFunctionParameterHelpers(t *testing.T) {
 	}
 }
 
+func TestFunctionParameterImportedTypeIdentity(t *testing.T) {
+	p := FunctionParameter{
+		Type:            "widgets.Widget",
+		TypeImportPath:  "example.com/acme/widgets",
+		TypePackageName: "widgets",
+		TypeName:        "Widget",
+	}
+	if got := p.BaseType(); got != "widgets.Widget" {
+		t.Fatalf("BaseType() = %q, want valid Go spelling %q", got, "widgets.Widget")
+	}
+	if got := p.CanonicalBaseType(); got != "example.com/acme/widgets.Widget" {
+		t.Fatalf("CanonicalBaseType() = %q", got)
+	}
+	if got := p.CastCode("value"); got != "widgets.Widget(value)" {
+		t.Fatalf("CastCode() = %q, want valid Go cast", got)
+	}
+	if got := p.GeneratedType(); got != "widgets.Widget" {
+		t.Fatalf("GeneratedType() = %q, want source alias spelling", got)
+	}
+}
+
 func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -185,5 +206,26 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	}
 	if child.MaxFlagLength() == 0 || child.MaxDefaultLength() == 0 {
 		t.Error("expected flag and default widths for inherited parameters")
+	}
+}
+
+func TestValidate_OSFile_Fails(t *testing.T) {
+	cmd := &Command{
+		MainCmdName: "test",
+		Parameters: []*FunctionParameter{
+			{
+				Name:         "myFile",
+				Type:         "*os.File",
+				IsPositional: true,
+			},
+		},
+	}
+	err := cmd.Validate()
+	if err == nil {
+		t.Fatalf("expected error for *os.File parameter, got nil")
+	}
+	expectedMsg := `parameter "myFile" has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider`
+	if err.Error() != expectedMsg {
+		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }

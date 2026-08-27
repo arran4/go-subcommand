@@ -163,9 +163,13 @@ The following Go types are supported for function parameters:
 *   `int`: Parsed as an integer.
 *   `bool`: Parsed as a boolean flag (no value required, e.g., `--verbose`).
 *   `time.Duration`: Parsed using `time.ParseDuration` (e.g., `10s`, `1h`).
+*   `io.Reader` and `io.ReadCloser`: `-` borrows standard input; any other value is opened as an input file.
+*   `io.Writer` and `io.WriteCloser`: `-` borrows standard output; any other value is opened with create, truncate, and write access.
 *   Pointers such as `*int`: preserve the difference between omitted and explicitly provided zero values.
 *   Slices such as `[]string`: support repeatable flags.
 *   `error`: (Return value only) Your function can return an `error`, which will be propagated to the CLI exit code.
+
+For I/O parameters, the literal values `stdin` and `stdout` are ordinary file paths; only `-` selects a standard stream. Files opened by generated code are closed on every exit path, while borrowed standard streams are never closed. Bare `*os.File` parameters are rejected for implicit CLI binding because their intended access mode is ambiguous; use the appropriate reader/writer interface or configure an explicit provider.
 
 ## Advanced Usage
 
@@ -279,6 +283,8 @@ You can supply template overlays in three formats:
 *   **Alias File Replacement:** `--replace-template usage=path/to/myusage.gotmpl` (available aliases: `usage`, `man`, `cmd`, `root`, `templates`).
 *   **Folder Overlay:** `--replace-template path/to/templates_dir` overlays a directory containing custom `.gotmpl` files onto default templates.
 *   **txtar Archive Overlay:** `--replace-template path/to/templates.txtar` overlays a `.txtar` archive containing custom template files.
+
+Multiple overlays are applied in command-line order. Later definitions with the same template name replace earlier definitions, while unrelated named definitions from every layer remain available.
 
 To view or export the built-in templates:
 *   `gosubc template layout`: Displays the directory tree structure of built-in templates.

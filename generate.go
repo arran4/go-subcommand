@@ -3,6 +3,7 @@ package go_subcommand
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -132,12 +133,7 @@ func (w *CollectingFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, 
 	}
 
 	if len(entries) == 0 {
-		// If we found nothing, maybe the directory doesn't exist in our map
-		// But since we are only collecting, returning empty is fine if it wasn't explicitly created.
-		// However, returning ErrNotExist might be more accurate if we strictly track Dirs.
-		// For now, let's assume if it's not in w.Dirs or has no files, it doesn't exist?
-		// But w.Dirs is only populated on MkdirAll.
-		// Let's check w.Dirs for exact match
+		// Directories exist only when explicitly collected or implied by a file.
 		_, isDir := w.Dirs[path]
 		if !isDir && path != "." {
 			// Check if any file starts with this path
@@ -566,7 +562,6 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 }
 
 // Helper to bridge legacy parse calls
-// Helper to bridge legacy parse calls
 func parse(dir string, parserName string, options *parsers.ParseOptions, ops ...any) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
@@ -625,27 +620,47 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"isDefaultExpression": isDefaultExpression,
 	})
 
-	var patterns []string
-	err := fs.WalkDir(fsys, "templates", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	var parseFS func(currentFS fs.FS) error
+	parseFS = func(currentFS fs.FS) error {
+		if ofs, ok := currentFS.(*overlayFS); ok {
+			if err := parseFS(ofs.base); err != nil {
+				return err
+			}
+			return parseFS(ofs.overlay)
 		}
-		if !d.IsDir() && strings.HasSuffix(path, ".gotmpl") {
-			patterns = append(patterns, path)
+
+		var patterns []string
+		err := fs.WalkDir(currentFS, "templates", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.HasSuffix(path, ".gotmpl") {
+				patterns = append(patterns, path)
+			}
+			return nil
+		})
+		if err != nil {
+			// Some overlays might not have a full templates/ tree, ignore not found errors
+			if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			// Wait, the walk dir will fail if it's not a folder, we can just walk the root ""
+			return fmt.Errorf("error walking templates: %w", err)
+		}
+
+		if len(patterns) > 0 {
+			var parseErr error
+			tmpl, parseErr = tmpl.ParseFS(currentFS, patterns...)
+			if parseErr != nil {
+				return fmt.Errorf("error parsing templates: %w", parseErr)
+			}
 		}
 		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error walking templates: %w", err)
 	}
 
-	if len(patterns) == 0 {
-		return tmpl, nil
-	}
-
-	tmpl, err = tmpl.ParseFS(fsys, patterns...)
+	err := parseFS(fsys)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing templates: %w", err)
+		return nil, err
 	}
 	return tmpl, nil
 }
@@ -653,6 +668,11 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 type templateImport struct {
 	Alias string
 	Path  string
+}
+
+type fileImports struct {
+	Standard []templateImport
+	Other    []templateImport
 }
 
 func parameterImports(params []*model.FunctionParameter) []templateImport {
@@ -674,6 +694,16 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		imports = append(imports, templateImport{Alias: alias, Path: ref.ImportPath})
 	}
 	for _, p := range params {
+		if p.TypeImportPath != "" {
+			alias := ""
+			if !p.IsReader() && !p.IsWriter() {
+				qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
+				if qualifier != path.Base(p.TypeImportPath) {
+					alias = qualifier
+				}
+			}
+			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
+		}
 		if p.Parser.Type == model.ParserTypeCustom {
 			add(p.Parser.Func)
 		}
@@ -706,26 +736,26 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 
 				pkgName := extractPkg(expr)
 				if pkgName != "" {
-					// We need to resolve the correct package import path.
-					// For standard library and simple names, this works, but if it is aliased we should look it up.
-					// For now, if the user imports it, we should probably find the real import path from the AST.
-					// But we don't have access to the AST of the file that declared it here.
-					// A better approach is to not add it if it's just the prefix of the selector.
-					// Wait, the review says: "The patch assumes the selector prefix is the full import path... The instructions explicitly required resolving the source package and import aliases from Go AST and package information".
-
-					// Let's pass the real import path in the model, or resolve it here.
+					// DefaultExpr carries resolved metadata when available; this
+					// fallback preserves legacy selector defaults.
 					add(&model.FuncRef{ImportPath: pkgName, CommandPackageName: pkgName})
 				}
 			}
 		}
+		if p.DefaultExpr != nil {
+			add(p.DefaultExpr)
+		}
+		if p.IsWriter() || p.IsReader() {
+			if !seen["os"] {
+				seen["os"] = true
+				imports = append(imports, templateImport{Path: "os"})
+			}
+		}
 	}
-	sort.Slice(imports, func(i, j int) bool {
-		return deduplicateAndSortImports(imports)[i].Path < imports[j].Path
-	})
-	return deduplicateAndSortImports(imports)
+	return imports
 }
 
-func deduplicateAndSortImports(imports []templateImport) []templateImport {
+func deduplicateAndSortImports(imports []templateImport) fileImports {
 	seen := make(map[string]templateImport)
 	for _, imp := range imports {
 		if _, ok := seen[imp.Path]; !ok {
@@ -759,40 +789,110 @@ func deduplicateAndSortImports(imports []templateImport) []templateImport {
 		finalImports = append(finalImports, imp)
 	}
 
-	sort.Slice(finalImports, func(i, j int) bool {
-		iStd := !strings.Contains(finalImports[i].Path, ".")
-		jStd := !strings.Contains(finalImports[j].Path, ".")
+	var standard []templateImport
+	var other []templateImport
+	for _, imp := range finalImports {
+		if !strings.Contains(imp.Path, ".") || imp.Path == "errors" || imp.Path == "time" || imp.Path == "strconv" || imp.Path == "flag" || imp.Path == "fmt" || imp.Path == "io" || imp.Path == "os" || imp.Path == "strings" || imp.Path == "sync" {
+			standard = append(standard, imp)
+		} else {
+			other = append(other, imp)
+		}
+	}
 
-		if iStd && !jStd {
-			return true
-		}
-		if !iStd && jStd {
-			return false
-		}
-		return finalImports[i].Path < finalImports[j].Path
+	sort.Slice(standard, func(i, j int) bool {
+		return standard[i].Path < standard[j].Path
 	})
 
-	return finalImports
+	sort.Slice(other, func(i, j int) bool {
+		return other[i].Path < other[j].Path
+	})
+
+	return fileImports{
+		Standard: standard,
+		Other:    other,
+	}
 }
 
-func subCommandImports(cmd *model.SubCommand, excludedPath string) []templateImport {
+func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"}, templateImport{Path: "os"}, templateImport{Path: "strings"})
+
+	if cmd.SubCommandFunctionName != "" && cmd.ReturnsError {
+		imports = append(imports, templateImport{Path: "errors"})
+		imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd"})
+	}
+
+	for _, p := range cmd.Parameters {
+		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+			imports = append(imports, templateImport{Path: "time"})
+		}
+		if p.Type == "int" || p.Type == "bool" || p.Type == "*int" || p.Type == "*bool" || p.Type == "[]int" || p.Type == "[]bool" || p.Type == "[]*int" || p.Type == "[]*bool" ||
+			p.Type == "int64" || p.Type == "int32" || p.Type == "int16" || p.Type == "int8" ||
+			p.Type == "uint" || p.Type == "uint64" || p.Type == "uint32" || p.Type == "uint16" || p.Type == "uint8" ||
+			p.Type == "float64" || p.Type == "float32" ||
+			p.Type == "*int64" || p.Type == "*int32" || p.Type == "*int16" || p.Type == "*int8" ||
+			p.Type == "*uint" || p.Type == "*uint64" || p.Type == "*uint32" || p.Type == "*uint16" || p.Type == "*uint8" ||
+			p.Type == "*float64" || p.Type == "*float32" ||
+			p.Type == "[]int64" || p.Type == "[]int32" || p.Type == "[]int16" || p.Type == "[]int8" ||
+			p.Type == "[]uint" || p.Type == "[]uint64" || p.Type == "[]uint32" || p.Type == "[]uint16" || p.Type == "[]uint8" ||
+			p.Type == "[]float64" || p.Type == "[]float32" ||
+			p.Type == "[]*int64" || p.Type == "[]*int32" || p.Type == "[]*int16" || p.Type == "[]*int8" ||
+			p.Type == "[]*uint" || p.Type == "[]*uint64" || p.Type == "[]*uint32" || p.Type == "[]*uint16" || p.Type == "[]*uint8" ||
+			p.Type == "[]*float64" || p.Type == "[]*float32" {
+			imports = append(imports, templateImport{Path: "strconv"})
+		}
+	}
+
 	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
 		alias := cmd.ImportAlias()
 		if cmd.HasAction() || cmd.CallPackage() != "" {
 			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
 		}
 	}
+	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
+		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
+	}
 	return deduplicateAndSortImports(imports)
 }
 
-func commandImports(cmd *model.Command, excludedPath string) []templateImport {
+func commandImports(cmd *model.Command, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
+	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"}, templateImport{Path: "io"}, templateImport{Path: "os"}, templateImport{Path: "strings"}, templateImport{Path: "sync"})
+
+	if cmd.FunctionName != "" && cmd.ReturnsError {
+		imports = append(imports, templateImport{Path: "errors"})
+		imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd"})
+	}
+
+	for _, p := range cmd.Parameters {
+		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+			imports = append(imports, templateImport{Path: "time"})
+		}
+		if p.Type == "int" || p.Type == "bool" || p.Type == "*int" || p.Type == "*bool" || p.Type == "[]int" || p.Type == "[]bool" || p.Type == "[]*int" || p.Type == "[]*bool" ||
+			p.Type == "int64" || p.Type == "int32" || p.Type == "int16" || p.Type == "int8" ||
+			p.Type == "uint" || p.Type == "uint64" || p.Type == "uint32" || p.Type == "uint16" || p.Type == "uint8" ||
+			p.Type == "float64" || p.Type == "float32" ||
+			p.Type == "*int64" || p.Type == "*int32" || p.Type == "*int16" || p.Type == "*int8" ||
+			p.Type == "*uint" || p.Type == "*uint64" || p.Type == "*uint32" || p.Type == "*uint16" || p.Type == "*uint8" ||
+			p.Type == "*float64" || p.Type == "*float32" ||
+			p.Type == "[]int64" || p.Type == "[]int32" || p.Type == "[]int16" || p.Type == "[]int8" ||
+			p.Type == "[]uint" || p.Type == "[]uint64" || p.Type == "[]uint32" || p.Type == "[]uint16" || p.Type == "[]uint8" ||
+			p.Type == "[]float64" || p.Type == "[]float32" ||
+			p.Type == "[]*int64" || p.Type == "[]*int32" || p.Type == "[]*int16" || p.Type == "[]*int8" ||
+			p.Type == "[]*uint" || p.Type == "[]*uint64" || p.Type == "[]*uint32" || p.Type == "[]*uint16" || p.Type == "[]*uint8" ||
+			p.Type == "[]*float64" || p.Type == "[]*float32" {
+			imports = append(imports, templateImport{Path: "strconv"})
+		}
+	}
+
 	if cmd.ImportPath != "" && (cmd.ImportPath != excludedPath || (cmd.HasAction() && cmd.CallPackage() != "")) {
 		alias := cmd.ImportAlias()
 		if cmd.HasAction() || cmd.CallPackage() != "" {
 			imports = append(imports, templateImport{Alias: alias, Path: cmd.ImportPath})
 		}
+	}
+	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
+		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
 	}
 	return deduplicateAndSortImports(imports)
 }

@@ -26,7 +26,33 @@ func MyCmd(m map[string]int) {}
 		}
 	})
 
-	// Case 2: Pointer (Should be supported)
+	// Case 2: io.Writer, io.Reader, os.File (Should be supported)
+	t.Run("IOAndOsFile", func(t *testing.T) {
+		src := `package main
+import (
+	"io"
+	"os"
+)
+
+// MyCmd is a subcommand ` + "`app cmd`" + `
+func MyCmd(
+	w io.Writer,
+	wc io.WriteCloser,
+	r io.Reader,
+	rc io.ReadCloser,
+	f *os.File,
+) {}
+`
+		fset := token.NewFileSet()
+		cmdTree := &CommandsTree{Commands: make(map[string]*CommandTree)}
+
+		err := ParseGoFile(fset, "test.go", "main", strings.NewReader(src), cmdTree)
+		if err != nil {
+			t.Fatalf("Expected nil error for supported types, got: %v", err)
+		}
+	})
+
+	// Case 3: Pointer (Should be supported)
 	t.Run("PointerType", func(t *testing.T) {
 		src := `package main
 

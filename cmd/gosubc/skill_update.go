@@ -6,12 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/arran4/go-subcommand/cmd"
-	"github.com/arran4/go-subcommand/skills"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/arran4/go-subcommand/cmd"
+	"github.com/arran4/go-subcommand/skills"
 )
 
 var _ Cmd = (*SkillUpdate)(nil)

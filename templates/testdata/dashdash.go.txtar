@@ -79,6 +79,7 @@ root.go.gotmpl
 package main
 
 import (
+	"/cmd/app/templates"
 	"flag"
 	"fmt"
 	"io"
@@ -87,8 +88,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"/cmd/app/templates"
 )
 
 type Cmd interface {

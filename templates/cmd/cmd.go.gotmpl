@@ -2,19 +2,20 @@
 
 package main
 
+{{$imports := subCommandImports . .ImportPath}}
 import (
-	"flag"
-	"fmt"
-	"os"
-	{{- if minGoVersion "1.21" .GoVersion }}
+{{- range $imports.Standard}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
+{{- if minGoVersion "1.21" .GoVersion }}
 	"slices"
-	{{- end }}
-	"strings"
-{{- template "common_imports" (list . true .ImportPath) }}
-	{{- if and .SubCommandFunctionName .ReturnsError}}
-	"errors"
-	"{{.PackagePath}}/cmd"
-	{{- end}}
+{{- end}}
+
+{{- if $imports.Other}}
+{{end}}
+{{- range $imports.Other}}
+	{{if .Alias}}{{ .Alias }} {{end}}"{{ .Path }}"
+{{- end}}
 )
 
 var _ Cmd = (*{{.SubCommandStructName}})(nil)
@@ -23,7 +24,7 @@ type {{.SubCommandStructName}} struct {
 	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
 	{{- range .Parameters}}
-	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
 	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error
@@ -49,6 +50,20 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 }
 
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
+	{{- $hasFileExec := false }}
+	{{- range .Parameters }}
+	{{- if or .IsWriter .IsReader }}
+	{{- $hasFileExec = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasFileExec }}
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			_ = cleanups[i]()
+		}
+	}()
+	{{- end }}
 	{{- range .Parameters }}
 	{{- if .HasGenerator }}
 	{
@@ -361,9 +376,9 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 	v.CommandAction = func(c *{{.SubCommandStructName}}) error {
 		{{if .ReturnsError}}
 		{{- if gt .ReturnCount 1 }}
-		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{range until (add .ReturnCount -1)}}_, {{end}}err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .SubCommandPackageName (ne .SubCommandPackageName "main")}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- else }}
-    err := {{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
+    err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .SubCommandPackageName (ne .SubCommandPackageName "main")}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
 		if err != nil {
       if errors.Is(err, cmd.ErrPrintHelp) {
@@ -380,7 +395,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
       return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
 		{{else}}
-		{{if ne .SubCommandPackageName "main"}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
+		{{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .SubCommandPackageName (ne .SubCommandPackageName "main")}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{end -}}
 		return nil
 	}

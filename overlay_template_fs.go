@@ -26,9 +26,11 @@ func buildOverlayFS(baseFS fs.FS, replaceTemplates []string, ops ...any) (fs.FS,
 		}
 	}
 
-	overlay := fstest.MapFS{}
+	layer := baseFS
 
 	for _, replace := range replaceTemplates {
+		overlay := fstest.MapFS{}
+
 		if strings.Contains(replace, "=") {
 			// format: alias=file
 			parts := strings.SplitN(replace, "=", 2)
@@ -129,9 +131,11 @@ func buildOverlayFS(baseFS fs.FS, replaceTemplates []string, ops ...any) (fs.FS,
 				}
 			}
 		}
+
+		layer = &overlayFS{base: layer, overlay: overlay}
 	}
 
-	return &overlayFS{base: baseFS, overlay: overlay}, nil
+	return layer, nil
 }
 
 type overlayFS struct {

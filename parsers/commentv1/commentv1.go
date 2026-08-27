@@ -325,11 +325,55 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							return fmt.Errorf("error processing parameter %s in function %s: %w", name.Name, s.Name.Name, err)
 						}
 
+						typeImportPath := ""
+						typePackageName := ""
+						typeAlias := ""
+						typeActualName := ""
+
+						// Try to extract selector parts
+						extractSelector := expr
+						for {
+							if star, ok := extractSelector.(*ast.StarExpr); ok {
+								extractSelector = star.X
+							} else if arr, ok := extractSelector.(*ast.ArrayType); ok {
+								extractSelector = arr.Elt
+							} else {
+								break
+							}
+						}
+
+						if sel, ok := extractSelector.(*ast.SelectorExpr); ok {
+							typeActualName = sel.Sel.Name
+							if ident, ok := sel.X.(*ast.Ident); ok {
+								typeAlias = ident.Name
+							}
+						}
+
+						// Resolve alias against file imports
+						if typeAlias != "" {
+							for _, imp := range f.Imports {
+								impPath := strings.Trim(imp.Path.Value, `"`)
+								if imp.Name != nil && imp.Name.Name == typeAlias {
+									typeImportPath = impPath
+									typePackageName = path.Base(impPath)
+									break
+								}
+								if imp.Name == nil && path.Base(impPath) == typeAlias {
+									typeImportPath = impPath
+									typePackageName = typeAlias
+									break
+								}
+							}
+						}
+
 						fp := &model.FunctionParameter{
-							Name:       name.Name,
-							Type:       typeName,
-							IsVarArg:   isVarArg,
-							DeclaredIn: currentCmdName,
+							Name:            name.Name,
+							Type:            typeName,
+							IsVarArg:        isVarArg,
+							DeclaredIn:      currentCmdName,
+							TypeImportPath:  typeImportPath,
+							TypePackageName: typePackageName,
+							TypeName:        typeActualName,
 						}
 						// Extract details from different sources with priority
 						// Priority:
