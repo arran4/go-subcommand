@@ -747,7 +747,7 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		if p.DefaultExpr != nil {
 			add(p.DefaultExpr)
 		}
-		if p.IsWriter() || p.IsReader() || p.IsFile() {
+		if p.IsWriter() || p.IsReader() {
 			if !seen["os"] {
 				seen["os"] = true
 				imports = append(imports, templateImport{Path: "os"})

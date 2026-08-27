@@ -207,7 +207,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 func (c *RootCmd) Execute(args []string) error {
 	{{- $hasFile := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader .IsFile }}
+	{{- if or .IsWriter .IsReader }}
 	{{- $hasFile = true }}
 	{{- end }}
 	{{- end }}

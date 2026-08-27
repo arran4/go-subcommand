@@ -183,6 +183,10 @@ type FunctionParameter struct {
 	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
 	// It is parser metadata and is intentionally excluded from serialized models.
 	InheritedFrom string `json:"-"`
+
+	TypeImportPath  string
+	TypePackageName string
+	TypeName        string
 }
 
 func (dm *DataModel) Validate() error {
@@ -335,6 +339,9 @@ func (p *FunctionParameter) HasPointer() bool {
 
 // BaseType returns the underlying type (stripping * and []).
 func (p *FunctionParameter) BaseType() string {
+	if p.TypeImportPath != "" && p.TypeName != "" {
+		return p.TypeImportPath + "." + p.TypeName
+	}
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
 	t = strings.TrimPrefix(t, "*")
@@ -357,16 +364,8 @@ func (p *FunctionParameter) IsWriter() bool {
 	return p.BaseType() == "io.Writer" || p.BaseType() == "io.WriteCloser"
 }
 
-func (p *FunctionParameter) IsWriterLegacy() bool {
-	return p.BaseType() == "io.Writer" || p.BaseType() == "io.WriteCloser" || p.BaseType() == "os.File"
-}
-
 func (p *FunctionParameter) IsReader() bool {
 	return p.BaseType() == "io.Reader" || p.BaseType() == "io.ReadCloser"
-}
-
-func (p *FunctionParameter) IsReaderLegacy() bool {
-	return p.BaseType() == "io.Reader" || p.BaseType() == "io.ReadCloser" || p.BaseType() == "os.File"
 }
 
 func (p *FunctionParameter) IsCloser() bool {

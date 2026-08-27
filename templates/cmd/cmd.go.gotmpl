@@ -52,7 +52,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	{{- $hasFileExec := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader .IsFile }}
+	{{- if or .IsWriter .IsReader }}
 	{{- $hasFileExec = true }}
 	{{- end }}
 	{{- end }}
