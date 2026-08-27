@@ -24,7 +24,7 @@ type {{.SubCommandStructName}} struct {
 	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
 	{{- range .Parameters}}
-	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
 	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error

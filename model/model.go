@@ -389,6 +389,17 @@ func (p *FunctionParameter) CanonicalBaseType() string {
 	return p.BaseType()
 }
 
+// GeneratedType returns the valid Go type spelling used in generated files.
+// Built-in IO provider types use the generator's canonical io identifier;
+// other imported types retain their source qualifier.
+func (p *FunctionParameter) GeneratedType() string {
+	if !p.IsReader() && !p.IsWriter() {
+		return p.Type
+	}
+	prefix := strings.TrimSuffix(p.Type, p.BaseType())
+	return prefix + p.CanonicalBaseType()
+}
+
 func (p *FunctionParameter) IsBool() bool {
 	return p.BaseType() == "bool"
 }

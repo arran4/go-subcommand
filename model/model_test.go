@@ -72,6 +72,9 @@ func TestFunctionParameterImportedTypeIdentity(t *testing.T) {
 	if got := p.CastCode("value"); got != "widgets.Widget(value)" {
 		t.Fatalf("CastCode() = %q, want valid Go cast", got)
 	}
+	if got := p.GeneratedType(); got != "widgets.Widget" {
+		t.Fatalf("GeneratedType() = %q, want source alias spelling", got)
+	}
 }
 
 func TestFunctionParameterGenerationHelpers(t *testing.T) {

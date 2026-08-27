@@ -85,7 +85,7 @@ type RootCmd struct {
 	Commit   string
 	Date     string
 	{{- range .Parameters}}
-	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.Type}}
+	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
 	CommandAction func(c *RootCmd) error
 }

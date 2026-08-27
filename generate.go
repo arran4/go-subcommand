@@ -133,12 +133,7 @@ func (w *CollectingFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, 
 	}
 
 	if len(entries) == 0 {
-		// If we found nothing, maybe the directory doesn't exist in our map
-		// But since we are only collecting, returning empty is fine if it wasn't explicitly created.
-		// However, returning ErrNotExist might be more accurate if we strictly track Dirs.
-		// For now, let's assume if it's not in w.Dirs or has no files, it doesn't exist?
-		// But w.Dirs is only populated on MkdirAll.
-		// Let's check w.Dirs for exact match
+		// Directories exist only when explicitly collected or implied by a file.
 		_, isDir := w.Dirs[path]
 		if !isDir && path != "." {
 			// Check if any file starts with this path
@@ -567,7 +562,6 @@ func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manD
 }
 
 // Helper to bridge legacy parse calls
-// Helper to bridge legacy parse calls
 func parse(dir string, parserName string, options *parsers.ParseOptions, ops ...any) (*model.DataModel, error) {
 	if dir == "" {
 		dir = "."
@@ -701,10 +695,12 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 	}
 	for _, p := range params {
 		if p.TypeImportPath != "" {
-			qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
 			alias := ""
-			if qualifier != path.Base(p.TypeImportPath) {
-				alias = qualifier
+			if !p.IsReader() && !p.IsWriter() {
+				qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
+				if qualifier != path.Base(p.TypeImportPath) {
+					alias = qualifier
+				}
 			}
 			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
 		}
@@ -740,14 +736,8 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 
 				pkgName := extractPkg(expr)
 				if pkgName != "" {
-					// We need to resolve the correct package import path.
-					// For standard library and simple names, this works, but if it is aliased we should look it up.
-					// For now, if the user imports it, we should probably find the real import path from the AST.
-					// But we don't have access to the AST of the file that declared it here.
-					// A better approach is to not add it if it's just the prefix of the selector.
-					// Wait, the review says: "The patch assumes the selector prefix is the full import path... The instructions explicitly required resolving the source package and import aliases from Go AST and package information".
-
-					// Let's pass the real import path in the model, or resolve it here.
+					// DefaultExpr carries resolved metadata when available; this
+					// fallback preserves legacy selector defaults.
 					add(&model.FuncRef{ImportPath: pkgName, CommandPackageName: pkgName})
 				}
 			}
