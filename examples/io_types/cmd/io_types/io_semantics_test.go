@@ -85,13 +85,15 @@ func TestLifecycle_CleanupClosesFiles(t *testing.T) {
 	}
 	cmd := parent.NewCopyFile()
 
-	var capturedReader *os.File
+	var capturedReader, capturedWriter *os.File
 	cmd.CommandAction = func(c *CopyFile) error {
 		capturedReader = c.input.(*os.File)
+		capturedWriter = c.output.(*os.File)
 		return nil
 	}
 
-	err = cmd.Execute([]string{"--", inPath, "-"})
+	outPath := filepath.Join(tmpDir, "output.txt")
+	err = cmd.Execute([]string{"--", inPath, outPath})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -100,6 +102,10 @@ func TestLifecycle_CleanupClosesFiles(t *testing.T) {
 	_, err = capturedReader.Stat()
 	if !errors.Is(err, os.ErrClosed) {
 		t.Errorf("expected closed error, got: %v", err)
+	}
+	_, err = capturedWriter.Stat()
+	if !errors.Is(err, os.ErrClosed) {
+		t.Errorf("expected writer closed error, got: %v", err)
 	}
 }
 
@@ -117,13 +123,15 @@ func TestLifecycle_CleanupOnError(t *testing.T) {
 	}
 	cmd := parent.NewCopyFile()
 
-	var capturedReader *os.File
+	var capturedReader, capturedWriter *os.File
 	cmd.CommandAction = func(c *CopyFile) error {
 		capturedReader = c.input.(*os.File)
+		capturedWriter = c.output.(*os.File)
 		return errors.New("sentinel action error")
 	}
 
-	err = cmd.Execute([]string{"--", inPath, "-"})
+	outPath := filepath.Join(tmpDir, "output.txt")
+	err = cmd.Execute([]string{"--", inPath, outPath})
 	if err == nil || !strings.Contains(err.Error(), "sentinel action error") {
 		t.Fatalf("expected action error, got %v", err)
 	}
@@ -133,21 +141,23 @@ func TestLifecycle_CleanupOnError(t *testing.T) {
 	if !errors.Is(err, os.ErrClosed) {
 		t.Errorf("expected closed error, got: %v", err)
 	}
+	_, err = capturedWriter.Stat()
+	if !errors.Is(err, os.ErrClosed) {
+		t.Errorf("expected writer closed error, got: %v", err)
+	}
 }
 
 func TestLifecycle_PartialFailure(t *testing.T) {
-	// First input opens successfully, but output path is an invalid directory.
-	// Input MUST be closed when output fails to open.
+	originalReader, originalWriter := generatedOpenReader, generatedOpenWriter
+	t.Cleanup(func() {
+		generatedOpenReader, generatedOpenWriter = originalReader, originalWriter
+	})
 
-	tmpDir := t.TempDir()
-	inPath := filepath.Join(tmpDir, "input.txt")
-	err := os.WriteFile(inPath, []byte("test"), 0644)
-	if err != nil {
-		t.Fatalf("failed to create input: %v", err)
+	reader := &observedReadCloser{name: "reader"}
+	generatedOpenReader = func(string) (io.ReadCloser, error) { return reader, nil }
+	generatedOpenWriter = func(string) (io.WriteCloser, error) {
+		return nil, errors.New("sentinel open error")
 	}
-
-	outPath := filepath.Join(tmpDir, "invalid_dir")
-	os.MkdirAll(outPath, 0755)
 
 	parent := &RootCmd{
 		FlagSet:  flag.NewFlagSet("root", flag.ContinueOnError),
@@ -160,13 +170,89 @@ func TestLifecycle_PartialFailure(t *testing.T) {
 		return nil
 	}
 
-	err = cmd.Execute([]string{"--", inPath, outPath})
-	if err == nil {
-		t.Fatalf("expected error from open, got nil")
+	err := cmd.Execute([]string{"--", "input", "output"})
+	if err == nil || !strings.Contains(err.Error(), "sentinel open error") {
+		t.Fatalf("expected output open error, got %v", err)
+	}
+	if reader.closeCount != 1 {
+		t.Fatalf("first resource close count = %d, want 1", reader.closeCount)
+	}
+}
+
+func TestLifecycle_ReverseOrderAndBorrowedStreams(t *testing.T) {
+	originalReader, originalWriter := generatedOpenReader, generatedOpenWriter
+	t.Cleanup(func() {
+		generatedOpenReader, generatedOpenWriter = originalReader, originalWriter
+	})
+
+	var order []string
+	reader := &observedReadCloser{name: "reader", order: &order}
+	writer := &observedWriteCloser{name: "writer", order: &order}
+	readerOpens, writerOpens := 0, 0
+	generatedOpenReader = func(name string) (io.ReadCloser, error) {
+		readerOpens++
+		if name != "stdin" {
+			t.Errorf("reader opener path = %q, want literal stdin", name)
+		}
+		return reader, nil
+	}
+	generatedOpenWriter = func(name string) (io.WriteCloser, error) {
+		writerOpens++
+		if name != "stdout" {
+			t.Errorf("writer opener path = %q, want literal stdout", name)
+		}
+		return writer, nil
 	}
 
-	// Wait, we need to prove the *first* file opened was closed.
-	// We can't capture the `*os.File` easily because it never reaches `CommandAction`.
-	// But `os.ErrClosed` isn't accessible to us here without OS inspection.
-	// However, we know reverse cleanup is explicitly in the template via the `defer` block loop.
+	parent := &RootCmd{FlagSet: flag.NewFlagSet("root", flag.ContinueOnError), Commands: make(map[string]func() Cmd)}
+	cmd := parent.NewCopyFile()
+	cmd.CommandAction = func(*CopyFile) error { return nil }
+	if err := cmd.Execute([]string{"--", "stdin", "stdout"}); err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+	if got, want := strings.Join(order, ","), "writer,reader"; got != want {
+		t.Fatalf("cleanup order = %q, want %q", got, want)
+	}
+	if reader.closeCount != 1 || writer.closeCount != 1 {
+		t.Fatalf("close counts = reader %d, writer %d; want exactly once", reader.closeCount, writer.closeCount)
+	}
+
+	if err := cmd.Execute([]string{"--", "-", "-"}); err != nil {
+		t.Fatalf("borrowed stream execute failed: %v", err)
+	}
+	if readerOpens != 1 || writerOpens != 1 {
+		t.Fatalf("borrowed streams invoked openers: reader %d, writer %d", readerOpens, writerOpens)
+	}
+}
+
+type observedReadCloser struct {
+	name       string
+	order      *[]string
+	closeCount int
+}
+
+func (*observedReadCloser) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (c *observedReadCloser) Close() error {
+	c.closeCount++
+	if c.order != nil {
+		*c.order = append(*c.order, c.name)
+	}
+	return nil
+}
+
+type observedWriteCloser struct {
+	name       string
+	order      *[]string
+	closeCount int
+}
+
+func (*observedWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+
+func (c *observedWriteCloser) Close() error {
+	c.closeCount++
+	if c.order != nil {
+		*c.order = append(*c.order, c.name)
+	}
+	return nil
 }

@@ -145,7 +145,7 @@
 					c.{{.Name}} = append(c.{{.Name}}, os.Stdout)
 					continue
 				}
-				f, err := os.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				f, err := generatedOpenWriter(arg)
 				if err != nil {
 					return err
 				}
@@ -158,7 +158,7 @@
 					c.{{.Name}} = append(c.{{.Name}}, os.Stdin)
 					continue
 				}
-				f, err := os.Open(arg)
+				f, err := generatedOpenReader(arg)
 				if err != nil {
 					return err
 				}
@@ -187,7 +187,7 @@
 			if argVal == "-" {
 				c.{{.Name}} = os.Stdout
 			} else {
-				f, err := os.OpenFile(argVal, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				f, err := generatedOpenWriter(argVal)
 				if err != nil {
 					return err
 				}
@@ -198,7 +198,7 @@
 			if argVal == "-" {
 				c.{{.Name}} = os.Stdin
 			} else {
-				f, err := os.Open(argVal)
+				f, err := generatedOpenReader(argVal)
 				if err != nil {
 					return err
 				}
@@ -234,7 +234,7 @@
 			if {{$default}} == "-" {
 				c.{{.Name}} = os.Stdout
 			} else {
-				f, err := os.OpenFile({{$default}}, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				f, err := generatedOpenWriter({{$default}})
 				if err != nil {
 					return err
 				}
@@ -245,7 +245,7 @@
 			if {{$default}} == "-" {
 				c.{{.Name}} = os.Stdin
 			} else {
-				f, err := os.Open({{$default}})
+				f, err := generatedOpenReader({{$default}})
 				if err != nil {
 					return err
 				}

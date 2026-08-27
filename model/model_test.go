@@ -56,6 +56,24 @@ func TestFunctionParameterHelpers(t *testing.T) {
 	}
 }
 
+func TestFunctionParameterImportedTypeIdentity(t *testing.T) {
+	p := FunctionParameter{
+		Type:            "widgets.Widget",
+		TypeImportPath:  "example.com/acme/widgets",
+		TypePackageName: "widgets",
+		TypeName:        "Widget",
+	}
+	if got := p.BaseType(); got != "widgets.Widget" {
+		t.Fatalf("BaseType() = %q, want valid Go spelling %q", got, "widgets.Widget")
+	}
+	if got := p.CanonicalBaseType(); got != "example.com/acme/widgets.Widget" {
+		t.Fatalf("CanonicalBaseType() = %q", got)
+	}
+	if got := p.CastCode("value"); got != "widgets.Widget(value)" {
+		t.Fatalf("CastCode() = %q, want valid Go cast", got)
+	}
+}
+
 func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	tests := []struct {
 		name        string

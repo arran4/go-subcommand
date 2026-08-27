@@ -700,6 +700,14 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		imports = append(imports, templateImport{Alias: alias, Path: ref.ImportPath})
 	}
 	for _, p := range params {
+		if p.TypeImportPath != "" {
+			qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
+			alias := ""
+			if qualifier != path.Base(p.TypeImportPath) {
+				alias = qualifier
+			}
+			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
+		}
 		if p.Parser.Type == model.ParserTypeCustom {
 			add(p.Parser.Func)
 		}
@@ -751,12 +759,6 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 			if !seen["os"] {
 				seen["os"] = true
 				imports = append(imports, templateImport{Path: "os"})
-			}
-		}
-		if p.Type == "io.Writer" || p.Type == "io.Reader" || p.Type == "io.ReadCloser" || p.Type == "io.WriteCloser" || p.Type == "[]io.Writer" || p.Type == "[]io.Reader" || p.Type == "[]io.ReadCloser" || p.Type == "[]io.WriteCloser" {
-			if !seen["io"] {
-				seen["io"] = true
-				imports = append(imports, templateImport{Path: "io"})
 			}
 		}
 	}

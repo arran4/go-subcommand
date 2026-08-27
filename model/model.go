@@ -210,6 +210,38 @@ func (cmd *Command) Validate() error {
 	return nil
 }
 
+// HasIOParameters reports whether this command tree needs generated file
+// acquisition helpers for reader or writer parameters.
+func (cmd *Command) HasIOParameters() bool {
+	for _, p := range cmd.Parameters {
+		if p.IsReader() || p.IsWriter() {
+			return true
+		}
+	}
+	for _, sc := range cmd.SubCommands {
+		if sc.HasIOParameters() {
+			return true
+		}
+	}
+	return false
+}
+
+// HasIOParameters reports whether this subcommand tree needs generated file
+// acquisition helpers for reader or writer parameters.
+func (sc *SubCommand) HasIOParameters() bool {
+	for _, p := range sc.Parameters {
+		if p.IsReader() || p.IsWriter() {
+			return true
+		}
+	}
+	for _, child := range sc.SubCommands {
+		if child.HasIOParameters() {
+			return true
+		}
+	}
+	return false
+}
+
 func (sc *SubCommand) Validate() error {
 	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
 		return err
@@ -337,15 +369,24 @@ func (p *FunctionParameter) HasPointer() bool {
 	return strings.HasPrefix(t, "*")
 }
 
-// BaseType returns the underlying type (stripping * and []).
+// BaseType returns the underlying Go type spelling (stripping * and []).
+// It deliberately preserves source import qualifiers so the result remains
+// valid Go syntax (for example, stream.Reader).
 func (p *FunctionParameter) BaseType() string {
-	if p.TypeImportPath != "" && p.TypeName != "" {
-		return p.TypeImportPath + "." + p.TypeName
-	}
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
 	t = strings.TrimPrefix(t, "*")
 	return t
+}
+
+// CanonicalBaseType returns the semantic identity of the underlying type.
+// Unlike BaseType, an imported type is qualified by its import path and must
+// not be emitted as Go source.
+func (p *FunctionParameter) CanonicalBaseType() string {
+	if p.TypeImportPath != "" && p.TypeName != "" {
+		return p.TypeImportPath + "." + p.TypeName
+	}
+	return p.BaseType()
 }
 
 func (p *FunctionParameter) IsBool() bool {
@@ -357,23 +398,23 @@ func (p *FunctionParameter) IsString() bool {
 }
 
 func (p *FunctionParameter) IsDuration() bool {
-	return p.BaseType() == "time.Duration"
+	return p.CanonicalBaseType() == "time.Duration"
 }
 
 func (p *FunctionParameter) IsWriter() bool {
-	return p.BaseType() == "io.Writer" || p.BaseType() == "io.WriteCloser"
+	return p.CanonicalBaseType() == "io.Writer" || p.CanonicalBaseType() == "io.WriteCloser"
 }
 
 func (p *FunctionParameter) IsReader() bool {
-	return p.BaseType() == "io.Reader" || p.BaseType() == "io.ReadCloser"
+	return p.CanonicalBaseType() == "io.Reader" || p.CanonicalBaseType() == "io.ReadCloser"
 }
 
 func (p *FunctionParameter) IsCloser() bool {
-	return p.BaseType() == "io.WriteCloser" || p.BaseType() == "io.ReadCloser" || p.BaseType() == "os.File"
+	return p.CanonicalBaseType() == "io.WriteCloser" || p.CanonicalBaseType() == "io.ReadCloser" || p.CanonicalBaseType() == "os.File"
 }
 
 func (p *FunctionParameter) IsFile() bool {
-	return p.BaseType() == "os.File"
+	return p.CanonicalBaseType() == "os.File"
 }
 
 func (p *FunctionParameter) HasCustomParser() bool {
@@ -436,7 +477,7 @@ func (p *FunctionParameter) CastCode(valName string) string {
 }
 
 func (p *FunctionParameter) TypeDescription() string {
-	t := p.BaseType()
+	t := p.CanonicalBaseType()
 	switch t {
 	case "int":
 		return "integer"

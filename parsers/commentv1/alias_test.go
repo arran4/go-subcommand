@@ -3,7 +3,10 @@ package commentv1
 import (
 	"bytes"
 	"go/token"
+	"strings"
 	"testing"
+
+	"github.com/arran4/go-subcommand/model"
 )
 
 func TestParseGoFile_Alias(t *testing.T) {
@@ -34,17 +37,22 @@ func Run(r stream.Reader, w stream.Writer, rc stream.ReadCloser, wc stream.Write
 	}
 
 	p := tree.Parameters[0]
-	if p.TypeImportPath != "io" || p.TypeName != "Reader" || p.BaseType() != "io.Reader" {
-		t.Errorf("r failed: %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType())
+	if p.TypeImportPath != "io" || p.TypeName != "Reader" || p.BaseType() != "stream.Reader" || p.CanonicalBaseType() != "io.Reader" {
+		t.Errorf("r failed: %v %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType(), p.CanonicalBaseType())
 	}
 
 	p = tree.Parameters[1]
-	if p.TypeImportPath != "io" || p.TypeName != "Writer" || p.BaseType() != "io.Writer" {
-		t.Errorf("w failed: %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType())
+	if p.TypeImportPath != "io" || p.TypeName != "Writer" || p.BaseType() != "stream.Writer" || p.CanonicalBaseType() != "io.Writer" {
+		t.Errorf("w failed: %v %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType(), p.CanonicalBaseType())
 	}
 
 	p = tree.Parameters[4]
-	if p.TypeImportPath != "os" || p.TypeName != "File" || p.BaseType() != "os.File" {
-		t.Errorf("f failed: %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType())
+	if p.TypeImportPath != "os" || p.TypeName != "File" || p.BaseType() != "filesystem.File" || p.CanonicalBaseType() != "os.File" {
+		t.Errorf("f failed: %v %v %v %v", p.TypeImportPath, p.TypeName, p.BaseType(), p.CanonicalBaseType())
+	}
+
+	err = (&model.Command{MainCmdName: "alias", Parameters: tree.Parameters}).Validate()
+	if err == nil || !strings.Contains(err.Error(), `parameter "f" has type *os.File but no implicit file access mode`) {
+		t.Fatalf("Validate() error = %v", err)
 	}
 }

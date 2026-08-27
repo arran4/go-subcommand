@@ -117,7 +117,7 @@ func (c *CopyFile) Execute(args []string) error {
 			if argVal == "-" {
 				c.input = os.Stdin
 			} else {
-				f, err := os.Open(argVal)
+				f, err := generatedOpenReader(argVal)
 				if err != nil {
 					return err
 				}
@@ -135,7 +135,7 @@ func (c *CopyFile) Execute(args []string) error {
 			if argVal == "-" {
 				c.output = os.Stdout
 			} else {
-				f, err := os.OpenFile(argVal, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				f, err := generatedOpenWriter(argVal)
 				if err != nil {
 					return err
 				}

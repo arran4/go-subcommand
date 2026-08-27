@@ -30,6 +30,52 @@ func TestBuildOverlayFS_Alias(t *testing.T) {
 	}
 }
 
+func TestBuildOverlayFS_Folder(t *testing.T) {
+	inMemFS := fstest.MapFS{
+		"custom_dir/cmd/templates/usage.txt.gotmpl": &fstest.MapFile{Data: []byte("FOLDER USAGE OVERLAY")},
+	}
+
+	overlay, err := buildOverlayFS(TemplatesFS, []string{"custom_dir"}, inMemFS)
+	if err != nil {
+		t.Fatalf("buildOverlayFS failed: %v", err)
+	}
+
+	data, err := fs.ReadFile(overlay, "templates/cmd/templates/usage.txt.gotmpl")
+	if err != nil {
+		t.Fatalf("ReadFile from overlay failed: %v", err)
+	}
+	if string(data) != "FOLDER USAGE OVERLAY" {
+		t.Errorf("expected customized usage, got %q", string(data))
+	}
+}
+
+func TestBuildOverlayFS_Txtar(t *testing.T) {
+	inMemFS := fstest.MapFS{
+		"templates.txtar": &fstest.MapFile{Data: overlayTxtarData},
+	}
+
+	overlay, err := buildOverlayFS(TemplatesFS, []string{"templates.txtar"}, inMemFS)
+	if err != nil {
+		t.Fatalf("buildOverlayFS failed: %v", err)
+	}
+
+	data, err := fs.ReadFile(overlay, "templates/cmd/templates/usage.txt.gotmpl")
+	if err != nil {
+		t.Fatalf("ReadFile from overlay failed: %v", err)
+	}
+	if want := "CUSTOM USAGE TEMPLATE OVERLAY: {{.FullUsageString}}\n"; string(data) != want {
+		t.Errorf("expected %q, got %q", want, string(data))
+	}
+
+	data, err = fs.ReadFile(overlay, "templates/cmd/templates/man.gotmpl")
+	if err != nil {
+		t.Fatalf("ReadFile man template from overlay failed: %v", err)
+	}
+	if want := "CUSTOM MAN TEMPLATE OVERLAY\n"; string(data) != want {
+		t.Errorf("expected %q, got %q", want, string(data))
+	}
+}
+
 func TestBuildOverlayFS_Composition(t *testing.T) {
 	baseFS := fstest.MapFS{
 		"templates/common.gotmpl": &fstest.MapFile{

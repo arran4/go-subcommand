@@ -17,6 +17,14 @@ import (
 	"github.com/arran4/go-subcommand/examples/io_types/cmd/io_types/templates"
 )
 
+var generatedOpenReader = func(name string) (io.ReadCloser, error) {
+	return os.Open(name)
+}
+
+var generatedOpenWriter = func(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+}
+
 type Cmd interface {
 	Execute(args []string) error
 	Usage()

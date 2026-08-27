@@ -4,8 +4,18 @@ cmp output.txt expected.txt
 exec io_types inspect-file input.txt
 stdout 'File size: 14'
 
+# Only "-" selects borrowed standard streams.
+stdin input.txt
+exec io_types copy-file - stdin-copy.txt
+cmp stdin-copy.txt expected.txt
+
+exec io_types copy-file input.txt -
+stdout 'Hello World!'
+
 -- input.txt --
 Hello World!
 
 -- expected.txt --
 Hello World!
+
+-- empty --

@@ -116,7 +116,7 @@ func (c *InspectFile) Execute(args []string) error {
 			if argVal == "-" {
 				c.file = os.Stdin
 			} else {
-				f, err := os.Open(argVal)
+				f, err := generatedOpenReader(argVal)
 				if err != nil {
 					return err
 				}
