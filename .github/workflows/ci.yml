@@ -414,7 +414,11 @@ jobs:
             git status
             git diff
             echo "changes_detected=true" >> $GITHUB_OUTPUT
-            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_prs }}" == "true" ]]; then
+            # Fail on release modes or if PRs are not explicitly permitted
+            if [[ "${{ needs.route.outputs.run_release }}" == "true" ]]; then
+              echo "Generated code changes detected during a release path. Failing to prevent dirty tags."
+              exit 1
+            elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_prs }}" == "true" ]]; then
               echo "Will create PR."
             else
               echo "Changes found but PR creation is not enabled. Failing workflow."
@@ -548,7 +552,8 @@ jobs:
     needs: [route, prepare-release-tag, golangci, go-test, go-vet, verify-generation, integration-test]
     if: |
       !failure() && !cancelled() &&
-      needs.route.result == 'success' &&
+      needs.route.outputs.run_release == 'true' &&
+      needs.prepare-release-tag.result == 'success' &&
       needs.golangci.result == 'success' &&
       needs.go-test.result == 'success' &&
       needs.go-vet.result == 'success' &&
@@ -561,7 +566,7 @@ jobs:
   release-context:
     name: Release Context
     needs: [route, prepare-release-tag, release-validation]
-    if: ${{ !failure() && !cancelled() && needs.route.outputs.run_release == 'true' }}
+    if: ${{ !failure() && !cancelled() && needs.route.outputs.run_release == 'true' && needs.release-validation.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
