@@ -47,7 +47,7 @@ func (c *Validate) UsageRecursive() {
 	}
 }
 
-func (c *Validate) Execute(args []string) error {
+func (c *Validate) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

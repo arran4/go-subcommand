@@ -47,7 +47,7 @@ func (c *Scan) UsageRecursive() {
 	}
 }
 
-func (c *Scan) Execute(args []string) error {
+func (c *Scan) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

@@ -40,7 +40,7 @@ func (c *Template) UsageRecursive() {
 	}
 }
 
-func (c *Template) Execute(args []string) error {
+func (c *Template) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

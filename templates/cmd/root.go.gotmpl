@@ -214,7 +214,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	return c, nil
 }
 
-func (c *RootCmd) Execute(args []string) error {
+func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
 	{{- range .Parameters }}
 	{{- if or .IsWriter .IsReader }}
@@ -225,7 +225,9 @@ func (c *RootCmd) Execute(args []string) error {
 	var cleanups []func() error
 	defer func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
-			_ = cleanups[i]()
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
 		}
 	}()
 	{{- end }}
@@ -323,7 +325,9 @@ func (c *RootCmd) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				{{- if $param.HasCustomParser }}
+				{{- if or $param.IsWriter $param.IsReader }}
+				{{- template "acquire_io" (list $param "value") }}
+				{{- else if $param.HasCustomParser }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
 					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
@@ -737,7 +741,9 @@ func (c *RootCmd) Execute(args []string) error {
 							return fmt.Errorf("flag -%s requires a value", char)
 						}
 					}
-					{{- if $param.HasCustomParser }}
+					{{- if or $param.IsWriter $param.IsReader }}
+					{{- template "acquire_io" (list $param "value") }}
+					{{- else if $param.HasCustomParser }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
 						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)

@@ -1,0 +1,8 @@
+-- test.txt --
+hello world
+-- issue185.txt --
+exec app --reader test.txt --writer out.txt
+cmp out.txt expected.txt
+
+-- expected.txt --
+Received: hello world

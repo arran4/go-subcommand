@@ -49,7 +49,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 	}
 }
 
-func (c *{{.SubCommandStructName}}) Execute(args []string) error {
+func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- $hasFileExec := false }}
 	{{- range .Parameters }}
 	{{- if or .IsWriter .IsReader }}
@@ -60,7 +60,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) error {
 	var cleanups []func() error
 	defer func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
-			_ = cleanups[i]()
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
 		}
 	}()
 	{{- end }}

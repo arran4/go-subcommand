@@ -1,0 +1,9 @@
+-- test.txt --
+stdin data
+-- issue185_dash.txt --
+stdin test.txt
+exec app --reader - --writer out.txt
+cmp out.txt expected.txt
+
+-- expected.txt --
+Received: stdin data

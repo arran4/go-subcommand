@@ -81,11 +81,15 @@
 	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
 					{{- else }}
 	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+		{{- if or $param.IsWriter $param.IsReader }}
+		// Parsed manually in Execute
+		{{- else }}
 		v, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
 		}
 		{{$struct}}.{{$param.Name}} = {{$param.CastCode "v"}}
+		{{- end }}
 		return nil
 	})
 					{{- end }}
@@ -139,31 +143,9 @@
 		{{- end }}
 		{{- if and .IsString (not .HasCustomParser) }}
 		c.{{.Name}} = varArgs
-			{{- else if .IsWriter }}
+			{{- else if or .IsWriter .IsReader }}
 			for _, arg := range varArgs {
-				if arg == "-" {
-					c.{{.Name}} = append(c.{{.Name}}, os.Stdout)
-					continue
-				}
-				f, err := generatedOpenWriter(arg)
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = append(c.{{.Name}}, f)
-			}
-			{{- else if .IsReader }}
-			for _, arg := range varArgs {
-				if arg == "-" {
-					c.{{.Name}} = append(c.{{.Name}}, os.Stdin)
-					continue
-				}
-				f, err := generatedOpenReader(arg)
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = append(c.{{.Name}}, f)
+				{{- template "acquire_io" (list . "arg") }}
 			}
 		{{- else }}
 		for _, arg := range varArgs {
@@ -183,28 +165,8 @@
 			argVal := remainingArgs[argIndex]
 			{{- if and .IsString (not .HasCustomParser) }}
 			c.{{.Name}} = argVal
-			{{- else if .IsWriter }}
-			if argVal == "-" {
-				c.{{.Name}} = os.Stdout
-			} else {
-				f, err := generatedOpenWriter(argVal)
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = f
-			}
-			{{- else if .IsReader }}
-			if argVal == "-" {
-				c.{{.Name}} = os.Stdin
-			} else {
-				f, err := generatedOpenReader(argVal)
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = f
-			}
+			{{- else if or .IsWriter .IsReader }}
+			{{- template "acquire_io" (list . "argVal") }}
 			{{- else }}
 			v, err := {{.ParserCall "argVal"}}
 			if err != nil {
@@ -230,28 +192,8 @@
 			}
 				{{- else if and .IsString (not .HasCustomParser) }}
 			c.{{.Name}} = {{$default}}
-				{{- else if .IsWriter }}
-			if {{$default}} == "-" {
-				c.{{.Name}} = os.Stdout
-			} else {
-				f, err := generatedOpenWriter({{$default}})
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = f
-			}
-				{{- else if .IsReader }}
-			if {{$default}} == "-" {
-				c.{{.Name}} = os.Stdin
-			} else {
-				f, err := generatedOpenReader({{$default}})
-				if err != nil {
-					return err
-				}
-				cleanups = append(cleanups, f.Close)
-				c.{{.Name}} = f
-			}
+				{{- else if or .IsWriter .IsReader }}
+			{{- template "acquire_io" (list . $default) }}
 				{{- else }}
 			v, err := {{.ParserCall $default}}
 			if err != nil {
@@ -265,6 +207,50 @@
 			{{- end }}
 		{{- end }}
 	{{- end }}
+{{- end -}}
+
+{{- define "acquire_io" -}}
+{{- $param := index . 0 -}}
+{{- $argVar := index . 1 -}}
+{{- if $param.IsWriter }}
+if {{$argVar}} == "-" {
+	{{- if $param.IsSlice }}
+	c.{{$param.Name}} = append(c.{{$param.Name}}, os.Stdout)
+	{{- else }}
+	c.{{$param.Name}} = os.Stdout
+	{{- end }}
+} else {
+	f, err := generatedOpenWriter({{$argVar}})
+	if err != nil {
+		return err
+	}
+	cleanups = append(cleanups, f.Close)
+	{{- if $param.IsSlice }}
+	c.{{$param.Name}} = append(c.{{$param.Name}}, f)
+	{{- else }}
+	c.{{$param.Name}} = f
+	{{- end }}
+}
+{{- else if $param.IsReader }}
+if {{$argVar}} == "-" {
+	{{- if $param.IsSlice }}
+	c.{{$param.Name}} = append(c.{{$param.Name}}, os.Stdin)
+	{{- else }}
+	c.{{$param.Name}} = os.Stdin
+	{{- end }}
+} else {
+	f, err := generatedOpenReader({{$argVar}})
+	if err != nil {
+		return err
+	}
+	cleanups = append(cleanups, f.Close)
+	{{- if $param.IsSlice }}
+	c.{{$param.Name}} = append(c.{{$param.Name}}, f)
+	{{- else }}
+	c.{{$param.Name}} = f
+	{{- end }}
+}
+{{- end }}
 {{- end -}}
 
 {{- define "flag_helper_types" -}}

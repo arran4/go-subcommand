@@ -47,7 +47,7 @@ func (c *Format) UsageRecursive() {
 	}
 }
 
-func (c *Format) Execute(args []string) error {
+func (c *Format) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
