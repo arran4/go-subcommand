@@ -214,7 +214,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	return c, nil
 }
 
-func (c *RootCmd) Execute(args []string) error {
+func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
 	{{- range .Parameters }}
 	{{- if or .IsWriter .IsReader }}
@@ -225,7 +225,9 @@ func (c *RootCmd) Execute(args []string) error {
 	var cleanups []func() error
 	defer func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
-			_ = cleanups[i]()
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
 		}
 	}()
 	{{- end }}
@@ -241,7 +243,13 @@ func (c *RootCmd) Execute(args []string) error {
 	{{- end }}
 	{{- end }}
 	var remainingArgs []string
-	{{- if .HasRequiredFlags }}
+	{{- $hasTrackedFlags := false }}
+	{{- range .Parameters }}
+		{{- if or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue) }}
+			{{- $hasTrackedFlags = true }}
+		{{- end }}
+	{{- end }}
+	{{- if $hasTrackedFlags }}
 	seenFlags := make(map[string]bool)
 	{{- end }}
 	dashDashSeen := false
@@ -283,7 +291,7 @@ func (c *RootCmd) Execute(args []string) error {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
-				{{- if $param.Required }}
+				{{- if or $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
 				{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
@@ -323,7 +331,9 @@ func (c *RootCmd) Execute(args []string) error {
 						return fmt.Errorf("flag %s requires a value", name)
 					}
 				}
-				{{- if $param.HasCustomParser }}
+				{{- if or $param.IsWriter $param.IsReader }}
+				{{- template "acquire_io" (list $param "value") }}
+				{{- else if $param.HasCustomParser }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
 					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
@@ -703,7 +713,7 @@ func (c *RootCmd) Execute(args []string) error {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
-					{{- if $param.Required }}
+					{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
 					{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
@@ -737,7 +747,9 @@ func (c *RootCmd) Execute(args []string) error {
 							return fmt.Errorf("flag -%s requires a value", char)
 						}
 					}
-					{{- if $param.HasCustomParser }}
+					{{- if or $param.IsWriter $param.IsReader }}
+					{{- template "acquire_io" (list $param "value") }}
+					{{- else if $param.HasCustomParser }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
 						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
@@ -1114,6 +1126,14 @@ func (c *RootCmd) Execute(args []string) error {
 
 {{- template "positional_args_parsing" .Parameters }}
 
+	{{- range $param := .Parameters }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	if !seenFlags["{{$param.Name}}"] {
+		{{- $default := $param.Default -}}
+		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
+	}
+	{{- end }}
+	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)

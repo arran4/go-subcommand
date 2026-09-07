@@ -1,0 +1,8 @@
+-- 1.txt --
+one
+-- 2.txt --
+two
+-- test_slice.txt --
+exec app slice --input 1.txt --input 2.txt
+stdout 'Read: one'
+stdout 'Read: two'

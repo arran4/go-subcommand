@@ -45,7 +45,7 @@ func (c *SkillRemove) UsageRecursive() {
 	}
 }
 
-func (c *SkillRemove) Execute(args []string) error {
+func (c *SkillRemove) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

@@ -56,7 +56,7 @@ func (c *Generate) UsageRecursive() {
 	}
 }
 
-func (c *Generate) Execute(args []string) error {
+func (c *Generate) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

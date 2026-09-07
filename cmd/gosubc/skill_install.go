@@ -46,7 +46,7 @@ func (c *SkillInstall) UsageRecursive() {
 	}
 }
 
-func (c *SkillInstall) Execute(args []string) error {
+func (c *SkillInstall) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

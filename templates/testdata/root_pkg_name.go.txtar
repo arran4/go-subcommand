@@ -166,7 +166,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	return c, nil
 }
 
-func (c *RootCmd) Execute(args []string) error {
+func (c *RootCmd) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
@@ -215,7 +215,6 @@ func (c *RootCmd) Execute(args []string) error {
 			break
 		}
 	}
-
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("mycmd failed: %w", err)

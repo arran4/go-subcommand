@@ -88,7 +88,7 @@ func (c *MySliceCmd) UsageRecursive() {
 	}
 }
 
-func (c *MySliceCmd) Execute(args []string) error {
+func (c *MySliceCmd) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

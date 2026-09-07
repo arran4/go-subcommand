@@ -44,7 +44,7 @@ func (c *SkillList) UsageRecursive() {
 	}
 }
 
-func (c *SkillList) Execute(args []string) error {
+func (c *SkillList) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
