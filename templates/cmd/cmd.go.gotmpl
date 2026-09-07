@@ -86,7 +86,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	var remainingArgs []string
 	{{- $hasTrackedFlags := false }}
 	{{- range .Parameters }}
-		{{- if or .Required (and (or .IsWriter .IsReader) .HasDefaultValue) }}
+		{{- if or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -132,7 +132,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
-				{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+				{{- if or $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
 				{{- if $param.IsBool }}
@@ -196,6 +196,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 				c.{{$param.Name}} = value
 				{{- end }}
 				{{- end }}
+				{{- else if or $param.IsWriter $param.IsReader }}
+				{{- template "acquire_io" (list $param "value") }}
 				{{- else }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
@@ -303,6 +305,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 					c.{{$param.Name}} = value
 					{{- end }}
 					{{- end }}
+					{{- else if or $param.IsWriter $param.IsReader }}
+					{{- template "acquire_io" (list $param "value") }}
 					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
@@ -359,7 +363,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
-	{{- if and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
 	if !seenFlags["{{$param.Name}}"] {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}

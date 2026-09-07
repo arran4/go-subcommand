@@ -1,0 +1,11 @@
+-- test.txt --
+test cmd default
+-- issue185_subcmd.txt --
+exec app mycmd
+stdout 'Received: '
+
+exec app mycmd --reader test.txt --writer test_out.txt
+cmp test_out.txt expected.txt
+
+-- expected.txt --
+Received: test cmd default

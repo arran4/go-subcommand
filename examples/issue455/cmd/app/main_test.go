@@ -10,11 +10,11 @@ import (
 type mockReadCloser struct {
 	io.Reader
 	CloseFunc func() error
-	Closed    bool
+	CloseCount int
 }
 
 func (m *mockReadCloser) Close() error {
-	m.Closed = true
+	m.CloseCount++
 	if m.CloseFunc != nil {
 		return m.CloseFunc()
 	}
@@ -102,8 +102,8 @@ func TestIssue455_Cleanup(t *testing.T) {
 			}
 
 			for _, m := range currentMockReaders {
-				if !m.Closed {
-					t.Errorf("expected all resources to be closed")
+				if m.CloseCount != 1 {
+					t.Errorf("expected all resources to be closed exactly once, got %d for one resource", m.CloseCount)
 				}
 			}
 
@@ -120,6 +120,7 @@ func TestIssue455_PartialAcquisition(t *testing.T) {
 	root, _ := NewRoot("app", "test", "test", "test")
 
 	var cleanupsRun []string
+	var currentMockReaders []*mockReadCloser
 
 	origOpenReader := generatedOpenReader
 	defer func() { generatedOpenReader = origOpenReader }()
@@ -135,6 +136,7 @@ func TestIssue455_PartialAcquisition(t *testing.T) {
 				return nil
 			},
 		}
+		currentMockReaders = append(currentMockReaders, m)
 		return m, nil
 	}
 
@@ -146,6 +148,12 @@ func TestIssue455_PartialAcquisition(t *testing.T) {
 
 	if len(cleanupsRun) != 1 || cleanupsRun[0] != "success1.txt" {
 		t.Fatalf("expected success1.txt to be cleaned up, got %v", cleanupsRun)
+	}
+
+	for _, m := range currentMockReaders {
+		if m.CloseCount != 1 {
+			t.Errorf("expected closed exactly once, got %d", m.CloseCount)
+		}
 	}
 }
 

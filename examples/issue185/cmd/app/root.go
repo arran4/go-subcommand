@@ -126,7 +126,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.CommandAction = func(c *RootCmd) error {
 
-		err := app.Issue185(c.reader, c.writer)
+		err := app.App(c.reader, c.writer)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -144,6 +144,17 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		return nil
 	}
 
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewMycmd() })
+		c.Commands["mycmd"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewMycmd2() })
+		c.Commands["mycmd2"] = subCmd
+
+	}
 	c.Commands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {

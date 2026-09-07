@@ -177,7 +177,7 @@
 		} else {
 			{{- if .HasDefaultValue }}
 				{{- $default := .Default }}
-				{{- if eq .Type "string" }}{{ $default = printf "%q" .Default }}
+				{{- if or (eq .Type "string") .IsWriter .IsReader }}{{ $default = printf "%q" .Default }}
 				{{- else if isDefaultExpression .Default }}{{ $default = .Default }}
 				{{- end }}
 				{{- if .HasCustomParser }}
