@@ -30,7 +30,7 @@
 		{{- if not $aliases }}{{ $aliases = list .Name }}{{ end }}
 
 		{{- range $aliases }}
-			{{- if $param.IsSlice }}
+			{{- if and $param.IsSlice (not (or $param.IsWriter $param.IsReader)) }}
 				{{- $baseName := $param.BaseType | title }}
 				{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
 				{{- $helperName := printf "%sSlice" $baseName }}

@@ -243,7 +243,13 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	{{- end }}
 	var remainingArgs []string
-	{{- if .HasRequiredFlags }}
+	{{- $hasTrackedFlags := false }}
+	{{- range .Parameters }}
+		{{- if or .Required (and (or .IsWriter .IsReader) .HasDefaultValue) }}
+			{{- $hasTrackedFlags = true }}
+		{{- end }}
+	{{- end }}
+	{{- if $hasTrackedFlags }}
 	seenFlags := make(map[string]bool)
 	{{- end }}
 	dashDashSeen := false
@@ -285,7 +291,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
-				{{- if $param.Required }}
+				{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
 				{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
@@ -707,7 +713,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
-					{{- if $param.Required }}
+					{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
 					{{- if or (eq $param.Type "bool") (eq $param.Type "*bool") (eq $param.Type "[]bool") (eq $param.Type "[]*bool") }}
@@ -1120,6 +1126,14 @@ func (c *RootCmd) Execute(args []string) (err error) {
 
 {{- template "positional_args_parsing" .Parameters }}
 
+	{{- range $param := .Parameters }}
+	{{- if and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	if !seenFlags["{{$param.Name}}"] {
+		{{- $default := $param.Default -}}
+		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
+	}
+	{{- end }}
+	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)

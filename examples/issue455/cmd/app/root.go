@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arran4/go-subcommand/examples/issue455/app"
 	"github.com/arran4/go-subcommand/examples/issue455/cmd"
 	"github.com/arran4/go-subcommand/examples/issue455/cmd/app/templates"
 )
@@ -79,7 +80,7 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
-	in            io.Reader
+	in            []io.Reader
 	CommandAction func(c *RootCmd) error
 }
 
@@ -113,22 +114,13 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.FlagSet.Usage = c.Usage
 
 	c.Func("in", "TODO: Add usage text", func(s string) error {
-		if s == "-" {
-			c.in = os.Stdin
-		} else {
-			f, err := generatedOpenReader(s)
-			if err != nil {
-				return err
-			}
-			cleanups = append(cleanups, f.Close)
-			c.in = f
-		}
+		// Parsed manually in Execute
 		return nil
 	})
 
 	c.CommandAction = func(c *RootCmd) error {
 
-		err := App(c.in)
+		err := app.App(c.in)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -232,14 +224,14 @@ func (c *RootCmd) Execute(args []string) (err error) {
 					}
 				}
 				if value == "-" {
-					c.in = os.Stdin
+					c.in = append(c.in, os.Stdin)
 				} else {
 					f, err := generatedOpenReader(value)
 					if err != nil {
 						return err
 					}
 					cleanups = append(cleanups, f.Close)
-					c.in = f
+					c.in = append(c.in, f)
 				}
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
@@ -264,7 +256,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			break
 		}
 	}
-
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("app failed: %w", err)

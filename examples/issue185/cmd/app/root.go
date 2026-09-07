@@ -282,7 +282,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			break
 		}
 	}
-
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("app failed: %w", err)
