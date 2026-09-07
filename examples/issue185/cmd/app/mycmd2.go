@@ -80,26 +80,6 @@ func (c *Mycmd2) Execute(args []string) (err error) {
 			_ = value
 			_ = hasValue
 			switch name {
-
-			case "writer":
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				if value == "-" {
-					c.writer = os.Stdout
-				} else {
-					f, err := generatedOpenWriter(value)
-					if err != nil {
-						return err
-					}
-					cleanups = append(cleanups, f.Close)
-					c.writer = f
-				}
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -113,7 +93,6 @@ func (c *Mycmd2) Execute(args []string) (err error) {
 					return nil
 				}
 				found := false
-
 				if !found {
 					return fmt.Errorf("unknown flag: -%s", char)
 				}
@@ -131,7 +110,7 @@ func (c *Mycmd2) Execute(args []string) (err error) {
 	}
 	// Handle positional argument reader
 	{
-		argIndex := 1
+		argIndex := 0
 		if argIndex >= 0 && argIndex < len(remainingArgs) {
 			argVal := remainingArgs[argIndex]
 			if argVal == "-" {
@@ -157,6 +136,34 @@ func (c *Mycmd2) Execute(args []string) (err error) {
 			}
 		}
 	}
+	// Handle positional argument writer
+	{
+		argIndex := 1
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			if argVal == "-" {
+				c.writer = os.Stdout
+			} else {
+				f, err := generatedOpenWriter(argVal)
+				if err != nil {
+					return err
+				}
+				cleanups = append(cleanups, f.Close)
+				c.writer = f
+			}
+		} else {
+			if "-" == "-" {
+				c.writer = os.Stdout
+			} else {
+				f, err := generatedOpenWriter("-")
+				if err != nil {
+					return err
+				}
+				cleanups = append(cleanups, f.Close)
+				c.writer = f
+			}
+		}
+	}
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
@@ -176,11 +183,6 @@ func (c *RootCmd) NewMycmd2() *Mycmd2 {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
-
-	set.Func("writer", "TODO: Add usage text", func(s string) error {
-		// Parsed manually in Execute
-		return nil
-	})
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Mycmd2) error {

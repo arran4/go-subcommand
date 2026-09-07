@@ -113,7 +113,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.Func("in", "TODO: Add usage text", func(s string) error {
+	c.Func("in", "Input reader", func(s string) error {
 		// Parsed manually in Execute
 		return nil
 	})
@@ -188,6 +188,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}()
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -215,6 +216,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			switch name {
 
 			case "in":
+				seenFlags["in"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]

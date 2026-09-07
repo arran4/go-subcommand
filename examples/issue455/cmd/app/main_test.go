@@ -91,9 +91,13 @@ func TestIssue455_Cleanup(t *testing.T) {
 
 			err := root.Execute(tt.args)
 
-			if tt.expectErrText == "" {
+			if tt.expectErrText == "" && tt.actionErr == nil {
 				if err != nil {
 					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if tt.actionErr != nil {
+				if !errors.Is(err, tt.actionErr) {
+					t.Errorf("expected error to wrap actionErr %v, got: %v", tt.actionErr, err)
 				}
 			} else {
 				if err == nil || !strings.Contains(err.Error(), tt.expectErrText) {

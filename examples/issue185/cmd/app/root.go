@@ -114,12 +114,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.Func("reader", "TODO: Add usage text", func(s string) error {
+	c.Func("reader", "Input reader", func(s string) error {
 		// Parsed manually in Execute
 		return nil
 	})
 
-	c.Func("writer", "TODO: Add usage text", func(s string) error {
+	c.Func("writer", "Output writer", func(s string) error {
 		// Parsed manually in Execute
 		return nil
 	})
@@ -205,6 +205,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}()
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -232,6 +233,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			switch name {
 
 			case "reader":
+				seenFlags["reader"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -252,6 +254,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 				}
 
 			case "writer":
+				seenFlags["writer"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -291,6 +294,30 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		} else {
 			remainingArgs = append(remainingArgs, args[i:]...)
 			break
+		}
+	}
+	if !seenFlags["reader"] {
+		if "-" == "-" {
+			c.reader = os.Stdin
+		} else {
+			f, err := generatedOpenReader("-")
+			if err != nil {
+				return err
+			}
+			cleanups = append(cleanups, f.Close)
+			c.reader = f
+		}
+	}
+	if !seenFlags["writer"] {
+		if "-" == "-" {
+			c.writer = os.Stdout
+		} else {
+			f, err := generatedOpenWriter("-")
+			if err != nil {
+				return err
+			}
+			cleanups = append(cleanups, f.Close)
+			c.writer = f
 		}
 	}
 	if c.CommandAction != nil {

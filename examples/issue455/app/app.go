@@ -5,7 +5,9 @@ import (
 )
 
 // App is a subcommand `app`
-//	flag: --in (default: nil) (description: "Input reader")
+// Flags:
+//
+//	in: --in (default: nil) Input reader
 func App(in []io.Reader) error {
 	return nil
 }

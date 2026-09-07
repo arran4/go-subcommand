@@ -55,6 +55,7 @@ func (c *Mycmd) Execute(args []string) (err error) {
 		}
 	}()
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -82,6 +83,7 @@ func (c *Mycmd) Execute(args []string) (err error) {
 			switch name {
 
 			case "reader":
+				seenFlags["reader"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -102,6 +104,7 @@ func (c *Mycmd) Execute(args []string) (err error) {
 				}
 
 			case "writer":
+				seenFlags["writer"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -150,6 +153,30 @@ func (c *Mycmd) Execute(args []string) (err error) {
 		}
 	}
 
+	if !seenFlags["reader"] {
+		if "-" == "-" {
+			c.reader = os.Stdin
+		} else {
+			f, err := generatedOpenReader("-")
+			if err != nil {
+				return err
+			}
+			cleanups = append(cleanups, f.Close)
+			c.reader = f
+		}
+	}
+	if !seenFlags["writer"] {
+		if "-" == "-" {
+			c.writer = os.Stdout
+		} else {
+			f, err := generatedOpenWriter("-")
+			if err != nil {
+				return err
+			}
+			cleanups = append(cleanups, f.Close)
+			c.writer = f
+		}
+	}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("mycmd failed: %w", err)
@@ -169,12 +196,12 @@ func (c *RootCmd) NewMycmd() *Mycmd {
 		SubCommands: make(map[string]func() Cmd),
 	}
 
-	set.Func("reader", "TODO: Add usage text", func(s string) error {
+	set.Func("reader", "Input reader", func(s string) error {
 		// Parsed manually in Execute
 		return nil
 	})
 
-	set.Func("writer", "TODO: Add usage text", func(s string) error {
+	set.Func("writer", "Output writer", func(s string) error {
 		// Parsed manually in Execute
 		return nil
 	})

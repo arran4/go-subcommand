@@ -22,7 +22,6 @@ func TestMycmd2_Execute(t *testing.T) {
 	}
 
 	args := []string{}
-	args = append(args, "--writer")
 	args = append(args, "-")
 	args = append(args, "-")
 

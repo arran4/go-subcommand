@@ -7,7 +7,9 @@ import (
 
 // RunSlice (gosubc: slice)
 //
-//	flag: --input (default: nil) (description: "Input readers")
+// Flags:
+//
+//	inputs: --input (default: nil) Input readers
 func RunSlice(inputs []io.Reader) error {
 	for _, in := range inputs {
 		b, err := io.ReadAll(in)
