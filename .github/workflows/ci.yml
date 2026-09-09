@@ -1,7 +1,5 @@
 # Agent rules for generation:
-# https://arran4.github.io/blog/post/2026/042-simplified-github-ci-release-safe/
-# Release safety details:
-# https://arran4.github.io/blog/post/2026/041-release-safe-single-owner-github-ci/
+# https://arran4.github.io/blog/post/2026/043-canonical-github-actions-ci-cd-super-reference/
 # Built using these posts as reference/guidance.
 name: CI/CD
 
@@ -10,10 +8,6 @@ on:
     branches: [main, master]
     tags:
       - 'v*'
-      - 'v*.*.*'
-      - 'v*.*.*-rc*'
-      - 'v*.*.*-beta*'
-      - 'test-*'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, closed]
     branches: [main, master]
@@ -53,17 +47,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.event.inputs.mode, 'release-') }}
 
 permissions:
-  contents: write
-  discussions: write
-  pull-requests: write
-  checks: write
-  packages: write
-  security-events: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   route:
@@ -71,91 +58,77 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run_code_checks: ${{ steps.route.outputs.run_code_checks }}
-      run_pr_meta_checks: ${{ steps.route.outputs.run_pr_meta_checks }}
-      run_cleanup: ${{ steps.route.outputs.run_cleanup }}
+      run_build: ${{ steps.route.outputs.run_build }}
       run_release: ${{ steps.route.outputs.run_release }}
-      is_monthly: ${{ steps.route.outputs.is_monthly }}
-      is_nightly: ${{ steps.route.outputs.is_nightly }}
+      run_autofix: ${{ steps.route.outputs.run_autofix }}
+      run_publisher: ${{ steps.route.outputs.run_publisher }}
+      run_maintenance: ${{ steps.route.outputs.run_maintenance }}
+      mode: ${{ steps.route.outputs.mode }}
       run_pages: ${{ steps.route.outputs.run_pages }}
     steps:
       - id: route
-        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+          REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-
-          run_code_checks=false
-          run_pr_meta_checks=false
-          run_cleanup=false
+          run_code_checks=true
+          run_build=true
           run_release=false
-          is_monthly=false
-          is_nightly=false
+          run_autofix=false
+          run_publisher=false
+          run_maintenance=false
           run_pages=false
+          mode="build"
 
-          case "${{ github.event_name }}" in
-            push)
-              run_code_checks=true
-              if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-                run_release=true
-              fi
-              ;;
-            pull_request)
-              if [[ "${{ github.event.action }}" == "closed" ]]; then
-                run_cleanup=true
-              else
-                run_pr_meta_checks=true
-                run_code_checks=true
-              fi
-              ;;
-            release)
-              # Downstream notification only. Never create the same release again here.
-              ;;
-            workflow_dispatch)
-              run_code_checks=true
-              case "${{ inputs.mode }}" in
-                lint-fix)
-                  is_nightly=true
-                  ;;
-                release-*)
-                  run_release=true
-                  ;;
-                publish-tag)
-                  if [[ "${{ github.ref_type }}" != "tag" || ! "${{ github.ref }}" =~ ^refs/tags/v.* ]]; then
-                    echo "publish-tag mode requires an eligible tag context (e.g. refs/tags/v*)" >&2
-                    exit_code=1
-                  fi
-                  run_code_checks=true
-                  run_release=true
-                  ;;
-                monthly-maintenance)
-                  is_monthly=true
-                  ;;
-              esac
-              if [ "${exit_code:-0}" -ne 0 ]; then
-                # fail gracefully with exit
-                echo "Failing due to exit_code 1" >&2 && exit "$exit_code"
-              fi
-              ;;
-            schedule)
-              run_code_checks=true
-              if [[ "${{ github.event.schedule }}" == "17 3 1 * *" ]]; then
-                is_monthly=true
-              fi
-              if [[ "${{ github.event.schedule }}" == "41 2 * * *" ]]; then
-                is_nightly=true
-              fi
-              ;;
-          esac
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # PRs just validate
+            :
+          elif [[ "$EVENT_NAME" == "schedule" ]]; then
+            if [[ "${{ github.event.schedule }}" == "17 3 1 * *" ]]; then
+               run_maintenance=true
+               mode="monthly-maintenance"
+            else
+               run_autofix=true
+               mode="lint-fix"
+            fi
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${INPUT_MODE:-build}"
+            if [[ "$mode" == "lint-fix" ]]; then
+               run_autofix=true
+            elif [[ "$mode" == "publish-tag" ]]; then
+               # The internal explicit publish-tag dispatch mode
+               if [[ "$REF_TYPE" == "tag" && "$GITHUB_REF" == refs/tags/v* ]]; then
+                  run_code_checks=false
+                  run_build=false
+                  run_publisher=true
+               else
+                  echo "Error: publish-tag mode requires a v* tag context. Found: $GITHUB_REF" >&2
+                  sh -c "exit 1"
+               fi
+            elif [[ "$mode" == release-* ]]; then
+               run_release=true
+            elif [[ "$mode" == "monthly-maintenance" ]]; then
+               run_maintenance=true
+            fi
+          elif [[ "$EVENT_NAME" == "push" && "$REF_TYPE" == "tag" && "$GITHUB_REF" == refs/tags/v* ]]; then
+             # Standard external v* push publication
+             run_publisher=true
+          fi
 
-          if [[ "${{ github.ref }}" == refs/tags/* || "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/master" ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* || "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]]; then
             run_pages=true
           fi
 
           echo "run_code_checks=$run_code_checks" >> "$GITHUB_OUTPUT"
-          echo "run_pr_meta_checks=$run_pr_meta_checks" >> "$GITHUB_OUTPUT"
-          echo "run_cleanup=$run_cleanup" >> "$GITHUB_OUTPUT"
+          echo "run_build=$run_build" >> "$GITHUB_OUTPUT"
           echo "run_release=$run_release" >> "$GITHUB_OUTPUT"
-          echo "is_monthly=$is_monthly" >> "$GITHUB_OUTPUT"
-          echo "is_nightly=$is_nightly" >> "$GITHUB_OUTPUT"
+          echo "run_autofix=$run_autofix" >> "$GITHUB_OUTPUT"
+          echo "run_publisher=$run_publisher" >> "$GITHUB_OUTPUT"
+          echo "run_maintenance=$run_maintenance" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "run_pages=$run_pages" >> "$GITHUB_OUTPUT"
 
   prepare-release-tag:
@@ -332,11 +305,38 @@ jobs:
           cache: true
       - run: go vet ./...
 
-  go-fmt-pr:
-    name: go fmt -> PR (manual dispatch)
+  maintenance:
+    name: Monthly Maintenance
     needs: [route]
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'lint-fix' && inputs.allow_prs == true }}
+    if: ${{ needs.route.outputs.run_maintenance == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go get -u ./... && go mod tidy
+      - name: Create Pull Request
+        if: ${{ github.event_name == 'schedule' || inputs.allow_prs != false }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: monthly dependency update"
+          title: "chore: monthly dependency update"
+          branch: automation/maintenance
+          delete-branch: true
+
+  autofix:
+    name: Autofix Formatting
+    needs: [route]
+    if: ${{ needs.route.outputs.run_autofix == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -344,22 +344,21 @@ jobs:
           go-version-file: go.mod
       - name: Run go fmt
         run: go fmt ./...
-      - name: Create PR if go fmt changed files
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if git diff --quiet; then echo "No fmt changes"; else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            BRANCH="ci/gofmt/${{ github.run_id }}"
-            git checkout -b "$BRANCH"
-            git add -A
-            git commit -m "ci: go fmt"
-            git \
-              push origin "$BRANCH"
-            gh pr create --title "ci: go fmt" --body "Automated go fmt from manual dispatch." --base main --head "$BRANCH" --label "ci-autofix"
-          fi
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - name: Run golangci-lint fix
+        run: $(go env GOPATH)/bin/golangci-lint run --fix || true
+      - name: Create Pull Request
+        if: ${{ github.event_name == 'schedule' || inputs.allow_prs != false }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "style: auto-format code and lint fixes"
+          title: "style: auto-format code and lint fixes"
+          body: "This PR auto-formats the code and applies lint fixes."
+          branch: automation/lint-fix
+          delete-branch: true
+          base: main
 
   verify-generation:
     name: Verify Generated Code
@@ -462,7 +461,7 @@ jobs:
   integration-test:
     name: Run Integration Script
     needs: [route]
-    if: ${{ needs.route.outputs.run_code_checks == 'true' }}
+    if: ${{ needs.route.outputs.run_build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -633,7 +632,7 @@ jobs:
   goreleaser:
     name: GoReleaser
     needs: [route, release-context]
-    if: ${{ !failure() && !cancelled() && needs.route.outputs.run_release == 'true' && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ !failure() && !cancelled() && needs.route.outputs.run_publisher == 'true' && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
