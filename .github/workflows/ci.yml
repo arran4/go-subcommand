@@ -50,6 +50,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: auto
+
 jobs:
   route:
     name: Route event
