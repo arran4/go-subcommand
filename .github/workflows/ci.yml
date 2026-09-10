@@ -50,9 +50,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  GOTOOLCHAIN: auto
-
 jobs:
   route:
     name: Route event
@@ -259,7 +256,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -279,7 +276,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
           cache: true
       - name: Test
         run: go test ./... -v
@@ -293,7 +290,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
           cache: true
       - run: go vet ./...
 
@@ -309,7 +306,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: go get -u ./... && go mod tidy
       - name: Create Pull Request
         if: ${{ github.event_name == 'schedule' || inputs.allow_prs != false }}
@@ -333,7 +330,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
       - name: Run go fmt
         run: go fmt ./...
       - name: Install golangci-lint
@@ -369,7 +366,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Run generation with --clean
         run: go run ./cmd/gosubc generate --clean --project-provenance=false --timestamp=false
@@ -465,7 +462,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Build and Install gosubc
         run: go install ./cmd/gosubc
@@ -636,7 +633,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
       - name: Login to GHCR
         uses: docker/login-action@v4
         with:
