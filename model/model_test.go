@@ -230,7 +230,6 @@ func TestValidate_OSFile_Fails(t *testing.T) {
 	}
 }
 
-
 func TestEffectiveCliParser(t *testing.T) {
 	root := &Command{CliParser: "gnu"}
 	explicit := &SubCommand{Command: root, CliParser: "go-flag"}
