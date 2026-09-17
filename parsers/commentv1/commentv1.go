@@ -54,6 +54,7 @@ type CommandTree struct {
 	ReturnCount        int
 	Description        string
 	ExtendedHelp       string
+	CliParser          string
 	ImportPath         string
 }
 
@@ -203,6 +204,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ReturnCount:        cmdTree.ReturnCount,
 			Description:        cmdTree.Description,
 			ExtendedHelp:       cmdTree.ExtendedHelp,
+			CliParser:          cmdTree.CliParser,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -288,6 +290,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				continue
 			}
 			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
+			cliParser := parseCliParserDirective(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -679,6 +682,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.ReturnCount = returnCount
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
+				ct.CliParser = cliParser
 				continue
 			}
 
@@ -687,6 +691,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
+				CliParser:              cliParser,
 				SubCommandName:         subCommandName,
 				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection
@@ -711,6 +716,7 @@ var (
 	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	reFlag            = regexp.MustCompile(`-[\w-]+`)
+	reCliParser       = regexp.MustCompile(`(?i)^CLI-Parser:\s*([A-Za-z0-9][A-Za-z0-9-]*)\s*$`)
 )
 
 type ParsedParam struct {
@@ -733,6 +739,16 @@ type ParsedParam struct {
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
 
+func parseCliParserDirective(text string) string {
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	for scanner.Scan() {
+		if match := reCliParser.FindStringSubmatch(strings.TrimSpace(scanner.Text())); match != nil {
+			return match[1]
+		}
+	}
+	return ""
+}
+
 func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []string, description string, extendedHelp string, aliases []string, params map[string]ParsedParam, ok bool) {
 	params = make(map[string]ParsedParam)
 	scanner := bufio.NewScanner(strings.NewReader(text))
@@ -745,6 +761,10 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 	for scanner.Scan() {
 		line := scanner.Text() // Keep whitespace for indentation check
 		trimmedLine := strings.TrimSpace(line)
+
+		if reCliParser.MatchString(trimmedLine) {
+			continue
+		}
 
 		if justEnteredFlagsBlock {
 			if trimmedLine != "" {

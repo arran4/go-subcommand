@@ -229,3 +229,39 @@ func TestValidate_OSFile_Fails(t *testing.T) {
 		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
+
+func TestEffectiveCliParser(t *testing.T) {
+	root := &Command{CliParser: "gnu"}
+	explicit := &SubCommand{Command: root, CliParser: "go-flag"}
+	inheritedRoot := &SubCommand{Command: root}
+	inheritedChild := &SubCommand{Command: root, Parent: explicit}
+	overrideBack := &SubCommand{Command: root, Parent: explicit, CliParser: "gnu"}
+
+	tests := []struct {
+		name string
+		cmd  *SubCommand
+		want string
+	}{
+		{name: "child explicit", cmd: explicit, want: "go-flag"},
+		{name: "child inherits root", cmd: inheritedRoot, want: "gnu"},
+		{name: "descendant inherits nearest explicit ancestor", cmd: inheritedChild, want: "go-flag"},
+		{name: "descendant overrides back to gnu", cmd: overrideBack, want: "gnu"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cmd.EffectiveCliParser(); got != tt.want {
+				t.Fatalf("EffectiveCliParser() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	unsetRoot := &Command{}
+	unsetChild := &SubCommand{Command: unsetRoot}
+	if got := unsetRoot.EffectiveCliParser(); got != "" {
+		t.Fatalf("unset root EffectiveCliParser() = %q, want empty", got)
+	}
+	if got := unsetChild.EffectiveCliParser(); got != "" {
+		t.Fatalf("unset child EffectiveCliParser() = %q, want empty", got)
+	}
+}
