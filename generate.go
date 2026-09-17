@@ -381,6 +381,74 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 	return prov
 }
 
+// GenerateOptions carries optional generator settings that do not change the legacy positional API.
+type GenerateOptions struct {
+	// CliParser is the generation-wide runtime CLI parser backend fallback.
+	CliParser string
+}
+
+func extractGenerateOptions(ops []any) GenerateOptions {
+	var result GenerateOptions
+	for _, opt := range ops {
+		switch value := opt.(type) {
+		case GenerateOptions:
+			result = value
+		case *GenerateOptions:
+			if value != nil {
+				result = *value
+			}
+		}
+	}
+	return result
+}
+
+func resolveCLIParser(local, fallback string) (string, error) {
+	backend := local
+	if backend == "" {
+		backend = fallback
+	}
+	if backend == "" {
+		backend = "gnu"
+	}
+
+	switch backend {
+	case "gnu", "go-flag":
+		return backend, nil
+	case "plus-minus":
+		return "", fmt.Errorf("cli-parser %q is reserved for issue #464 and is not implemented", backend)
+	default:
+		return "", fmt.Errorf("unsupported cli-parser %q", backend)
+	}
+}
+
+func resolveCLIParsers(commands []*model.Command, generatorDefault string) error {
+	for _, cmd := range commands {
+		resolved, err := resolveCLIParser(cmd.CliParser, generatorDefault)
+		if err != nil {
+			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
+		}
+		cmd.ResolvedCliParser = resolved
+		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited string) error {
+	for _, subCommand := range subCommands {
+		resolved, err := resolveCLIParser(subCommand.CliParser, inherited)
+		if err != nil {
+			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
+		}
+		subCommand.ResolvedCliParser = resolved
+		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GenerateWithFS generates code using provided FS and Writer. Optional variadic args ops can provide custom dependencies such as readFS (fs.FS).
 func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error {
 	if clean {
@@ -422,6 +490,11 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 	if len(dataModel.Commands) == 0 {
 		return fmt.Errorf("no commands found in %s", dir)
+	}
+
+	generateOptions := extractGenerateOptions(ops)
+	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CliParser); err != nil {
+		return err
 	}
 
 	if err := dataModel.Validate(); err != nil {
