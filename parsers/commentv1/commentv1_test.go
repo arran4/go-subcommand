@@ -140,7 +140,6 @@ func TestSubCommandTree_Insert_Merge(t *testing.T) {
 	})
 }
 
-
 func TestParseCliParserDirective(t *testing.T) {
 	tests := []struct {
 		name string
