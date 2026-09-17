@@ -9,6 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
 )
 
