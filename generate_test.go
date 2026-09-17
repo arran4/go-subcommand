@@ -416,7 +416,6 @@ func TestGetProvenanceExtensive(t *testing.T) {
 	}
 }
 
-
 func TestResolveCLIParser(t *testing.T) {
 	tests := []struct {
 		name     string
