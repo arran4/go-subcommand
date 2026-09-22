@@ -414,3 +414,60 @@ func TestGetProvenanceExtensive(t *testing.T) {
 		t.Errorf("Expected template ID to be a=b,c=d, got %v", prov.TemplateID)
 	}
 }
+
+func TestGenerate_RootPointerParametersCompilesAndRuns(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/pointerroot\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), `package app
+
+import "time"
+
+// App is a subcommand `+"`pointerroot`"+`.
+func App(
+	strVal *string, // flag: --str
+	intVal *int, // flag: --int
+	int64Val *int64, // flag: --int64
+	floatVal *float64, // flag: --float
+	boolVal *bool, // flag: --bool
+	durVal *time.Duration, // flag: --dur
+) error {
+	return nil
+}
+`)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	generatedTestPath := filepath.Join(dir, "cmd", "pointerroot", "root_test.go")
+	generatedTest, err := os.ReadFile(generatedTestPath)
+	if err != nil {
+		t.Fatalf("read generated root test: %v", err)
+	}
+	testSource := string(generatedTest)
+
+	for _, expectedAssertion := range []string{
+		"cmd.strVal == nil",
+		"*cmd.strVal != \"test\"",
+		"cmd.intVal == nil",
+		"*cmd.intVal != 1",
+		"cmd.int64Val == nil",
+		"*cmd.int64Val != 1",
+		"cmd.floatVal == nil",
+		"*cmd.floatVal != 1.5",
+		"cmd.boolVal == nil",
+		"*cmd.boolVal != true",
+		"cmd.durVal == nil",
+		"*cmd.durVal != 1*time.Second",
+	} {
+		if !strings.Contains(testSource, expectedAssertion) {
+			t.Errorf("generated test missing assertion %q\n%s", expectedAssertion, testSource)
+		}
+	}
+
+	cmd := exec.Command("go", "test", "-v", "./...")
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated pointer root module tests failed: %v\n%s\nGenerated test:\n%s", err, output, testSource)
+	}
+}

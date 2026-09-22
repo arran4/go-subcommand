@@ -6,7 +6,7 @@ import (
 	"testing"
 	{{- $hasDuration := false }}
 	{{- range .Parameters}}
-	{{- if eq .Type "time.Duration" }}
+	{{- if .IsDuration }}
 	{{- $hasDuration = true }}
 	{{- end }}
 	{{- end }}
@@ -31,53 +31,63 @@ func TestRoot_Execute(t *testing.T) {
 	args := []string{}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if .IsPositional}}
+	{{- if and (not .HasGenerator) (not .IsPositional)}}
+	args = append(args, "{{.PrimaryFlagName}}")
+		{{- if and (ne .BaseType "bool") (not .IsBool)}}
+			{{- if eq .BaseType "string"}}
+	args = append(args, "test")
+			{{- else if or (eq .BaseType "int") (eq .BaseType "int64")}}
+	args = append(args, "1")
+			{{- else if eq .BaseType "float64"}}
+	args = append(args, "1.5")
+			{{- else if .IsDuration}}
+	args = append(args, "1s")
+			{{- else if .IsWriter}}
+	args = append(args, "-")
+			{{- else if .IsReader}}
+	args = append(args, "-")
+			{{- end}}
+		{{- end}}
+	{{- end}}
+	{{- end}}
+	{{- range .Parameters}}
+	{{- $param := . }}
+	{{- if and (not .HasGenerator) .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
 				{{- range until .VarArgMin}}
-					{{- if eq $param.Type "string"}}
-					args = append(args, "test")
-					{{- else if eq $param.Type "int"}}
-					args = append(args, "1")
-					{{- else if eq $param.Type "bool"}}
-					args = append(args, "true")
-					{{- else if eq $param.Type "time.Duration"}}
-					args = append(args, "1s")
-					{{- else if .IsWriter}}
-					args = append(args, "-")
-					{{- else if .IsReader}}
-					args = append(args, "-")
+					{{- if eq $param.BaseType "string"}}
+	args = append(args, "test")
+					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "int64")}}
+	args = append(args, "1")
+					{{- else if eq $param.BaseType "float64"}}
+	args = append(args, "1.5")
+					{{- else if $param.IsBool}}
+	args = append(args, "true")
+					{{- else if $param.IsDuration}}
+	args = append(args, "1s")
+					{{- else if $param.IsWriter}}
+	args = append(args, "-")
+					{{- else if $param.IsReader}}
+	args = append(args, "-")
 					{{- end}}
 				{{- end}}
 			{{- end}}
 		{{- else}}
-			{{- if eq .Type "string"}}
-			args = append(args, "test")
-			{{- else if eq .Type "int"}}
-			args = append(args, "1")
-			{{- else if eq .Type "bool"}}
-			args = append(args, "true")
-			{{- else if eq .Type "time.Duration"}}
-			args = append(args, "1s")
+			{{- if eq .BaseType "string"}}
+	args = append(args, "test")
+			{{- else if or (eq .BaseType "int") (eq .BaseType "int64")}}
+	args = append(args, "1")
+			{{- else if eq .BaseType "float64"}}
+	args = append(args, "1.5")
+			{{- else if .IsBool}}
+	args = append(args, "true")
+			{{- else if .IsDuration}}
+	args = append(args, "1s")
 			{{- else if .IsWriter}}
-			args = append(args, "-")
+	args = append(args, "-")
 			{{- else if .IsReader}}
-			args = append(args, "-")
-			{{- end}}
-		{{- end}}
-	{{- else}}
-		args = append(args, "--{{.Name}}")
-		{{- if ne .Type "bool"}}
-			{{- if eq .Type "string"}}
-			args = append(args, "test")
-			{{- else if eq .Type "int"}}
-			args = append(args, "1")
-			{{- else if eq .Type "time.Duration"}}
-			args = append(args, "1s")
-			{{- else if .IsWriter}}
-			args = append(args, "-")
-			{{- else if .IsReader}}
-			args = append(args, "-")
+	args = append(args, "-")
 			{{- end}}
 		{{- end}}
 	{{- end}}
@@ -93,61 +103,151 @@ func TestRoot_Execute(t *testing.T) {
 
 	{{range .Parameters}}
 	{{- $param := . }}
+	{{- if and (not .HasGenerator) (not .HasCustomParser)}}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
-				if len(cmd.{{.Name}}) != {{.VarArgMin}} {
-					t.Errorf("Expected {{.Name}} to have length {{.VarArgMin}}, got %d", len(cmd.{{.Name}}))
-				}
+	if len(cmd.{{.Name}}) != {{.VarArgMin}} {
+		t.Errorf("Expected {{.Name}} to have length {{.VarArgMin}}, got %d", len(cmd.{{.Name}}))
+	}
 				{{- range $i := until .VarArgMin}}
-					{{- if eq $param.Type "string"}}
-					if cmd.{{$param.Name}}[{{$i}}] != "test" {
-						t.Errorf("Expected {{$param.Name}}[%d] to be 'test', got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
-					}
-					{{- else if eq $param.Type "int"}}
-					if cmd.{{$param.Name}}[{{$i}}] != 1 {
-						t.Errorf("Expected {{$param.Name}}[%d] to be 1, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
-					}
+					{{- if eq $param.BaseType "string"}}
+	if cmd.{{$param.Name}}[{{$i}}] != "test" {
+		t.Errorf("Expected {{$param.Name}}[%d] to be 'test', got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
+	}
+					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "int64")}}
+	if cmd.{{$param.Name}}[{{$i}}] != 1 {
+		t.Errorf("Expected {{$param.Name}}[%d] to be 1, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
+	}
+					{{- else if eq $param.BaseType "float64"}}
+	if cmd.{{$param.Name}}[{{$i}}] != 1.5 {
+		t.Errorf("Expected {{$param.Name}}[%d] to be 1.5, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
+	}
+					{{- else if $param.IsBool}}
+	if cmd.{{$param.Name}}[{{$i}}] != true {
+		t.Errorf("Expected {{$param.Name}}[%d] to be true, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
+	}
+					{{- else if $param.IsDuration}}
+	if cmd.{{$param.Name}}[{{$i}}] != 1 * time.Second {
+		t.Errorf("Expected {{$param.Name}}[%d] to be 1s, got '%v'", {{$i}}, cmd.{{$param.Name}}[{{$i}}])
+	}
 					{{- end}}
 				{{- end}}
 			{{- end}}
 		{{- else}}
-			{{- if eq .Type "string"}}
-			if cmd.{{.Name}} != "test" {
-				t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "int"}}
-			if cmd.{{.Name}} != 1 {
-				t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "bool"}}
-			if cmd.{{.Name}} != true {
-				t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
-			}
-			{{- else if eq .Type "time.Duration"}}
-			if cmd.{{.Name}} != 1 * time.Second {
-				t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
-			}
+			{{- if .HasPointer}}
+				{{- if eq .BaseType "string"}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != "test" {
+		t.Errorf("Expected {{.Name}} to be 'test', got '%v'", *cmd.{{.Name}})
+	}
+				{{- else if or (eq .BaseType "int") (eq .BaseType "int64")}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1 {
+		t.Errorf("Expected {{.Name}} to be 1, got '%v'", *cmd.{{.Name}})
+	}
+				{{- else if eq .BaseType "float64"}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1.5 {
+		t.Errorf("Expected {{.Name}} to be 1.5, got '%v'", *cmd.{{.Name}})
+	}
+				{{- else if .IsBool}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != true {
+		t.Errorf("Expected {{.Name}} to be true, got '%v'", *cmd.{{.Name}})
+	}
+				{{- else if .IsDuration}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1 * time.Second {
+		t.Errorf("Expected {{.Name}} to be 1s, got '%v'", *cmd.{{.Name}})
+	}
+				{{- end}}
+			{{- else}}
+				{{- if eq .Type "string"}}
+	if cmd.{{.Name}} != "test" {
+		t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
+	}
+				{{- else if or (eq .Type "int") (eq .Type "int64")}}
+	if cmd.{{.Name}} != 1 {
+		t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
+	}
+				{{- else if eq .Type "float64"}}
+	if cmd.{{.Name}} != 1.5 {
+		t.Errorf("Expected {{.Name}} to be 1.5, got '%v'", cmd.{{.Name}})
+	}
+				{{- else if eq .Type "bool"}}
+	if cmd.{{.Name}} != true {
+		t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
+	}
+				{{- else if .IsDuration}}
+	if cmd.{{.Name}} != 1 * time.Second {
+		t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
+	}
+				{{- end}}
 			{{- end}}
 		{{- end}}
 	{{- else}}
-		{{- if eq .Type "string"}}
-		if cmd.{{.Name}} != "test" {
-			t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "int"}}
-		if cmd.{{.Name}} != 1 {
-			t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "bool"}}
-		if cmd.{{.Name}} != true {
-			t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
-		}
-		{{- else if eq .Type "time.Duration"}}
-		if cmd.{{.Name}} != 1 * time.Second {
-			t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
-		}
+		{{- if .HasPointer}}
+			{{- if eq .BaseType "string"}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != "test" {
+		t.Errorf("Expected {{.Name}} to be 'test', got '%v'", *cmd.{{.Name}})
+	}
+			{{- else if or (eq .BaseType "int") (eq .BaseType "int64")}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1 {
+		t.Errorf("Expected {{.Name}} to be 1, got '%v'", *cmd.{{.Name}})
+	}
+			{{- else if eq .BaseType "float64"}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1.5 {
+		t.Errorf("Expected {{.Name}} to be 1.5, got '%v'", *cmd.{{.Name}})
+	}
+			{{- else if .IsBool}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != true {
+		t.Errorf("Expected {{.Name}} to be true, got '%v'", *cmd.{{.Name}})
+	}
+			{{- else if .IsDuration}}
+	if cmd.{{.Name}} == nil {
+		t.Errorf("Expected {{.Name}} to be non-nil")
+	} else if *cmd.{{.Name}} != 1 * time.Second {
+		t.Errorf("Expected {{.Name}} to be 1s, got '%v'", *cmd.{{.Name}})
+	}
+			{{- end}}
+		{{- else}}
+			{{- if eq .Type "string"}}
+	if cmd.{{.Name}} != "test" {
+		t.Errorf("Expected {{.Name}} to be 'test', got '%v'", cmd.{{.Name}})
+	}
+			{{- else if or (eq .Type "int") (eq .Type "int64")}}
+	if cmd.{{.Name}} != 1 {
+		t.Errorf("Expected {{.Name}} to be 1, got '%v'", cmd.{{.Name}})
+	}
+			{{- else if eq .Type "float64"}}
+	if cmd.{{.Name}} != 1.5 {
+		t.Errorf("Expected {{.Name}} to be 1.5, got '%v'", cmd.{{.Name}})
+	}
+			{{- else if eq .Type "bool"}}
+	if cmd.{{.Name}} != true {
+		t.Errorf("Expected {{.Name}} to be true, got '%v'", cmd.{{.Name}})
+	}
+			{{- else if .IsDuration}}
+	if cmd.{{.Name}} != 1 * time.Second {
+		t.Errorf("Expected {{.Name}} to be 1s, got '%v'", cmd.{{.Name}})
+	}
+			{{- end}}
 		{{- end}}
+	{{- end}}
 	{{- end}}
 	{{- end}}
 	{{else}}
