@@ -383,8 +383,8 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 
 // GenerateOptions carries optional generator settings that do not change the legacy positional API.
 type GenerateOptions struct {
-	// CliParser is the generation-wide runtime CLI parser backend fallback.
-	CliParser string
+	// CLIParser is the generation-wide runtime CLI parser backend fallback.
+	CLIParser string
 }
 
 func extractGenerateOptions(ops []any) GenerateOptions {
@@ -412,8 +412,10 @@ func resolveCLIParser(local, fallback string) (string, error) {
 	}
 
 	switch backend {
-	case "gnu", "go-flag":
+	case "gnu":
 		return backend, nil
+	case "go-flag":
+		return "", fmt.Errorf("cli-parser %q is not implemented; generated commands currently use the GNU backend", backend)
 	case "plus-minus":
 		return "", fmt.Errorf("cli-parser %q is reserved for issue #464 and is not implemented", backend)
 	default:
@@ -423,11 +425,11 @@ func resolveCLIParser(local, fallback string) (string, error) {
 
 func resolveCLIParsers(commands []*model.Command, generatorDefault string) error {
 	for _, cmd := range commands {
-		resolved, err := resolveCLIParser(cmd.CliParser, generatorDefault)
+		resolved, err := resolveCLIParser(cmd.CLIParser, generatorDefault)
 		if err != nil {
 			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
 		}
-		cmd.ResolvedCliParser = resolved
+		cmd.ResolvedCLIParser = resolved
 		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -437,11 +439,11 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 
 func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited string) error {
 	for _, subCommand := range subCommands {
-		resolved, err := resolveCLIParser(subCommand.CliParser, inherited)
+		resolved, err := resolveCLIParser(subCommand.CLIParser, inherited)
 		if err != nil {
 			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
 		}
-		subCommand.ResolvedCliParser = resolved
+		subCommand.ResolvedCLIParser = resolved
 		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -493,7 +495,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	generateOptions := extractGenerateOptions(ops)
-	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CliParser); err != nil {
+	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CLIParser); err != nil {
 		return err
 	}
 

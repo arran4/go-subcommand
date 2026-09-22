@@ -112,17 +112,19 @@ type Command struct {
 	ReturnsError bool
 	// ReturnCount is the number of return values.
 	ReturnCount int
-	// CliParser is an explicit runtime CLI parser backend selected for this command.
-	CliParser string
-	// ResolvedCliParser is the final runtime CLI parser backend after inheritance and generator defaults.
-	ResolvedCliParser string
+	// CLIParser is the explicit runtime CLI parser backend selected for this command.
+	CLIParser string
+	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
+	ResolvedCLIParser string
 }
 
-func (c *Command) EffectiveCliParser() string {
+// EffectiveCLIParser returns the nearest explicit parser selection. It does not
+// apply a generator default or validate that a backend is implemented.
+func (c *Command) EffectiveCLIParser() string {
 	if c == nil {
 		return ""
 	}
-	return c.CliParser
+	return c.CLIParser
 }
 
 // FunctionParameter represents a parameter of a command function, which can be a flag or a positional argument.
@@ -555,24 +557,26 @@ type SubCommand struct {
 	ReturnsError bool
 	// ReturnCount is the number of return values.
 	ReturnCount int
-	// CliParser is an explicit runtime CLI parser backend selected for this subcommand.
-	CliParser string
-	// ResolvedCliParser is the final runtime CLI parser backend after inheritance and generator defaults.
-	ResolvedCliParser string
+	// CLIParser is the explicit runtime CLI parser backend selected for this subcommand.
+	CLIParser string
+	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
+	ResolvedCLIParser string
 }
 
-func (sc *SubCommand) EffectiveCliParser() string {
+// EffectiveCLIParser returns the nearest explicit parser selection. It does not
+// apply a generator default or validate that a backend is implemented.
+func (sc *SubCommand) EffectiveCLIParser() string {
 	if sc == nil {
 		return ""
 	}
-	if sc.CliParser != "" {
-		return sc.CliParser
+	if sc.CLIParser != "" {
+		return sc.CLIParser
 	}
 	if sc.Parent != nil {
-		return sc.Parent.EffectiveCliParser()
+		return sc.Parent.EffectiveCLIParser()
 	}
 	if sc.Command != nil {
-		return sc.Command.EffectiveCliParser()
+		return sc.Command.EffectiveCLIParser()
 	}
 	return ""
 }

@@ -54,7 +54,7 @@ type CommandTree struct {
 	ReturnCount        int
 	Description        string
 	ExtendedHelp       string
-	CliParser          string
+	CLIParser          string
 	ImportPath         string
 }
 
@@ -204,7 +204,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ReturnCount:        cmdTree.ReturnCount,
 			Description:        cmdTree.Description,
 			ExtendedHelp:       cmdTree.ExtendedHelp,
-			CliParser:          cmdTree.CliParser,
+			CLIParser:          cmdTree.CLIParser,
 		}
 
 		allocator := parsers.NewNameAllocator()
@@ -682,7 +682,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.ReturnCount = returnCount
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
-				ct.CliParser = cliParser
+				ct.CLIParser = cliParser
 				continue
 			}
 
@@ -691,7 +691,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				SubCommandFunctionName: s.Name.Name,
 				SubCommandDescription:  description,
 				SubCommandExtendedHelp: extendedHelp,
-				CliParser:              cliParser,
+				CLIParser:              cliParser,
 				SubCommandName:         subCommandName,
 				Aliases:                aliases,
 				// SubCommandStructName is assigned during collection

@@ -425,9 +425,9 @@ func TestResolveCLIParser(t *testing.T) {
 		wantErr  bool
 	}{
 		{name: "implicit default", want: "gnu"},
-		{name: "generator default", fallback: "go-flag", want: "go-flag"},
-		{name: "explicit overrides generator", local: "gnu", fallback: "go-flag", want: "gnu"},
-		{name: "explicit go flag", local: "go-flag", fallback: "gnu", want: "go-flag"},
+		{name: "generator default go flag is unsupported", fallback: "go-flag", wantErr: true},
+		{name: "explicit gnu overrides unsupported generator default", local: "gnu", fallback: "go-flag", want: "gnu"},
+		{name: "explicit go flag is unsupported", local: "go-flag", fallback: "gnu", wantErr: true},
 		{name: "plus minus reserved", local: "plus-minus", wantErr: true},
 		{name: "unknown", local: "unknown", wantErr: true},
 	}
@@ -453,10 +453,10 @@ func TestResolveCLIParser(t *testing.T) {
 
 func TestResolveCLIParsers(t *testing.T) {
 	root := &model.Command{MainCmdName: "app"}
-	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CliParser: "go-flag"}
+	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CLIParser: "gnu"}
 	legacyImport := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "import"}
 	modern := &model.SubCommand{Command: root, SubCommandName: "modern"}
-	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CliParser: "gnu"}
+	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CLIParser: "gnu"}
 	legacy.SubCommands = []*model.SubCommand{legacyImport, gnuOverride}
 	root.SubCommands = []*model.SubCommand{modern, legacy}
 
@@ -469,16 +469,53 @@ func TestResolveCLIParsers(t *testing.T) {
 		got  string
 		want string
 	}{
-		{name: "root", got: root.ResolvedCliParser, want: "gnu"},
-		{name: "modern inherits root", got: modern.ResolvedCliParser, want: "gnu"},
-		{name: "legacy override", got: legacy.ResolvedCliParser, want: "go-flag"},
-		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCliParser, want: "go-flag"},
-		{name: "descendant overrides back", got: gnuOverride.ResolvedCliParser, want: "gnu"},
+		{name: "root", got: root.ResolvedCLIParser, want: "gnu"},
+		{name: "modern inherits root", got: modern.ResolvedCLIParser, want: "gnu"},
+		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "gnu"},
+		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "gnu"},
+		{name: "descendant overrides back", got: gnuOverride.ResolvedCLIParser, want: "gnu"},
 	}
 
 	for _, check := range checks {
 		if check.got != check.want {
 			t.Errorf("%s resolved parser = %q, want %q", check.name, check.got, check.want)
 		}
+	}
+}
+
+func TestGenerateWithFSRejectsUnimplementedCLIParser(t *testing.T) {
+	tests := []struct {
+		name    string
+		comment string
+		ops     []any
+	}{
+		{
+			name: "generation default",
+			ops:  []any{GenerateOptions{CLIParser: "go-flag"}},
+		},
+		{
+			name:    "command metadata",
+			comment: "// CLI-Parser: go-flag\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := fstest.MapFS{
+				"go.mod":  {Data: []byte("module example.com/test\n\ngo 1.22\n")},
+				"main.go": {Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
+			}
+			writer := NewCollectingFileWriter()
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", tt.ops...)
+			if err == nil {
+				t.Fatal("GenerateWithFS unexpectedly succeeded")
+			}
+			if !strings.Contains(err.Error(), `cli-parser "go-flag" is not implemented`) {
+				t.Fatalf("GenerateWithFS error = %q, want clear go-flag backend error", err)
+			}
+			if len(writer.Files) != 0 {
+				t.Fatalf("GenerateWithFS wrote %d files after rejecting go-flag", len(writer.Files))
+			}
+		})
 	}
 }

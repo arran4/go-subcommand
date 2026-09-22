@@ -174,7 +174,7 @@ func TestParseSubCommandCommentsCliParserIsMetadata(t *testing.T) {
 
 func TestParseGoFilesCliParserMetadata(t *testing.T) {
 	fsys := fstest.MapFS{
-		"go.mod": {Data: []byte("module example.com/testcli\ngo 1.21\n")},
+		"go.mod":      {Data: []byte("module example.com/testcli\ngo 1.21\n")},
 		"commands.go": {Data: []byte("package testcli\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n\n// Child is a subcommand `app child`\n// CLI-Parser: go-flag\nfunc Child() {}\n")},
 	}
 
@@ -186,13 +186,13 @@ func TestParseGoFilesCliParserMetadata(t *testing.T) {
 		t.Fatalf("len(data.Commands) = %d, want 1", len(data.Commands))
 	}
 	root := data.Commands[0]
-	if root.CliParser != "gnu" {
-		t.Fatalf("root.CliParser = %q, want gnu", root.CliParser)
+	if root.CLIParser != "gnu" {
+		t.Fatalf("root.CLIParser = %q, want gnu", root.CLIParser)
 	}
 	if len(root.SubCommands) != 1 {
 		t.Fatalf("len(root.SubCommands) = %d, want 1", len(root.SubCommands))
 	}
-	if got := root.SubCommands[0].CliParser; got != "go-flag" {
-		t.Fatalf("child.CliParser = %q, want go-flag", got)
+	if got := root.SubCommands[0].CLIParser; got != "go-flag" {
+		t.Fatalf("child.CLIParser = %q, want go-flag", got)
 	}
 }
