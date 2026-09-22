@@ -6,7 +6,7 @@ import "fmt"
 //
 // Flags:
 //
-//   flag: --flag
+//	flag: --flag
 func Root(flag bool, args ...string) error {
 	fmt.Printf("root: flag=%v args=%v\n", flag, args)
 	return nil
@@ -16,7 +16,7 @@ func Root(flag bool, args ...string) error {
 //
 // Flags:
 //
-//   empty: --empty
+//	empty: --empty
 func Command(empty bool, args ...string) error {
 	fmt.Printf("command: args=%v\n", args)
 	return nil
@@ -26,7 +26,7 @@ func Command(empty bool, args ...string) error {
 //
 // Flags:
 //
-//   childflag: --childflag
+//	childflag: --childflag
 func Child(childflag bool, args ...string) error {
 	fmt.Printf("child: childflag=%v args=%v\n", childflag, args)
 	return nil

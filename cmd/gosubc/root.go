@@ -93,7 +93,7 @@ type UsageDataRootCmd struct {
 
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c := &RootCmd{
-		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		FlagSet:  flag.NewFlagSet(name, flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
@@ -201,7 +201,6 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	return c, nil
 }
-
 func (c *RootCmd) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false

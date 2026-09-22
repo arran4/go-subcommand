@@ -2,9 +2,9 @@ package issue50_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
-	"os/exec"
 
 	"github.com/rogpeppe/go-internal/testscript"
 )

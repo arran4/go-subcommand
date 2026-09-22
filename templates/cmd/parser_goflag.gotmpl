@@ -1,0 +1,117 @@
+{{- define "parser_goflag_root" }}
+func (c *RootCmd) Execute(args []string) (err error) {
+	{{- $hasFile := false }}{{- range .Parameters }}{{- if or .IsWriter .IsReader }}{{- $hasFile = true }}{{- end }}{{- end }}
+	{{- if $hasFile }}
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil { err = cerr }
+		}
+	}()
+	{{- end }}
+	{{- range .Parameters }}{{- if .HasGenerator }}
+	{{- if eq .Type "*os.File" }}// Parameter {{.Name}} specifies an explicit *os.File via a custom generator/provider, which is permitted.{{- end }}
+	{{- template "acquire_io" (list . "") }}
+	{{- end }}{{- end }}
+
+	if err := c.FlagSet.Parse(args); err != nil {
+		if err == flag.ErrHelp { c.Usage(); return nil }
+		return err
+	}
+
+	seenFlags := make(map[string]bool)
+	c.FlagSet.Visit(func(f *flag.Flag) {
+		{{- range .Parameters }}{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+		if f.Name == "{{.Name}}"{{ range .FlagAliases }} || f.Name == "{{.}}"{{ end }} { seenFlags["{{.Name}}"] = true }
+		{{- end }}{{- end }}
+	})
+
+	{{- if .HasRequiredFlags }}{{- range .Parameters }}{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+	if !seenFlags["{{.Name}}"] { return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided") }
+	{{- end }}{{- end }}{{- end }}
+
+	remainingArgs := c.FlagSet.Args()
+
+	{{- if .FunctionName }}
+{{- template "positional_args_parsing" .Parameters }}
+	{{- range $param := .Parameters }}{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	if !seenFlags["{{$param.Name}}"] { {{- template "acquire_io" (list $param (printf "%q" $param.Default)) }} }
+	{{- end }}{{- end }}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil { return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err) }
+	}
+	{{- end }}
+
+	dashDashSeen := false
+	for _, arg := range args {
+		if arg == "--" { dashDashSeen = true; break }
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok { return cmd().Execute(remainingArgs[1:]) }
+	}
+
+	{{- if .FunctionName }}return nil{{ else }}
+	c.Usage()
+	if len(remainingArgs) > 0 { return fmt.Errorf("unknown command: %s", remainingArgs[0]) }
+	return nil
+	{{- end}}
+}
+{{- end }}
+
+{{- define "parser_goflag_cmd" }}
+func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
+	{{- $hasFileExec := false }}{{- range .Parameters }}{{- if or .IsWriter .IsReader }}{{- $hasFileExec = true }}{{- end }}{{- end }}
+	{{- if $hasFileExec }}
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil { err = cerr }
+		}
+	}()
+	{{- end }}
+
+	{{- range .Parameters }}{{- if .HasGenerator }}
+	{{- if eq .Type "*os.File" }}// Parameter {{.Name}} specifies an explicit *os.File via a custom generator/provider, which is permitted.{{- end }}
+	{{- template "acquire_io" (list . "") }}
+	{{- end }}{{- end }}
+
+	if err := c.Flags.Parse(args); err != nil {
+		if err == flag.ErrHelp { c.Usage(); return nil }
+		return err
+	}
+
+	seenFlags := make(map[string]bool)
+	c.Flags.Visit(func(f *flag.Flag) {
+		{{- range .Parameters }}{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+		if f.Name == "{{.Name}}"{{ range .FlagAliases }} || f.Name == "{{.}}"{{ end }} { seenFlags["{{.Name}}"] = true }
+		{{- end }}{{- end }}
+	})
+
+	{{- if .HasRequiredFlags }}{{- range .Parameters }}{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+	if !seenFlags["{{.Name}}"] { return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided") }
+	{{- end }}{{- end }}{{- end }}
+
+	remainingArgs := c.Flags.Args()
+
+	dashDashSeen := false
+	for _, arg := range args {
+		if arg == "--" { dashDashSeen = true; break }
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok { return cmd().Execute(remainingArgs[1:]) }
+	}
+
+{{- template "positional_args_parsing" .Parameters }}
+	{{if .SubCommandFunctionName}}
+	{{- range $param := .Parameters }}{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	if !seenFlags["{{$param.Name}}"] { {{- template "acquire_io" (list $param (printf "%q" $param.Default)) }} }
+	{{- end }}{{- end }}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil { return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err) }
+	} else { c.Usage() }
+	{{else}}c.Usage(){{end}}
+	return nil
+}
+{{- end }}

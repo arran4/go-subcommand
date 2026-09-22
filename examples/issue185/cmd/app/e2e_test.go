@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/rogpeppe/go-internal/testscript"
 	"os"
 	"testing"
-	"github.com/rogpeppe/go-internal/testscript"
 )
 
 func TestMain(m *testing.M) {

@@ -39,7 +39,6 @@ func (c *Template) UsageRecursive() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
-
 func (c *Template) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false

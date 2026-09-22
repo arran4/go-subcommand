@@ -9,7 +9,7 @@ import (
 
 type mockReadCloser struct {
 	io.Reader
-	CloseFunc func() error
+	CloseFunc  func() error
 	CloseCount int
 }
 
@@ -31,24 +31,24 @@ func TestIssue455_Cleanup(t *testing.T) {
 		expectOrder   []string
 	}{
 		{
-			name: "success + successful cleanup",
-			args: []string{"--in", "in1.txt", "--in", "in2.txt"},
+			name:        "success + successful cleanup",
+			args:        []string{"--in", "in1.txt", "--in", "in2.txt"},
 			expectOrder: []string{"in2.txt", "in1.txt"},
 		},
 		{
-			name:      "success + cleanup failure",
-			args:      []string{"--in", "in1.txt", "--in", "in2.txt"},
-			cleanErrs: []error{errors.New("cleanup error 1"), errors.New("cleanup error 2")},
+			name:          "success + cleanup failure",
+			args:          []string{"--in", "in1.txt", "--in", "in2.txt"},
+			cleanErrs:     []error{errors.New("cleanup error 1"), errors.New("cleanup error 2")},
 			expectErrText: "cleanup error 1", // First error encountered during reverse execution
-			expectOrder: []string{"in2.txt", "in1.txt"},
+			expectOrder:   []string{"in2.txt", "in1.txt"},
 		},
 		{
-			name:      "action error + cleanup failure preserves action error",
-			args:      []string{"--in", "in1.txt", "--in", "in2.txt"},
-			actionErr: errors.New("action error"),
-			cleanErrs: []error{errors.New("cleanup error")},
+			name:          "action error + cleanup failure preserves action error",
+			args:          []string{"--in", "in1.txt", "--in", "in2.txt"},
+			actionErr:     errors.New("action error"),
+			cleanErrs:     []error{errors.New("cleanup error")},
 			expectErrText: "app failed: action error",
-			expectOrder: []string{"in2.txt", "in1.txt"},
+			expectOrder:   []string{"in2.txt", "in1.txt"},
 		},
 	}
 
@@ -112,9 +112,9 @@ func TestIssue455_Cleanup(t *testing.T) {
 			}
 
 			for i, v := range tt.expectOrder {
-			    if i >= len(cleanupsRun) || cleanupsRun[i] != v {
-			        t.Errorf("expected cleanup order %v, got %v", tt.expectOrder, cleanupsRun)
-			    }
+				if i >= len(cleanupsRun) || cleanupsRun[i] != v {
+					t.Errorf("expected cleanup order %v, got %v", tt.expectOrder, cleanupsRun)
+				}
 			}
 		})
 	}

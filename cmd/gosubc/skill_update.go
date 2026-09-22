@@ -47,7 +47,6 @@ func (c *SkillUpdate) UsageRecursive() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
-
 func (c *SkillUpdate) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false

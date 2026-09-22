@@ -46,7 +46,6 @@ func (c *Goreleaser) UsageRecursive() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
-
 func (c *Goreleaser) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false

@@ -13,7 +13,6 @@ var (
 	_ = runtime.NumCPU
 )
 
-
 // Root is a subcommand `app`
 //
 // Flags:
@@ -23,5 +22,3 @@ var (
 func Root(cores int, limit int) {
 	fmt.Printf("cores: %d, limit: %d\n", cores, limit)
 }
-
-
