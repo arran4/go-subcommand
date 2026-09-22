@@ -229,3 +229,39 @@ func TestValidate_OSFile_Fails(t *testing.T) {
 		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
+
+func TestEffectiveCLIParser(t *testing.T) {
+	root := &Command{CLIParser: "gnu"}
+	explicit := &SubCommand{Command: root, CLIParser: "go-flag"}
+	inheritedRoot := &SubCommand{Command: root}
+	inheritedChild := &SubCommand{Command: root, Parent: explicit}
+	overrideBack := &SubCommand{Command: root, Parent: explicit, CLIParser: "gnu"}
+
+	tests := []struct {
+		name string
+		cmd  *SubCommand
+		want string
+	}{
+		{name: "child explicit", cmd: explicit, want: "go-flag"},
+		{name: "child inherits root", cmd: inheritedRoot, want: "gnu"},
+		{name: "descendant inherits nearest explicit ancestor", cmd: inheritedChild, want: "go-flag"},
+		{name: "descendant overrides back to gnu", cmd: overrideBack, want: "gnu"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cmd.EffectiveCLIParser(); got != tt.want {
+				t.Fatalf("EffectiveCLIParser() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	unsetRoot := &Command{}
+	unsetChild := &SubCommand{Command: unsetRoot}
+	if got := unsetRoot.EffectiveCLIParser(); got != "" {
+		t.Fatalf("unset root EffectiveCLIParser() = %q, want empty", got)
+	}
+	if got := unsetChild.EffectiveCLIParser(); got != "" {
+		t.Fatalf("unset child EffectiveCLIParser() = %q, want empty", got)
+	}
+}
