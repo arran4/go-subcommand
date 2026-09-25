@@ -49,87 +49,28 @@ func (c *Child) UsageRecursive() {
 func (c *Child) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			dashDashSeen = true
-			remainingArgs = append(remainingArgs, args[i+1:]...)
-			break
+
+	// Create a local flagset so it doesn't ExitOnError or panic
+	fs := flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	fs.Usage = c.Usage
+
+	fs.StringVar(&c.goFlag, "goFlag", c.goFlag, "")
+	fs.StringVar(&c.goFlag, "go-flag", c.goFlag, "")
+
+	fs.BoolVar(&c.boolFlag, "boolFlag", c.boolFlag, "")
+	fs.BoolVar(&c.boolFlag, "b", c.boolFlag, "")
+
+	fs.Var((*StringSlice)(&c.args), "args", "(positional: true)")
+
+	err = fs.Parse(args)
+	if err != nil {
+		if err == flag.ErrHelp {
+			return nil
 		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			name := arg[1:]
-			if strings.HasPrefix(name, "-") {
-				name = name[1:]
-			}
-			if name == "help" || name == "h" {
-				c.Usage()
-				return nil
-			}
-
-			value := ""
-			hasValue := false
-			if strings.Contains(name, "=") {
-				parts := strings.SplitN(name, "=", 2)
-				name = parts[0]
-				value = parts[1]
-				hasValue = true
-			}
-
-			_ = value
-			_ = hasValue
-
-			found := false
-			switch name {
-
-			case "goFlag", "go-flag":
-				found = true
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.goFlag = value
-
-			case "boolFlag", "b":
-				found = true
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.boolFlag = b
-				} else {
-					c.boolFlag = true
-				}
-
-			case "args":
-				found = true
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.args = append(c.args, value)
-			default:
-				// Try to see if it's a combined boolean short flag, only if single dash was used.
-				// Actually, go-flag doesn't do GNU-style short flag clustering. It just looks for the exact name.
-				// If not found, it's an error.
-			}
-
-			if !found {
-				return fmt.Errorf("unknown flag: -%s", name)
-			}
-		} else {
-			remainingArgs = append(remainingArgs, args[i:]...)
-			break
-		}
+		return err
 	}
+
+	remainingArgs = fs.Args()
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {

@@ -194,135 +194,34 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 func (c *RootCmd) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			dashDashSeen = true
-			remainingArgs = append(remainingArgs, args[i+1:]...)
-			break
+
+	// Create a local flagset so it doesn't ExitOnError or panic
+	fs := flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	fs.Usage = c.Usage
+
+	fs.StringVar(&c.in, "in", c.in, "Input source")
+
+	fs.StringVar(&c.out, "out", c.out, "Output target")
+
+	fs.BoolVar(&c.verbose, "verbose", c.verbose, "Verbose")
+
+	fs.BoolVar(&c.a, "a", c.a, "")
+
+	fs.BoolVar(&c.b, "b", c.b, "")
+
+	fs.BoolVar(&c.c, "c", c.c, "")
+
+	fs.Var((*StringSlice)(&c.args), "args", "(positional: true)")
+
+	err = fs.Parse(args)
+	if err != nil {
+		if err == flag.ErrHelp {
+			return nil
 		}
-		if strings.HasPrefix(arg, "-") && arg != "-" {
-			name := arg[1:]
-			if strings.HasPrefix(name, "-") {
-				name = name[1:]
-			}
-			if name == "help" || name == "h" {
-				c.Usage()
-				return nil
-			}
-
-			value := ""
-			hasValue := false
-			if strings.Contains(name, "=") {
-				parts := strings.SplitN(name, "=", 2)
-				name = parts[0]
-				value = parts[1]
-				hasValue = true
-			}
-
-			_ = value
-			_ = hasValue
-
-			found := false
-			switch name {
-
-			case "in":
-				found = true
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.in = value
-
-			case "out":
-				found = true
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.out = value
-
-			case "verbose":
-				found = true
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.verbose = b
-				} else {
-					c.verbose = true
-				}
-
-			case "a":
-				found = true
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.a = b
-				} else {
-					c.a = true
-				}
-
-			case "b":
-				found = true
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.b = b
-				} else {
-					c.b = true
-				}
-
-			case "c":
-				found = true
-				if hasValue {
-					b, err := strconv.ParseBool(value)
-					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
-					}
-					c.c = b
-				} else {
-					c.c = true
-				}
-
-			case "args":
-				found = true
-				if !hasValue {
-					if i+1 < len(args) {
-						value = args[i+1]
-						i++
-					} else {
-						return fmt.Errorf("flag %s requires a value", name)
-					}
-				}
-				c.args = append(c.args, value)
-			default:
-				// Try to see if it's a combined boolean short flag, only if single dash was used.
-				// Actually, go-flag doesn't do GNU-style short flag clustering. It just looks for the exact name.
-				// If not found, it's an error.
-			}
-
-			if !found {
-				return fmt.Errorf("unknown flag: -%s", name)
-			}
-		} else {
-			remainingArgs = append(remainingArgs, args[i:]...)
-			break
-		}
+		return err
 	}
+
+	remainingArgs = fs.Args()
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return fmt.Errorf("app failed: %w", err)

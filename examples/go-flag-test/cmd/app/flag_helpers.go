@@ -677,3 +677,17 @@ func (s *DurationPointerSlice) Set(value string) error {
 	*s = append(*s, &d)
 	return nil
 }
+
+func flagSetFuncPointer(dest interface{}, s string, t string) error {
+	// Not implemented completely
+	return nil
+}
+
+func flagSetFuncCustom(dest interface{}, s string, t string, v interface{}) error {
+	return nil
+}
+
+func flagSetFunc(dest interface{}, s string, t string) error {
+	// Not implemented
+	return nil
+}
