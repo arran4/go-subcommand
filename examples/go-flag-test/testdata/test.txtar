@@ -1,0 +1,13 @@
+exec go-flag-test -in README.md -out result.png -verbose -a -b -c pos1 pos2
+stdout 'App in=README.md out=result.png'
+stdout 'verbose'
+stdout 'a'
+stdout 'b'
+stdout 'c'
+
+! exec go-flag-test -abc
+stderr 'Error: unknown flag: -abc'
+
+exec go-flag-test -in a -out b child -v
+stdout 'App in=a out=b'
+stdout 'Child v= true'
