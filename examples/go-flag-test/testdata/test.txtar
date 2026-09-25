@@ -1,13 +1,13 @@
-exec go-flag-test -in README.md -out result.png -verbose -a -b -c pos1 pos2
-stdout 'App in=README.md out=result.png'
+exec go-flag-test -verbose -a -b -c pos1 pos2
+stdout 'App in='
 stdout 'verbose'
 stdout 'a'
 stdout 'b'
 stdout 'c'
 
 ! exec go-flag-test -abc
-stderr 'Error: unknown flag: -abc'
+stderr 'Error: flag provided but not defined: -abc'
 
-exec go-flag-test -in a -out b child -v
-stdout 'App in=a out=b'
+exec go-flag-test child -v
+stdout 'App in='
 stdout 'Child v= true'

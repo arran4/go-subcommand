@@ -1,6 +1,20 @@
 {{- define "cli_parser_go-flag" }}
 	var remainingArgs []string
 	dashDashSeen := false
+	dashIdx := -1
+	for i, arg := range args {
+		if arg == "--" {
+			dashIdx = i
+			break
+		}
+	}
+	_ = dashIdx
+	// dashDashSeen is evaluated later based on remaining arguments.
+
+	c.FlagSet = flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	c.FlagSet.Usage = c.Usage
+
+
 	{{- $hasTrackedFlags := false }}
 	{{- range .Parameters }}
 		{{- if or .Required (and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) (or .IsWriter .IsReader) .HasDefaultValue) }}
@@ -28,7 +42,13 @@
 		{{- if not $exists }}{{ $uniqueAliases = append $uniqueAliases $a }}{{ end }}
 	{{- end }}
 	{{- range $uniqueAliases }}
-	{{- if and $param.IsSlice (not (or $param.IsWriter $param.IsReader)) }}
+	{{- if or $param.IsWriter $param.IsReader }}
+	fs.Var(goFlagCustom(func(s string) error {
+		value := s
+		{{- template "acquire_io" (list $param "value") }}
+		return nil
+	}, false), "{{.}}", "{{$param.Description}}")
+	{{- else if $param.IsSlice }}
 	{{- $baseName := $param.BaseType | title }}
 	{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
 	{{- $helperName := printf "%sSlice" $baseName }}
@@ -36,9 +56,92 @@
 	fs.Var((*{{$helperName}})(&c.{{$param.Name}}), "{{.}}", "{{$param.Description}}")
 	{{- else }}
 	{{- if $param.HasPointer }}
-	fs.Func("{{.}}", "{{$param.Description}}", func(s string) error { return flagSetFuncPointer(&c.{{$param.Name}}, s, "{{$param.Type}}") })
-	{{- else if and $param.HasCustomParser }}
-	fs.Func("{{.}}", "{{$param.Description}}", func(s string) error { return flagSetFuncCustom(&c.{{$param.Name}}, s, "{{$param.Type}}", {{$param.ParserCall "s"}}) })
+	fs.Var(goFlagCustom(func(s string) error {
+		{{- if $param.HasCustomParser }}
+		v, err := {{$param.ParserCall "s"}}
+		if err != nil { return err }
+		val := {{$param.CastCode "v"}}
+		c.{{$param.Name}} = &val
+		{{- else if eq $param.BaseType "string" }}
+		val := s
+		c.{{$param.Name}} = &val
+		{{- else if eq $param.BaseType "bool" }}
+		b, err := strconv.ParseBool(s)
+		if err != nil { return err }
+		c.{{$param.Name}} = &b
+		{{- else if eq $param.BaseType "int" }}
+		iv, err := strconv.Atoi(s)
+		if err != nil { return err }
+		c.{{$param.Name}} = &iv
+		{{- else if eq $param.BaseType "int64" }}
+		iv, err := strconv.ParseInt(s, 10, 64)
+		if err != nil { return err }
+		c.{{$param.Name}} = &iv
+		{{- else if eq $param.BaseType "int32" }}
+		iv, err := strconv.ParseInt(s, 10, 32)
+		if err != nil { return err }
+		v := int32(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "int16" }}
+		iv, err := strconv.ParseInt(s, 10, 16)
+		if err != nil { return err }
+		v := int16(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "int8" }}
+		iv, err := strconv.ParseInt(s, 10, 8)
+		if err != nil { return err }
+		v := int8(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "uint" }}
+		iv, err := strconv.ParseUint(s, 10, strconv.IntSize)
+		if err != nil { return err }
+		v := uint(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "uint64" }}
+		iv, err := strconv.ParseUint(s, 10, 64)
+		if err != nil { return err }
+		c.{{$param.Name}} = &iv
+		{{- else if eq $param.BaseType "uint32" }}
+		iv, err := strconv.ParseUint(s, 10, 32)
+		if err != nil { return err }
+		v := uint32(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "uint16" }}
+		iv, err := strconv.ParseUint(s, 10, 16)
+		if err != nil { return err }
+		v := uint16(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "uint8" }}
+		iv, err := strconv.ParseUint(s, 10, 8)
+		if err != nil { return err }
+		v := uint8(iv)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "float64" }}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil { return err }
+		c.{{$param.Name}} = &f
+		{{- else if eq $param.BaseType "float32" }}
+		f, err := strconv.ParseFloat(s, 32)
+		if err != nil { return err }
+		v := float32(f)
+		c.{{$param.Name}} = &v
+		{{- else if eq $param.BaseType "time.Duration" }}
+		d, err := time.ParseDuration(s)
+		if err != nil { return err }
+		c.{{$param.Name}} = &d
+		{{- else }}
+		// fallback
+		return fmt.Errorf("pointer flag type {{$param.Type}} unsupported")
+		{{- end }}
+		return nil
+	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", "{{$param.Description}}")
+	{{- else if $param.HasCustomParser }}
+	fs.Var(goFlagCustom(func(s string) error {
+		v, err := {{$param.ParserCall "s"}}
+		if err != nil { return err }
+		c.{{$param.Name}} = {{$param.CastCode "v"}}
+		return nil
+	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", "{{$param.Description}}")
 	{{- else if eq $param.Type "string" }}
 	fs.StringVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
 	{{- else if eq $param.Type "bool" }}
@@ -56,7 +159,41 @@
 	{{- else if eq $param.Type "time.Duration" }}
 	fs.DurationVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
 	{{- else }}
-	fs.Func("{{.}}", "{{$param.Description}}", func(s string) error { return flagSetFunc(&c.{{$param.Name}}, s, "{{$param.Type}}") })
+	fs.Var(goFlagCustom(func(s string) error {
+		// Types handled directly or custom parsing
+		{{- if eq $param.Type "int32" }}
+		iv, err := strconv.ParseInt(s, 10, 32)
+		if err != nil { return err }
+		c.{{$param.Name}} = int32(iv)
+		{{- else if eq $param.Type "int16" }}
+		iv, err := strconv.ParseInt(s, 10, 16)
+		if err != nil { return err }
+		c.{{$param.Name}} = int16(iv)
+		{{- else if eq $param.Type "int8" }}
+		iv, err := strconv.ParseInt(s, 10, 8)
+		if err != nil { return err }
+		c.{{$param.Name}} = int8(iv)
+		{{- else if eq $param.Type "uint32" }}
+		iv, err := strconv.ParseUint(s, 10, 32)
+		if err != nil { return err }
+		c.{{$param.Name}} = uint32(iv)
+		{{- else if eq $param.Type "uint16" }}
+		iv, err := strconv.ParseUint(s, 10, 16)
+		if err != nil { return err }
+		c.{{$param.Name}} = uint16(iv)
+		{{- else if eq $param.Type "uint8" }}
+		iv, err := strconv.ParseUint(s, 10, 8)
+		if err != nil { return err }
+		c.{{$param.Name}} = uint8(iv)
+		{{- else if eq $param.Type "float32" }}
+		f, err := strconv.ParseFloat(s, 32)
+		if err != nil { return err }
+		c.{{$param.Name}} = float32(f)
+		{{- else }}
+		return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented")
+		{{- end }}
+		return nil
+	}, false), "{{.}}", "{{$param.Description}}")
 	{{- end }}
 	{{- end }}
 	{{- end }}
@@ -77,12 +214,22 @@
 	{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 	seenFlags["{{$param.Name}}"] = false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "{{$param.Name}}" {{ range $param.FlagAliases }}|| f.Name == "{{.}}"{{ end }} {
+		if f.Name == "{{$param.Name}}" {
 			seenFlags["{{$param.Name}}"] = true
 		}
+		{{- range $alias := $param.FlagAliases }}
+		{{- if ne $alias $param.Name }}
+		else if f.Name == "{{$alias}}" {
+			seenFlags["{{$param.Name}}"] = true
+		}
+		{{- end }}
+		{{- end }}
 	})
 	{{- end }}
 	{{- end }}
 	{{- end }}
 	remainingArgs = fs.Args()
+	if dashIdx != -1 && len(args)-fs.NArg() <= dashIdx {
+		dashDashSeen = true
+	}
 {{- end }}
