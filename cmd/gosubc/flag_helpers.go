@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
@@ -676,4 +677,39 @@ func (s *DurationPointerSlice) Set(value string) error {
 	}
 	*s = append(*s, &d)
 	return nil
+}
+
+type goFlagCustomValue struct {
+	set func(string) error
+}
+
+func (v *goFlagCustomValue) Set(s string) error {
+	return v.set(s)
+}
+
+func (v *goFlagCustomValue) String() string {
+	return ""
+}
+
+type goFlagBoolCustomValue struct {
+	set func(string) error
+}
+
+func (v *goFlagBoolCustomValue) Set(s string) error {
+	return v.set(s)
+}
+
+func (v *goFlagBoolCustomValue) String() string {
+	return ""
+}
+
+func (v *goFlagBoolCustomValue) IsBoolFlag() bool {
+	return true
+}
+
+func goFlagCustom(set func(string) error, isBool bool) flag.Value {
+	if isBool {
+		return &goFlagBoolCustomValue{set: set}
+	}
+	return &goFlagCustomValue{set: set}
 }

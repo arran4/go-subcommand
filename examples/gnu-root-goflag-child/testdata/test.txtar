@@ -1,0 +1,8 @@
+exec test-app -g --long testval pos1
+stdout 'Root gnuFlag= true  longFlag= testval'
+
+exec test-app child -go-flag value -b childpos
+stdout 'Child goFlag= value  boolFlag= true'
+
+exec test-app child -go-flag=value -b=true childpos
+stdout 'Child goFlag= value  boolFlag= true'

@@ -43,7 +43,7 @@ func Sub() {}
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -53,7 +53,7 @@ func Sub() {}
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false, "", "", "")
+	err = GenerateWithFS(fs, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -81,7 +81,7 @@ func Cmd2() {}
 
 	// Test with specific path
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
 	}, false, false, nil, false, false, "", "", "")
@@ -103,7 +103,7 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
@@ -126,7 +126,7 @@ func TestGenerate_AliasedIOCompiles(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasio\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasIOSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -157,7 +157,7 @@ func TestGenerate_AliasedRootIOCompiles(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasroot\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasRootIOSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func Root() {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fs, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, "", "", "", fs)
+	err := GenerateWithFS(fs, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, "", "", "", fs)
 	if err != nil {
 		t.Fatalf("GenerateWithFS with replaceTemplates failed: %v", err)
 	}
@@ -319,7 +319,7 @@ func Root(cores int, limit int) {}
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("GenerateWithFS failed: %v", err)
 	}
@@ -350,14 +350,14 @@ func TestGenerate_Clean(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
 	customFile := filepath.Join(dir, "cmd", "app", "custom.go")
 	writeRuntimeFixture(t, customFile, "package app\n// Custom user file\n")
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate with clean failed: %v", err)
 	}
 
@@ -425,9 +425,9 @@ func TestResolveCLIParser(t *testing.T) {
 		wantErr  bool
 	}{
 		{name: "implicit default", want: "gnu"},
-		{name: "generator default go flag is unsupported", fallback: "go-flag", wantErr: true},
+		{name: "generator default go flag", fallback: "go-flag", want: "go-flag"},
 		{name: "explicit gnu overrides unsupported generator default", local: "gnu", fallback: "go-flag", want: "gnu"},
-		{name: "explicit go flag is unsupported", local: "go-flag", fallback: "gnu", wantErr: true},
+		{name: "explicit go flag", local: "go-flag", fallback: "gnu", want: "go-flag"},
 		{name: "plus minus reserved", local: "plus-minus", wantErr: true},
 		{name: "unknown", local: "unknown", wantErr: true},
 	}
@@ -453,7 +453,7 @@ func TestResolveCLIParser(t *testing.T) {
 
 func TestResolveCLIParsers(t *testing.T) {
 	root := &model.Command{MainCmdName: "app"}
-	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CLIParser: "gnu"}
+	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CLIParser: "go-flag"}
 	legacyImport := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "import"}
 	modern := &model.SubCommand{Command: root, SubCommandName: "modern"}
 	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CLIParser: "gnu"}
@@ -471,8 +471,8 @@ func TestResolveCLIParsers(t *testing.T) {
 	}{
 		{name: "root", got: root.ResolvedCLIParser, want: "gnu"},
 		{name: "modern inherits root", got: modern.ResolvedCLIParser, want: "gnu"},
-		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "gnu"},
-		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "gnu"},
+		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "go-flag"},
+		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "go-flag"},
 		{name: "descendant overrides back", got: gnuOverride.ResolvedCLIParser, want: "gnu"},
 	}
 
@@ -483,19 +483,30 @@ func TestResolveCLIParsers(t *testing.T) {
 	}
 }
 
-func TestGenerateWithFSRejectsUnimplementedCLIParser(t *testing.T) {
+func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 	tests := []struct {
-		name    string
-		comment string
-		ops     []any
+		name         string
+		comment      string
+		cliParser    string
+		expectParser string
+		ops          []any
 	}{
 		{
-			name: "generation default",
-			ops:  []any{GenerateOptions{CLIParser: "go-flag"}},
+			name:         "generation default empty, implicit gnu",
+			cliParser:    "",
+			expectParser: "cli_parser_gnu",
 		},
 		{
-			name:    "command metadata",
-			comment: "// CLI-Parser: go-flag\n",
+			name:         "generation default explicit go-flag",
+			cliParser:    "go-flag",
+			expectParser: "cli_parser_go-flag",
+		},
+
+		{
+			name:         "command metadata",
+			cliParser:    "gnu",
+			comment:      "// CLI-Parser: go-flag\n",
+			expectParser: "cli_parser_go-flag",
 		},
 	}
 
@@ -506,15 +517,20 @@ func TestGenerateWithFSRejectsUnimplementedCLIParser(t *testing.T) {
 				"main.go": {Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
 			}
 			writer := NewCollectingFileWriter()
-			err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", tt.ops...)
-			if err == nil {
-				t.Fatal("GenerateWithFS unexpectedly succeeded")
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", tt.cliParser, nil, false, false, nil, false, false, "", "", "", tt.ops...)
+			if err != nil {
+				t.Fatalf("GenerateWithFS unexpectedly failed with implemented go-flag: %v", err)
 			}
-			if !strings.Contains(err.Error(), `cli-parser "go-flag" is not implemented`) {
-				t.Fatalf("GenerateWithFS error = %q, want clear go-flag backend error", err)
+			if len(writer.Files) == 0 {
+				t.Fatalf("GenerateWithFS wrote %d files after accepting go-flag", len(writer.Files))
 			}
-			if len(writer.Files) != 0 {
-				t.Fatalf("GenerateWithFS wrote %d files after rejecting go-flag", len(writer.Files))
+
+			// Verify it generated the correct parser fragment
+			generatedContent := string(writer.Files["cmd/app/root.go"])
+
+			// go-flag emits c.FlagSet.Parse(args), whereas gnu doesn't
+			if tt.expectParser == "cli_parser_go-flag" && !strings.Contains(generatedContent, "fs.Parse(args)") {
+				t.Fatalf("Expected output to contain Go flag parser logic, got: \n%s", generatedContent)
 			}
 		})
 	}
@@ -540,7 +556,7 @@ func App(
 }
 `)
 
-	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -574,5 +590,23 @@ func App(
 	cmd.Dir = dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generated pointer root module tests failed: %v\n%s\nGenerated test:\n%s", err, output, testSource)
+	}
+}
+
+func TestReplaceCLIParserTemplate(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod":        {Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go":       {Data: []byte("package main\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n")},
+		"custom.gotmpl": {Data: []byte("{{- define \"cli_parser_gnu\" }}\n// CUSTOM PARSER INJECTED\n{{- end }}")},
+	}
+	writer := NewCollectingFileWriter()
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", nil, false, false, []string{"cli-parsers/gnu.gotmpl=custom.gotmpl"}, false, false, "", "", "", fsys)
+	if err != nil {
+		t.Fatalf("GenerateWithFS with replaced template failed: %v", err)
+	}
+
+	generatedContent := string(writer.Files["cmd/app/root.go"])
+	if !strings.Contains(generatedContent, "// CUSTOM PARSER INJECTED") {
+		t.Fatalf("Expected injected parser to be present in generation")
 	}
 }

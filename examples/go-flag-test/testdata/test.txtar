@@ -1,0 +1,19 @@
+exec go-flag-test -verbose -a -b -c pos1 pos2
+stdout 'App in='
+stdout 'verbose'
+stdout 'a'
+stdout 'b'
+stdout 'c'
+
+! exec go-flag-test -abc
+stderr 'Error: flag provided but not defined: -abc'
+
+exec go-flag-test child -v
+stdout 'App in='
+stdout 'Child v= true'
+
+exec go-flag-test -- child -v
+stdout 'App in='
+
+exec go-flag-test positional -- child
+stdout 'App in='
