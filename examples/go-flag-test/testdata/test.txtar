@@ -11,3 +11,9 @@ stderr 'Error: flag provided but not defined: -abc'
 exec go-flag-test child -v
 stdout 'App in='
 stdout 'Child v= true'
+
+exec go-flag-test -- child -v
+stdout 'App in='
+
+exec go-flag-test positional -- child
+stdout 'App in='

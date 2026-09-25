@@ -359,14 +359,25 @@ You can override the backend applied either across the generator defaults, or in
 // Legacy is a subcommand `app legacy`
 // CLI-Parser: go-flag
 func Legacy() {}
+
+// Nested override back to gnu inherits nearest explicit ancestor
+// Child is a subcommand `app legacy child`
+// CLI-Parser: gnu
+func Child() {}
 ```
 
-The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it ignores GNU-style clustered short options, handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively.
-`plus-minus` is a reserved parser name for tracking future parser additions.
+**Subtree Command Boundaries:**
+A parent parsing its argv according to its own backend scopes the argv entirely per tree level. Once the parent identifies and dispatches a child subcommand, the remaining argv strictly belongs to the child's Execute scope, preventing parent-parsing bleed logic entirely without reinterpreting previously parsed flags from the caller level.
+
+**Parser Specific Constraints:**
+The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it ignores GNU-style clustered short options, handles single dashes natively (so `-in README.md` is fully supported, and `-abc` natively fails instead of parsing individually), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
+All arguments preceding a explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` calls correctly render help syntax across all backends natively.
+
+`plus-minus` is a reserved parser name for tracking future `+x`/`-x` style toggle parser additions.
 
 
 #### Replace CLI-Parser Backends
-The runtime CLI parser behavior can be fully swapped by overriding the defined templates via the `--replace-template` option:
+The runtime CLI parser behavior can be fully swapped by overriding the defined templates via the `--replace-template` option, allowing fallback syntax generation while replacing only targeted parser structures inside templates:
 ```sh
 go run github.com/arran4/go-subcommand/cmd/gosubc generate --replace-template "cli-parsers/gnu.gotmpl=my_custom_parser.gotmpl"
 ```

@@ -226,8 +226,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}()
 	var remainingArgs []string
 	dashDashSeen := false
-	// Check if -- is passed before positionals. We need to evaluate whether flag parsing stopped due to -- or due to positional.
-	// FlagSet will consume -- and stop. So if we have remaining args and -- was present right where FlagSet stopped, it saw it.
 
 	c.FlagSet = flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
 	c.FlagSet.Usage = c.Usage
@@ -310,13 +308,43 @@ func (c *RootCmd) Execute(args []string) (err error) {
 
 	remainingArgs = fs.Args()
 
-	// Check exactly why flagset stopped parsing
+	// A proper scan handles values attached vs detached and booleans safely to determine exact boundaries
 	parsedArgsCount := len(args) - len(remainingArgs)
-	if parsedArgsCount < len(args) && args[parsedArgsCount] == "--" {
-		dashDashSeen = true
-	} else if parsedArgsCount > 0 && args[parsedArgsCount-1] == "--" {
-		dashDashSeen = true
+	if parsedArgsCount > 0 && args[parsedArgsCount-1] == "--" {
+		// Verify if it was consumed as a value by the preceding flag
+		wasValue := false
+		if parsedArgsCount >= 2 {
+			prevArg := args[parsedArgsCount-2]
+			if len(prevArg) > 0 && prevArg[0] == '-' {
+				prevName := prevArg[1:]
+				if len(prevName) > 0 && prevName[0] == '-' {
+					prevName = prevName[1:]
+				}
+				eqIdx := -1
+				for i, c := range prevName {
+					if c == '=' {
+						eqIdx = i
+						break
+					}
+				}
+				if eqIdx == -1 {
+					f := fs.Lookup(prevName)
+					if f != nil {
+						if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
+							wasValue = true
+						}
+					}
+				}
+			}
+		}
+		if !wasValue {
+			dashDashSeen = true
+		}
+	} else if parsedArgsCount < len(args) && args[parsedArgsCount] == "--" {
+		// we didn't consume it.
 	}
+
+	// Add remaining args as varargs manually for Go-Flag when we correctly matched bounds without dash
 	if !seenFlags["in"] {
 		if "-" == "-" {
 			c.in = os.Stdin
