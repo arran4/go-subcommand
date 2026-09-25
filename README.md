@@ -345,3 +345,28 @@ Contributions are welcome! If you find a bug or have a feature request, please o
 ## License
 
 This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
+
+### Parser Backend Configuration
+* `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
+* `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
+* parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
+
+#### Runtime Parser Backends
+By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
+
+You can override the backend applied either across the generator defaults, or individually by inheriting sub-commands to support mixing multiple CLI grammars:
+```go
+// Legacy is a subcommand `app legacy`
+// CLI-Parser: go-flag
+func Legacy() {}
+```
+
+The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it ignores GNU-style clustered short options, handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively.
+`plus-minus` is a reserved parser name for tracking future parser additions.
+
+
+#### Replace CLI-Parser Backends
+The runtime CLI parser behavior can be fully swapped by overriding the defined templates via the `--replace-template` option:
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc generate --replace-template "cli-parsers/gnu.gotmpl=my_custom_parser.gotmpl"
+```

@@ -453,7 +453,7 @@ func TestResolveCLIParser(t *testing.T) {
 
 func TestResolveCLIParsers(t *testing.T) {
 	root := &model.Command{MainCmdName: "app"}
-	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CLIParser: "gnu"}
+	legacy := &model.SubCommand{Command: root, SubCommandName: "legacy", CLIParser: "go-flag"}
 	legacyImport := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "import"}
 	modern := &model.SubCommand{Command: root, SubCommandName: "modern"}
 	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CLIParser: "gnu"}
@@ -471,8 +471,8 @@ func TestResolveCLIParsers(t *testing.T) {
 	}{
 		{name: "root", got: root.ResolvedCLIParser, want: "gnu"},
 		{name: "modern inherits root", got: modern.ResolvedCLIParser, want: "gnu"},
-		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "gnu"},
-		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "gnu"},
+		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "go-flag"},
+		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "go-flag"},
 		{name: "descendant overrides back", got: gnuOverride.ResolvedCLIParser, want: "gnu"},
 	}
 
@@ -571,5 +571,23 @@ func App(
 	cmd.Dir = dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generated pointer root module tests failed: %v\n%s\nGenerated test:\n%s", err, output, testSource)
+	}
+}
+
+func TestReplaceCLIParserTemplate(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod":        {Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go":       {Data: []byte("package main\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n")},
+		"custom.gotmpl": {Data: []byte("{{- define \"cli_parser_gnu\" }}\n// CUSTOM PARSER INJECTED\n{{- end }}")},
+	}
+	writer := NewCollectingFileWriter()
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", nil, false, false, []string{"cli-parsers/gnu.gotmpl=custom.gotmpl"}, false, false, "", "", "", fsys)
+	if err != nil {
+		t.Fatalf("GenerateWithFS with replaced template failed: %v", err)
+	}
+
+	generatedContent := string(writer.Files["cmd/app/root.go"])
+	if !strings.Contains(generatedContent, "// CUSTOM PARSER INJECTED") {
+		t.Fatalf("Expected injected parser to be present in generation")
 	}
 }
