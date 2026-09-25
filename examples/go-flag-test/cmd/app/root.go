@@ -226,15 +226,8 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}()
 	var remainingArgs []string
 	dashDashSeen := false
-	dashIdx := -1
-	for i, arg := range args {
-		if arg == "--" {
-			dashIdx = i
-			break
-		}
-	}
-	_ = dashIdx
-	// dashDashSeen is evaluated later based on remaining arguments.
+	// Check if -- is passed before positionals. We need to evaluate whether flag parsing stopped due to -- or due to positional.
+	// FlagSet will consume -- and stop. So if we have remaining args and -- was present right where FlagSet stopped, it saw it.
 
 	c.FlagSet = flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
 	c.FlagSet.Usage = c.Usage
@@ -316,7 +309,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	})
 
 	remainingArgs = fs.Args()
-	if dashIdx != -1 && len(args)-fs.NArg() <= dashIdx {
+
+	// Check exactly why flagset stopped parsing
+	parsedArgsCount := len(args) - len(remainingArgs)
+	if parsedArgsCount < len(args) && args[parsedArgsCount] == "--" {
+		dashDashSeen = true
+	} else if parsedArgsCount > 0 && args[parsedArgsCount-1] == "--" {
 		dashDashSeen = true
 	}
 	if !seenFlags["in"] {
