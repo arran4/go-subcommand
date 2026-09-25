@@ -393,10 +393,12 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 	for _, opt := range ops {
 		switch value := opt.(type) {
 		case GenerateOptions:
-			result = value
+			if value.CLIParser != "" {
+				result.CLIParser = value.CLIParser
+			}
 		case *GenerateOptions:
-			if value != nil {
-				result = *value
+			if value != nil && value.CLIParser != "" {
+				result.CLIParser = value.CLIParser
 			}
 		}
 	}

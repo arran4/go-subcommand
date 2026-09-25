@@ -485,17 +485,28 @@ func TestResolveCLIParsers(t *testing.T) {
 
 func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 	tests := []struct {
-		name    string
-		comment string
-		ops     []any
+		name         string
+		comment      string
+		cliParser    string
+		expectParser string
+		ops          []any
 	}{
 		{
-			name: "generation default",
-			ops:  []any{GenerateOptions{CLIParser: "go-flag"}},
+			name:         "generation default empty, implicit gnu",
+			cliParser:    "",
+			expectParser: "cli_parser_gnu",
 		},
 		{
-			name:    "command metadata",
-			comment: "// CLI-Parser: go-flag\n",
+			name:         "generation default explicit go-flag",
+			cliParser:    "go-flag",
+			expectParser: "cli_parser_go-flag",
+		},
+
+		{
+			name:         "command metadata",
+			cliParser:    "gnu",
+			comment:      "// CLI-Parser: go-flag\n",
+			expectParser: "cli_parser_go-flag",
 		},
 	}
 
@@ -506,12 +517,20 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 				"main.go": {Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
 			}
 			writer := NewCollectingFileWriter()
-			err := GenerateWithFS(input, writer, ".", "", "commentv1", "gnu", nil, false, false, nil, false, false, "", "", "", tt.ops...)
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", tt.cliParser, nil, false, false, nil, false, false, "", "", "", tt.ops...)
 			if err != nil {
-				t.Fatal("GenerateWithFS unexpectedly failed with implemented go-flag")
+				t.Fatalf("GenerateWithFS unexpectedly failed with implemented go-flag: %v", err)
 			}
 			if len(writer.Files) == 0 {
 				t.Fatalf("GenerateWithFS wrote %d files after accepting go-flag", len(writer.Files))
+			}
+
+			// Verify it generated the correct parser fragment
+			generatedContent := string(writer.Files["cmd/app/root.go"])
+
+			// go-flag emits c.FlagSet.Parse(args), whereas gnu doesn't
+			if tt.expectParser == "cli_parser_go-flag" && !strings.Contains(generatedContent, "fs.Parse(args)") {
+				t.Fatalf("Expected output to contain Go flag parser logic, got: \n%s", generatedContent)
 			}
 		})
 	}
