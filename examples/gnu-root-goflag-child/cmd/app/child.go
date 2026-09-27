@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/arran4/go-subcommand/examples/gnu-root-goflag-child/cmd"
 	"github.com/arran4/go-subcommand/examples/gnu-root-goflag-child/internal/myapp"
@@ -50,6 +48,9 @@ func (c *Child) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 
+	c.FlagSet = flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	c.FlagSet.Usage = c.Usage
+
 	// Create a local flagset so it doesn't ExitOnError or panic
 	fs := flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
 	fs.Usage = c.Usage
@@ -71,6 +72,42 @@ func (c *Child) Execute(args []string) (err error) {
 	}
 
 	remainingArgs = fs.Args()
+
+	// A proper scan handles values attached vs detached and booleans safely to determine exact boundaries
+	parsedArgsCount := len(args) - len(remainingArgs)
+	if parsedArgsCount > 0 && args[parsedArgsCount-1] == "--" {
+		// Verify if it was consumed as a value by the preceding flag
+		wasValue := false
+		if parsedArgsCount >= 2 {
+			prevArg := args[parsedArgsCount-2]
+			if len(prevArg) > 0 && prevArg[0] == '-' {
+				prevName := prevArg[1:]
+				if len(prevName) > 0 && prevName[0] == '-' {
+					prevName = prevName[1:]
+				}
+				eqIdx := -1
+				for i, c := range prevName {
+					if c == '=' {
+						eqIdx = i
+						break
+					}
+				}
+				if eqIdx == -1 {
+					f := fs.Lookup(prevName)
+					if f != nil {
+						if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
+							wasValue = true
+						}
+					}
+				}
+			}
+		}
+		if !wasValue {
+			dashDashSeen = true
+		}
+	} else if parsedArgsCount < len(args) && args[parsedArgsCount] == "--" {
+		// we didn't consume it.
+	}
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {

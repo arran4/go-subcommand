@@ -15,6 +15,7 @@ Subcommands:
     -b                  (default: false)
     -c                  (default: false)
     --pointerInt *int   (default: nil)
+    --name string       (default: "")
     --args []string                        (positional: true)
 
 `child` Flags:

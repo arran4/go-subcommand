@@ -6,3 +6,9 @@ stdout 'Child goFlag= value  boolFlag= true'
 
 exec test-app child -go-flag=value -b=true childpos
 stdout 'Child goFlag= value  boolFlag= true'
+
+
+# assert inheritance works natively
+exec test-app -g child -go-flag childFlag -b childArg
+stdout 'Root gnuFlag= true  longFlag= test'
+stdout 'Child goFlag= childFlag  boolFlag= true'

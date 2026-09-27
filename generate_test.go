@@ -513,8 +513,8 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := fstest.MapFS{
-				"go.mod":  {Data: []byte("module example.com/test\n\ngo 1.22\n")},
-				"main.go": {Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
+				"go.mod":  &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+				"main.go": &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
 			}
 			writer := NewCollectingFileWriter()
 			err := GenerateWithFS(input, writer, ".", "", "commentv1", tt.cliParser, nil, false, false, nil, false, false, "", "", "", tt.ops...)
@@ -593,11 +593,90 @@ func App(
 	}
 }
 
+
+func TestRuntimeParserImports(t *testing.T) {
+	// Go-flag root with only native FlagSet types -> no unused strings / strconv
+
+	params1 := []*model.FunctionParameter{
+		{Type: "string", Name: "name"},
+		{Type: "int", Name: "age"},
+		{Type: "bool", Name: "verbose"},
+	}
+
+
+	cmd1 := &model.Command{Parameters: params1, ResolvedCLIParser: "go-flag"}
+
+	imports1 := commandImports(cmd1, "")
+	for _, imp := range append(imports1.Standard, imports1.Other...) {
+		if imp.Path == "strings" || imp.Path == "strconv" {
+			t.Errorf("Test 1: unexpected import %s", imp.Path)
+		}
+	}
+
+	// Go-flag root with a manual-conversion type such as *int -> strconv present and used
+	params2 := []*model.FunctionParameter{
+		{Type: "*int", Name: "age"},
+	}
+
+
+	cmd2 := &model.Command{Parameters: params2, ResolvedCLIParser: "go-flag"}
+
+	imports2 := commandImports(cmd2, "")
+	hasStrconv2 := false
+	for _, imp := range append(imports2.Standard, imports2.Other...) {
+		if imp.Path == "strconv" {
+			hasStrconv2 = true
+		}
+	}
+	if !hasStrconv2 {
+		t.Errorf("Test 2: expected strconv import for *int in go-flag")
+	}
+
+	// GNU child with a non-bool numeric value flag -> no unnecessary strconv
+	params3 := []*model.FunctionParameter{
+		{Type: "int", Name: "age"},
+	}
+
+
+	cmd3 := &model.Command{Parameters: params3, ResolvedCLIParser: "gnu"}
+
+	imports3 := commandImports(cmd3, "")
+	hasStrconv3 := false
+	for _, imp := range append(imports3.Standard, imports3.Other...) {
+		if imp.Path == "strconv" {
+			hasStrconv3 = true
+		}
+	}
+
+	if !hasStrconv3 {
+		t.Errorf("Test 3: expected strconv import for int in gnu")
+	}
+
+	// GNU command with bool flag -> strconv present because ParseBool is emitted
+	params4 := []*model.FunctionParameter{
+		{Type: "bool", Name: "verbose"},
+	}
+
+
+	cmd4 := &model.Command{Parameters: params4, ResolvedCLIParser: "gnu"}
+
+	imports4 := commandImports(cmd4, "")
+	hasStrconv4 := false
+	for _, imp := range append(imports4.Standard, imports4.Other...) {
+		if imp.Path == "strconv" {
+			hasStrconv4 = true
+		}
+	}
+	if !hasStrconv4 {
+		t.Errorf("Test 4: expected strconv import for bool in gnu")
+	}
+}
+
 func TestReplaceCLIParserTemplate(t *testing.T) {
 	fsys := fstest.MapFS{
-		"go.mod":        {Data: []byte("module example.com/test\n\ngo 1.22\n")},
-		"main.go":       {Data: []byte("package main\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n")},
-		"custom.gotmpl": {Data: []byte("{{- define \"cli_parser_gnu\" }}\n// CUSTOM PARSER INJECTED\n{{- end }}")},
+		"go.mod":        &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"main.go":       &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n")},
+		"custom.gotmpl": &fstest.MapFile{Data: []byte("{{- define \"cli_parser_gnu\" }}\n// CUSTOM PARSER INJECTED\n{{- end }}")},
 	}
 	writer := NewCollectingFileWriter()
 	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", nil, false, false, []string{"cli-parsers/gnu.gotmpl=custom.gotmpl"}, false, false, "", "", "", fsys)

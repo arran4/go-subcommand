@@ -226,15 +226,15 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 	}
 	sort.Strings(subCommandNames)
 	if sct.SubCommand != nil {
-		sct.Command = cmd
-		sct.Parent = parent
+		sct.SubCommand.Command = cmd
+		sct.SubCommand.Parent = parent
 		// Allocate unique struct name
-		allocateName := sct.SubCommandName
+		allocateName := sct.SubCommand.SubCommandName
 		if parent != nil {
 			allocateName = parent.SubCommandStructName + " " + allocateName
 		}
-		sct.SubCommandStructName = allocator.Allocate(allocateName)
-		sct.ConstructorMethodName = allocator.Allocate("New" + sct.SubCommandStructName)
+		sct.SubCommand.SubCommandStructName = allocator.Allocate(allocateName)
+		sct.SubCommand.ConstructorMethodName = allocator.Allocate("New" + sct.SubCommand.SubCommandStructName)
 
 		subCommands = append(subCommands, sct.SubCommand)
 		for _, name := range subCommandNames {

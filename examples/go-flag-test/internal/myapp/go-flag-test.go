@@ -17,8 +17,9 @@ import (
 //	b: -b (default: false)
 //	c: -c (default: false)
 //	pointerInt: -pointerInt (default: nil)
+//	name: -name --name (default: "")
 //	args: (positional: true)
-func App(in io.Reader, out io.Writer, verbose bool, a bool, b bool, c bool, pointerInt *int, args []string) error {
+func App(in io.Reader, out io.Writer, verbose bool, a bool, b bool, c bool, pointerInt *int, name string, args []string) error {
 	inBytes, _ := io.ReadAll(in)
 	fmt.Fprintf(out, "App in=%s\n", strings.TrimSpace(string(inBytes)))
 	if verbose {
@@ -28,6 +29,7 @@ func App(in io.Reader, out io.Writer, verbose bool, a bool, b bool, c bool, poin
 	if b { fmt.Fprintln(out, "b") }
 	if c { fmt.Fprintln(out, "c") }
 	if pointerInt != nil { fmt.Fprintln(out, "pointerInt=", *pointerInt) }
+	if name != "" { fmt.Fprintln(out, "name:", name) }
 	for _, arg := range args {
 		fmt.Fprintln(out, "arg=" + arg)
 	}

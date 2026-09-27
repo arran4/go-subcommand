@@ -69,12 +69,12 @@ func TestSubCommandTree_Insert(t *testing.T) {
 			}
 
 			// Fix: QF1008: could remove embedded field "SubCommand" from selector (staticcheck)
-			if current.ImportPath != tt.importPath {
-				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.ImportPath)
+			if current.SubCommand.ImportPath != tt.importPath {
+				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.SubCommand.ImportPath)
 			}
 
-			if current.SubCommandPackageName != tt.packageName {
-				t.Errorf("Expected SubCommandPackageName '%s', got '%s'", tt.packageName, current.SubCommandPackageName)
+			if current.SubCommand.SubCommandPackageName != tt.packageName {
+				t.Errorf("Expected SubCommandPackageName '%s', got '%s'", tt.packageName, current.SubCommand.SubCommandPackageName)
 			}
 		})
 	}
@@ -174,8 +174,8 @@ func TestParseSubCommandCommentsCliParserIsMetadata(t *testing.T) {
 
 func TestParseGoFilesCliParserMetadata(t *testing.T) {
 	fsys := fstest.MapFS{
-		"go.mod":      {Data: []byte("module example.com/testcli\ngo 1.21\n")},
-		"commands.go": {Data: []byte("package testcli\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n\n// Child is a subcommand `app child`\n// CLI-Parser: go-flag\nfunc Child() {}\n")},
+		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/testcli\ngo 1.21\n")},
+		"commands.go": &fstest.MapFile{Data: []byte("package testcli\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n\n// Child is a subcommand `app child`\n// CLI-Parser: go-flag\nfunc Child() {}\n")},
 	}
 
 	data, err := ParseGoFiles(fsys, ".")

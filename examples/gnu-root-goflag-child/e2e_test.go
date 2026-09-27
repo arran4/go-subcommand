@@ -1,25 +1,33 @@
-package main
+package main_test
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
-	"github.com/arran4/go-subcommand/examples/gnu-root-goflag-child/cmd/app"
+	"fmt"
+
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testscript.RunMain(m, map[string]func() int{
-		"test-app": Main,
-	}))
-}
-
-func Main() int {
-	root, _ := app.NewRoot("app", "1.0", "commit", "date")
-	err := root.Execute(os.Args[1:])
+	tmpDir, err := os.MkdirTemp("", "testscript")
 	if err != nil {
-		return 1
+		panic(err)
 	}
-	return 0
+
+	binPath := filepath.Join(tmpDir, "test-app")
+	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/app")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "Build failed: %v\n%s\n", err, out)
+		os.RemoveAll(tmpDir)
+		os.Exit(1)
+	}
+
+	os.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	code := m.Run()
+	_ = os.RemoveAll(tmpDir)
+	os.Exit(code)
 }
 
 func TestScripts(t *testing.T) {
