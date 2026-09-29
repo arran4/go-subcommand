@@ -229,7 +229,7 @@ func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, pa
 		sct.Command = cmd
 		sct.Parent = parent
 		// Allocate unique struct name
-		allocateName := sct.SubCommand.SubCommandName
+		allocateName := sct.SubCommandName
 		if parent != nil {
 			allocateName = parent.SubCommandStructName + " " + allocateName
 		}

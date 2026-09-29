@@ -28,13 +28,6 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
-//go:embed templates/cmd/cli-parsers/gnu.gotmpl
-var customFsGnu []byte
-
-var customFs = fstest.MapFS{
-	"cli-parsers/gnu.gotmpl": &fstest.MapFile{Data: customFsGnu},
-}
-
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
