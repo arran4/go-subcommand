@@ -346,7 +346,12 @@ Generates release configuration.
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 
-You can override the backend applied either across the generator defaults, or individually by inheriting sub-commands to support mixing multiple CLI grammars:
+You can override the backend applied either across the generator defaults, or individually by inheriting sub-commands to support mixing multiple CLI grammars. The parser backend for any given command resolves in this explicit fallback order:
+1. The command's explicitly declared `CLI-Parser:` metadata.
+2. The nearest explicit ancestor's declared backend.
+3. The generation-wide default provided by `--cli-parser`.
+4. The `gnu` backend.
+
 ```go
 // Legacy is a subcommand `app legacy`
 // CLI-Parser: go-flag
@@ -362,14 +367,15 @@ func Child() {}
 A parent parsing its argv according to its own backend scopes the argv entirely per tree level. Once the parent identifies and dispatches a child subcommand, the remaining argv strictly belongs to the child's Execute scope, preventing parent-parsing bleed logic entirely without reinterpreting previously parsed flags from the caller level.
 
 **Parser Specific Constraints:**
-The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it ignores GNU-style clustered short options, handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
-All arguments preceding a explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` return FlagSet help behavior if undeclared, but explicitly declared `h` / `help` are treated as ordinary registered flags.
+The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it strictly ignores GNU-style clustered short options. A flag invoked as `-abc` evaluates specifically as the exact declared flag named `abc` if it exists. If `abc` is undeclared, it strictly returns an unknown flag error rather than being parsed as `-a -b -c`. It handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
+All arguments preceding an explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` return FlagSet help behavior if undeclared, but explicitly declared `h` / `help` are treated as ordinary registered flags.
 
-`plus-minus` is a reserved parser name for tracking future `+x`/`-x` style toggle parser additions.
+`plus-minus` is a reserved parser name for tracking future `+x`/`-x` style toggle parser additions (tracked via #464).
 
 
 #### Replace CLI-Parser Backends
-The runtime CLI parser behavior can be fully swapped by overriding the defined templates via the `--replace-template` option, allowing fallback syntax generation while replacing only targeted parser structures inside templates:
+The runtime CLI parser behavior can be fully swapped by overriding the defined templates via the `--replace-template` option, allowing fallback syntax generation while replacing only targeted parser structures. The built-in backends are mapped exactly to the paths `cli-parsers/gnu.gotmpl` and `cli-parsers/go-flag.gotmpl`. Replacing one specific parser fragment entirely leaves the other unreplaced backends completely available and selectable for command generation:
+
 ```sh
 go run github.com/arran4/go-subcommand/cmd/gosubc generate --replace-template "cli-parsers/gnu.gotmpl=my_custom_parser.gotmpl"
 ```
