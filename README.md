@@ -338,14 +338,6 @@ Generates release configuration.
 *   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
 *   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
 
-## Contributing
-
-Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
-
-## License
-
-This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
-
 ### Parser Backend Configuration
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
@@ -381,3 +373,11 @@ The runtime CLI parser behavior can be fully swapped by overriding the defined t
 ```sh
 go run github.com/arran4/go-subcommand/cmd/gosubc generate --replace-template "cli-parsers/gnu.gotmpl=my_custom_parser.gotmpl"
 ```
+
+## Contributing
+
+Contributions are welcome! If you find a bug or have a feature request, please open an issue on our [GitHub repository](https://github.com/arran4/go-subcommand).
+
+## License
+
+This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
