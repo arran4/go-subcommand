@@ -28,6 +28,8 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--parser-name")
 	args = append(args, "test")
+	args = append(args, "--cli-parser")
+	args = append(args, "test")
 	args = append(args, "--path")
 	args = append(args, "test")
 	args = append(args, "--recursive")
@@ -61,6 +63,9 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.parserName != "test" {
 		t.Errorf("Expected parserName to be 'test', got '%v'", cmd.parserName)
+	}
+	if cmd.cliParser != "test" {
+		t.Errorf("Expected cliParser to be 'test', got '%v'", cmd.cliParser)
 	}
 	if cmd.recursive != true {
 		t.Errorf("Expected recursive to be true, got '%v'", cmd.recursive)

@@ -174,8 +174,8 @@ func TestParseSubCommandCommentsCliParserIsMetadata(t *testing.T) {
 
 func TestParseGoFilesCliParserMetadata(t *testing.T) {
 	fsys := fstest.MapFS{
-		"go.mod":      {Data: []byte("module example.com/testcli\ngo 1.21\n")},
-		"commands.go": {Data: []byte("package testcli\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n\n// Child is a subcommand `app child`\n// CLI-Parser: go-flag\nfunc Child() {}\n")},
+		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/testcli\ngo 1.21\n")},
+		"commands.go": &fstest.MapFile{Data: []byte("package testcli\n\n// Root is a subcommand `app`\n// CLI-Parser: gnu\nfunc Root() {}\n\n// Child is a subcommand `app child`\n// CLI-Parser: go-flag\nfunc Child() {}\n")},
 	}
 
 	data, err := ParseGoFiles(fsys, ".")

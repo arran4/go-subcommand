@@ -23,6 +23,7 @@ type Generate struct {
 	dir               string
 	manDir            string
 	parserName        string
+	cliParser         string
 	paths             []string
 	recursive         bool
 	force             bool
@@ -116,6 +117,17 @@ func (c *Generate) Execute(args []string) (err error) {
 					}
 				}
 				c.parserName = value
+
+			case "cliParser", "cli-parser":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.cliParser = value
 
 			case "paths", "path":
 				if !hasValue {
@@ -281,6 +293,8 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.parserName, "parser-name", "commentv1", "Name of the parser to use")
 
+	set.StringVar(&v.cliParser, "cli-parser", "gnu", "Name of the runtime CLI parser backend to use")
+
 	set.Var((*StringSlice)(&v.paths), "path", "Paths to search for subcommands (relative to dir)")
 
 	set.BoolVar(&v.recursive, "recursive", true, "Search recursively")
@@ -305,7 +319,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

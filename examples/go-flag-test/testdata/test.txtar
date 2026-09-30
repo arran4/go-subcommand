@@ -1,0 +1,52 @@
+exec go-flag-test -verbose -a -b -c pos1 pos2
+stdout 'App in='
+stdout 'verbose'
+stdout 'a'
+stdout 'b'
+stdout 'c'
+
+! exec go-flag-test -abc
+stderr 'Error: flag provided but not defined: -abc'
+
+exec go-flag-test child -v
+stdout 'App in='
+stdout 'Child v= true'
+
+exec go-flag-test -- child -v
+stdout 'App in='
+
+exec go-flag-test positional -- child
+stdout 'App in='
+
+# test that -- acts as a terminator normally, but when passed to a value-taking flag, it is treated as a value, and child dispatch continues.
+exec go-flag-test -name -- child
+stdout 'name: --'
+stdout 'Child v= false'
+
+exec go-flag-test -verbose -- child
+stdout 'verbose'
+
+
+# test missing #461 forms
+exec go-flag-test -name value
+stdout 'name: value'
+
+exec go-flag-test --name value
+stdout 'name: value'
+
+exec go-flag-test -name=value
+stdout 'name: value'
+
+exec go-flag-test --name=value
+stdout 'name: value'
+
+# test unknown flag on go-flag
+! exec go-flag-test -unknown
+stderr 'flag provided but not defined: -unknown'
+
+# test unknown on mixed backend
+! exec go-flag-test child --unknown
+stderr 'unknown flag: --unknown'
+
+! exec go-flag-test child -unknown
+stderr 'unknown flag: -u'
