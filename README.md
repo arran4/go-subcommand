@@ -300,7 +300,7 @@ To generate man pages, pass the `--man-dir` flag to `gosubc`.
 gosubc generate --man-dir ./man
 ```
 
-This will generate standard Unix man pages in the specified directory, using the descriptions and extended help text from your comments.
+This will generate standard Unix man pages in the specified directory, using the descriptions and extended help text from your comments.\n\nWhen upgrading from a generator version affected by [#469](https://github.com/arran4/go-subcommand/issues/469), regenerating existing man pages will produce a one-time canonical diff that removes deterministic trailing whitespace. Commit the regenerated output from the fixed generator rather than preserving the old spaces.
 
 ## CLI Reference
 
