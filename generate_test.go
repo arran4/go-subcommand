@@ -764,11 +764,10 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
 }
 
-
 func TestGenerate_ManWhitespace(t *testing.T) {
 	fsys := fstest.MapFS{
-		"go.mod": &fstest.MapFile{Data: []byte("module example.com/app\n\ngo 1.25.0\n")},
-		"main.go": &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app` -- application root\nfunc Root() {}\n")},
+		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/app\n\ngo 1.25.0\n")},
+		"main.go":     &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app` -- application root\nfunc Root() {}\n")},
 		"pkg1/cmd.go": &fstest.MapFile{Data: []byte("package pkg1\n\n// Cmd1 is a subcommand `app cmd1` -- test command\n// Flags:\n//\tparam1: (default: \"foo\") Parameter 1\n//\tparam2: Parameter 2\nfunc Cmd1(param1 string, param2 int) {}\n")},
 	}
 
