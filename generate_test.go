@@ -796,3 +796,58 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
 }
+
+func TestGenerate_ManWhitespace(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/app\n\ngo 1.25.0\n")},
+		"main.go":     &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app` -- application root\nfunc Root() {}\n")},
+		"pkg1/cmd.go": &fstest.MapFile{Data: []byte("package pkg1\n\n// Cmd1 is a subcommand `app cmd1` -- test command\n// Flags:\n//\tparam1: (default: \"foo\") Parameter 1\n//\tparam2: Parameter 2\nfunc Cmd1(param1 string, param2 int) {}\n")},
+	}
+
+	generate := func() []byte {
+		t.Helper()
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(fsys, writer, ".", "man", "commentv1", "gnu", nil, false, false, nil, false, false, "", "", ""); err != nil {
+			t.Fatalf("GenerateWithFS failed: %v", err)
+		}
+		content, ok := writer.Files["man/app-cmd1.1"]
+		if !ok {
+			t.Fatal("man/app-cmd1.1 was not generated")
+		}
+		return append([]byte(nil), content...)
+	}
+
+	first := generate()
+	second := generate()
+	if string(first) != string(second) {
+		t.Fatal("repeated man-page generation was not byte-for-byte stable")
+	}
+
+	output := string(first)
+	if !strings.Contains(output, "\n[param1] [param2]\n") {
+		t.Fatalf("synopsis parameters are not separated correctly:\n%s", output)
+	}
+
+	sawDefault := false
+	sawNoDefault := false
+	for i, line := range strings.Split(output, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Errorf("line %d has trailing whitespace: %q", i+1, line)
+		}
+		if strings.Contains(line, "Parameter 1") {
+			sawDefault = true
+			if !strings.Contains(line, "(default:") {
+				t.Errorf("defaulted option lost its default: %q", line)
+			}
+		}
+		if strings.Contains(line, "Parameter 2") {
+			sawNoDefault = true
+			if strings.Contains(line, "(default:") {
+				t.Errorf("option without a default gained one: %q", line)
+			}
+		}
+	}
+	if !sawDefault || !sawNoDefault {
+		t.Fatalf("expected both defaulted and non-defaulted option descriptions:\n%s", output)
+	}
+}
