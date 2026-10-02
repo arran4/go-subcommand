@@ -23,15 +23,18 @@ func TestRuntimeRequirements(t *testing.T) {
 	}
 
 	err = root.Execute([]string{
-		"--config", "config.yml", "parent", "--dir", "workspace", "child",
+		"--config", "config.yml", "parent", "--dir", "renamed-value", "--same-dir", "same-name-value", "child",
 		"-zxwq=123", "-Vfirst", "-V=second", "--ptr=0",
 		"--parsed", "value", "--local-parsed", "value",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := child.dir, "workspace"; got != want {
-		t.Fatalf("inherited parent value = %q, want %q", got, want)
+	if got, want := child.dir, "renamed-value"; got != want {
+		t.Fatalf("renamed inherited parent value = %q, want %q", got, want)
+	}
+	if got, want := child.sameDir, "same-name-value"; got != want {
+		t.Fatalf("same-name inherited parent value = %q, want %q", got, want)
 	}
 	if !child.z || !child.x || !child.w || child.q != "123" {
 		t.Fatalf("GNU short flags not parsed: z=%t x=%t w=%t q=%q", child.z, child.x, child.w, child.q)

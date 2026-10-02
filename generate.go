@@ -1017,7 +1017,7 @@ func runtimeParserImports(parser string, params []*model.FunctionParameter) []te
 		imports = append(imports, templateImport{Path: "strings"})
 
 		for _, param := range params {
-			if !param.HasGenerator() && param.InheritedFrom == "" && !param.IsPositional {
+			if !param.HasGenerator() && !param.Inherited && !param.IsPositional {
 				t := param.Type
 
 				// boolean flags with a long alias emit ParseBool inside gnu branch
@@ -1055,7 +1055,7 @@ func runtimeParserImports(parser string, params []*model.FunctionParameter) []te
 		}
 	} else if parser == "go-flag" {
 		for _, param := range params {
-			if !param.HasGenerator() && param.InheritedFrom == "" && !param.IsPositional {
+			if !param.HasGenerator() && !param.Inherited && !param.IsPositional {
 				t := param.Type
 				isPointer := strings.HasPrefix(t, "*")
 				if isPointer {

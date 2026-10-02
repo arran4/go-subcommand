@@ -9,7 +9,7 @@
 
 	{{- $hasTrackedFlags := false }}
 	{{- range .Parameters }}
-		{{- if or .Required (and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) (or .IsWriter .IsReader) .HasDefaultValue) }}
+		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -22,7 +22,7 @@
 	fs.Usage = c.Usage
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 	{{$param := .}}
 	{{- $aliases := list }}
 	{{- $aliases = append $aliases .Name }}
@@ -201,7 +201,7 @@
 	}
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 	{{$param := .}}
 	{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 	seenFlags["{{$param.Name}}"] = false
