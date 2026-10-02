@@ -130,15 +130,17 @@ func TestParseGoFile_InheritedFlagAliasAndLocalParser(t *testing.T) {
 // Flags:
 //
 //	dir: --dir Parent directory
-func Parent(dir string) {}
+//	sameDir: --same-dir Parent directory same
+func Parent(dir string, sameDir string) {}
 
 // Child is a subcommand ` + "`app parent child`" + `.
 //
 // Flags:
 //
 //	dir: --dir (from parent)
+//	sameDir: --same-dir (from parent)
 //	parsed: (parser: ParseLocal) --parsed Parsed locally
-func Child(d string, parsed string) {}
+func Child(d string, sameDir string, parsed string) {}
 
 func ParseLocal(value string) (string, error) { return value, nil }
 `
@@ -150,13 +152,17 @@ func ParseLocal(value string) (string, error) { return value, nil }
 
 	child := commands.Commands["app"].SubCommands["parent"].SubCommands["child"].SubCommand
 	inherited := child.Parameters[0]
-	if inherited.InheritedFrom != "dir" || inherited.DeclaredIn != "parent" {
+	if !inherited.Inherited || inherited.InheritedFrom != "dir" || inherited.DeclaredIn != "parent" {
 		t.Errorf("inherited parameter = %#v, want InheritedFrom dir declared in parent", inherited)
 	}
 	if got, want := inherited.FlagAliases, []string{"dir"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("inherited aliases = %v, want %v", got, want)
 	}
-	localParser := child.Parameters[1].Parser.Func
+	inherited2 := child.Parameters[1]
+	if !inherited2.Inherited || inherited2.InheritedFrom != "" || inherited2.DeclaredIn != "parent" {
+		t.Errorf("inherited parameter 2 = %#v, want Inherited and no InheritedFrom declared in parent", inherited2)
+	}
+	localParser := child.Parameters[2].Parser.Func
 	if localParser == nil {
 		t.Fatal("local parser was not recorded")
 		return

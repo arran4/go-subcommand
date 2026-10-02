@@ -582,6 +582,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 
 						if inherited {
+							fp.Inherited = true
 							if flagBlockName != name.Name {
 								fp.InheritedFrom = flagBlockName
 							}

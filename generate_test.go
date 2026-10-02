@@ -91,6 +91,11 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
+	generatedChild, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "parent_child.go"))
+	if err != nil {
+		t.Fatalf("read generated child command: %v", err)
+	}
+	assertIssue268GeneratedChild(t, string(generatedChild))
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
 
 	cmd := exec.Command("go", "test", "./...")
@@ -103,6 +108,34 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 			t.Fatalf("generated module tests failed: %v\n%s", err, output)
 		}
 		t.Fatalf("generated module tests failed: %v\n%s\nGenerated test:\n%s", err, output, generatedTest)
+	}
+}
+
+func assertIssue268GeneratedChild(t *testing.T, source string) {
+	t.Helper()
+	start := strings.Index(source, "type ParentChild struct {")
+	if start == -1 {
+		t.Fatalf("generated child struct missing:\n%s", source)
+	}
+	end := strings.Index(source[start:], "\n}\n")
+	if end == -1 {
+		t.Fatalf("generated child struct is not terminated:\n%s", source[start:])
+	}
+	structSource := source[start : start+end+3]
+	for _, expected := range []string{"*Parent", "Child(c.dir, c.sameDir,"} {
+		if !strings.Contains(source, expected) {
+			t.Errorf("generated child missing %q:\n%s", expected, source)
+		}
+	}
+	for _, unexpected := range []string{"\n\td string", "\n\tsameDir string"} {
+		if strings.Contains(structSource, unexpected) {
+			t.Errorf("generated child has inherited local field %q:\n%s", unexpected, structSource)
+		}
+	}
+	for _, unexpected := range []string{"case \"dir\":", "case \"same-dir\":", "&v.d, \"dir\"", "&v.sameDir, \"same-dir\""} {
+		if strings.Contains(source, unexpected) {
+			t.Errorf("generated child registers inherited flag %q:\n%s", unexpected, source)
+		}
 	}
 }
 

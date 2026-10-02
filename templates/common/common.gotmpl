@@ -3,7 +3,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+		{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -105,7 +105,7 @@
 {{- $posArgs := 0 }}
 {{- $reqPosArgs := 0 }}
 	{{- range $params }}
-		{{- if .IsPositional }}
+		{{- if and .IsPositional (not .Inherited) }}
 			{{- if not .IsVarArg }}
 				{{- $posArgs = add $posArgs 1 }}
 				{{- if not .HasDefaultValue }}
@@ -122,7 +122,7 @@
 	{{- end }}
 
 	{{- range $params }}
-		{{- if .IsPositional }}
+		{{- if and .IsPositional (not .Inherited) }}
 			{{- if .IsVarArg }}
 	// Handle vararg {{.Name}}
 	{

@@ -22,6 +22,10 @@ func TestRoot_Execute(t *testing.T) {
 	args = append(args, "-g")
 	args = append(args, "--long")
 	args = append(args, "test")
+	args = append(args, "--dir")
+	args = append(args, "test")
+	args = append(args, "--same-dir")
+	args = append(args, "test")
 	args = append(args, "--args")
 	args = append(args, "test")
 
@@ -38,6 +42,12 @@ func TestRoot_Execute(t *testing.T) {
 	}
 	if cmd.longFlag != "test" {
 		t.Errorf("Expected longFlag to be 'test', got '%v'", cmd.longFlag)
+	}
+	if cmd.dir != "test" {
+		t.Errorf("Expected dir to be 'test', got '%v'", cmd.dir)
+	}
+	if cmd.sameDir != "test" {
+		t.Errorf("Expected sameDir to be 'test', got '%v'", cmd.sameDir)
 	}
 
 }

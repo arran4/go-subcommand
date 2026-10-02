@@ -55,11 +55,12 @@ func (c *Child) Execute(args []string) (err error) {
 	fs := flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
 	fs.Usage = c.Usage
 
-	fs.StringVar(&c.goFlag, "goFlag", c.goFlag, "")
-	fs.StringVar(&c.goFlag, "go-flag", c.goFlag, "")
+	fs.StringVar(&c.goFlag, "goFlag", c.goFlag, "Go value")
+	fs.StringVar(&c.goFlag, "go-flag", c.goFlag, "Go value")
+	fs.StringVar(&c.goFlag, "flag", c.goFlag, "Go value")
 
-	fs.BoolVar(&c.boolFlag, "boolFlag", c.boolFlag, "")
-	fs.BoolVar(&c.boolFlag, "b", c.boolFlag, "")
+	fs.BoolVar(&c.boolFlag, "boolFlag", c.boolFlag, "Enable child flag")
+	fs.BoolVar(&c.boolFlag, "b", c.boolFlag, "Enable child flag")
 
 	fs.Var((*StringSlice)(&c.args), "args", "(positional: true)")
 
@@ -134,16 +135,17 @@ func (c *RootCmd) NewChild() *Child {
 		SubCommands: make(map[string]func() Cmd),
 	}
 
-	set.StringVar(&v.goFlag, "go-flag", "flag", "TODO: Add usage text")
+	set.StringVar(&v.goFlag, "go-flag", "flag", "Go value")
+	set.StringVar(&v.goFlag, "flag", "flag", "Go value")
 
-	set.BoolVar(&v.boolFlag, "b", false, "TODO: Add usage text")
+	set.BoolVar(&v.boolFlag, "b", false, "Enable child flag")
 
 	set.Var((*StringSlice)(&v.args), "args", "(positional: true)")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Child) error {
 
-		err := myapp.Child(c.goFlag, c.boolFlag, c.args)
+		err := myapp.Child(c.dir, c.sameDir, c.goFlag, c.boolFlag, c.args)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

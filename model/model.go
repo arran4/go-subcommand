@@ -648,7 +648,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.IsPositional && !p.HasGenerator() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() {
 			return true
 		}
 	}

@@ -24,7 +24,9 @@ type {{.SubCommandStructName}} struct {
 	{{if .Parent}}*{{.Parent.SubCommandStructName}}{{else}}*RootCmd{{end}}
 	Flags *flag.FlagSet
 	{{- range .Parameters}}
+	{{- if not .Inherited}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
+	{{- end}}
 	{{- end}}
 	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error
@@ -68,6 +70,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- end }}
 	{{- range .Parameters }}
 	{{- if .HasGenerator }}
+	{{- if not .Inherited }}
 	{
 		v, err := {{.GeneratorCall}}
 		if err != nil {
@@ -75,6 +78,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		}
 		c.{{.Name}} = v
 	}
+	{{- end }}
 	{{- end }}
 	{{- end }}
 	{{- $needsRemainingArgs := false }}
@@ -91,7 +95,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 
 	{{- if .HasRequiredFlags }}
 	{{- range .Parameters }}
-	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 	if !seenFlags["{{.Name}}"] {
 		return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
 	}
@@ -109,7 +113,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
-	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.Inherited) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
 	if !seenFlags["{{$param.Name}}"] {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}

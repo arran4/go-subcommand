@@ -68,7 +68,6 @@ func TestSubCommandTree_Insert(t *testing.T) {
 				t.Errorf("Expected SubCommand to be set at the leaf node")
 			}
 
-			// Fix: QF1008: could remove embedded field "SubCommand" from selector (staticcheck)
 			if current.ImportPath != tt.importPath {
 				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.ImportPath)
 			}

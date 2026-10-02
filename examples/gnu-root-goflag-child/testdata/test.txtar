@@ -2,13 +2,24 @@ exec test-app -g --long testval pos1
 stdout 'Root gnuFlag= true  longFlag= testval'
 
 exec test-app child -go-flag value -b childpos
-stdout 'Child goFlag= value  boolFlag= true'
+stdout 'Child dir=   sameDir=   goFlag= value  boolFlag= true'
 
 exec test-app child -go-flag=value -b=true childpos
-stdout 'Child goFlag= value  boolFlag= true'
+stdout 'Child dir=   sameDir=   goFlag= value  boolFlag= true'
 
+# GNU parent -> Go-flag child: parent-owned values cross the parser boundary.
+exec test-app --dir renamed-value --same-dir same-name-value child -go-flag childFlag -b childArg
+stdout 'Root gnuFlag= false  longFlag= test'
+stdout 'Child dir= renamed-value  sameDir= same-name-value  goFlag= childFlag  boolFlag= true'
 
-# assert inheritance works natively
+# Child does not register inherited parent flags locally.
+! exec test-app child --dir child-local
+stderr 'flag provided but not defined: -dir'
+
+! exec test-app child --same-dir child-local
+stderr 'flag provided but not defined: -same-dir'
+
+# Existing parent parser behavior remains valid at the mixed boundary.
 exec test-app -g child -go-flag childFlag -b childArg
 stdout 'Root gnuFlag= true  longFlag= test'
-stdout 'Child goFlag= childFlag  boolFlag= true'
+stdout 'Child dir=   sameDir=   goFlag= childFlag  boolFlag= true'
