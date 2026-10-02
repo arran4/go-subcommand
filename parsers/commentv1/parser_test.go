@@ -21,7 +21,7 @@ func TestParseGoFile(t *testing.T) {
 			src: `package main
 
 // Parent is a subcommand that Does work in a directory
-func Parent(dir string, sameDir string) {}
+func Parent(dir string) {}
 `,
 			wantCmdName:     "parent",
 			wantDescription: "Does work in a directory",
@@ -31,7 +31,7 @@ func Parent(dir string, sameDir string) {}
 			src: `package main
 
 // Parent is a subcommand ` + "`my-parent`" + ` that Does work explicitly
-func Parent(dir string, sameDir string) {}
+func Parent(dir string) {}
 `,
 			wantCmdName:     "my-parent",
 			wantDescription: "Does work explicitly",
@@ -41,7 +41,7 @@ func Parent(dir string, sameDir string) {}
 			src: `package main
 
 // Parent is a subcommand that Does work in a directory
-func Parent(dir string, sameDir string) {}
+func Parent(dir string) {}
 
 // Child is a subcommand ` + "`parent child`" + ` that is a child
 func Child(dir string) {}

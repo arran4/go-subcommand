@@ -3,15 +3,17 @@ Usage: app [flags...] <subcommand>
 
 Subcommands:
 {{if .Recursive}}
-    child
+    child                                    Go-flag child
 {{else}}
-    child
+    child      Go-flag child
 {{end}}
     help         Print this help message
     usage        Print this usage message
 
 
 Flags:
-    -g                (default: false)
-    --long string     (default: "test")
-    --args []string                       (positional: true)
+    -g                  (default: false)    Enable GNU flag
+    --long string       (default: "test")   Long GNU value
+    --dir string                            Parent directory
+    --same-dir string                       Parent shared directory
+    --args []string                         (positional: true)

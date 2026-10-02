@@ -19,7 +19,7 @@ var (
 
 // Provenance
 var (
-	GeneratorVersion = "v0.0.0-20260930024605-d0b9c49facb9+dirty"
+	GeneratorVersion = "(devel)"
 	GeneratedAt      = ""
 	ProjectCommit    = ""
 )

@@ -12,7 +12,7 @@ func App(config string) {}
 // Flags:
 //
 //	dir: --dir Parent directory
-//	sameDir: --same-dir Parent same-name directory
+//	sameDir: --same-dir Parent shared directory
 func Parent(dir string, sameDir string) {}
 
 // Child is a subcommand `app parent child`.
