@@ -2,6 +2,7 @@ package go_subcommand
 
 import (
 	_ "embed"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -765,23 +766,36 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
-	err := Generate(".", "", "commentv1", nil, false, false, false, nil, false, false, "", "", "")
-	if err != nil && !strings.Contains(err.Error(), "no packages found") {
-		t.Logf("Expected no packages found, got: %v", err)
-	}
+	// Verify signature exists and matches compilation
+	var _ func(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error = Generate
 }
 
 func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
-	err := GenerateWithFS(fstest.MapFS{}, &OSFileWriter{}, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
-	if err != nil && !strings.Contains(err.Error(), "no packages found") {
-		t.Logf("Expected no packages found, got: %v", err)
-	}
+	// Verify signature exists and matches compilation
+	var _ func(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error = GenerateWithFS
 }
 
 func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
-	// The primary check is whether GenerateCLI signature matches and includes cliParser
-	err := GenerateCLI(".", "", "commentv1", "go-flag", nil, false, false, false, nil, false, false, "", "", "")
-	if err != nil && !strings.Contains(err.Error(), "no packages found") {
-		t.Logf("Expected no packages found, got: %v", err)
+	fsys := fstest.MapFS{
+		"go.mod":         {Data: []byte("module example.com\n\ngo 1.22\n")},
+		"cmd/app/app.go": {Data: []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")},
+	}
+
+	// Because we can't easily override OSFileWriter via GenerateCLI itself, we must test its wrapper logic explicitly
+	// Or we can rely on verifying its signature matching, since we proved its behavior elsewhere
+	var _ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error = GenerateCLI
+
+	// We can explicitly test GenerateWithFS options forwarding
+	writer := NewCollectingFileWriter()
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", fsys, GenerateOptions{CLIParser: "go-flag"})
+	if err != nil {
+		t.Fatalf("GenerateWithFS with go-flag parser failed: %v", err)
+	}
+	content, ok := writer.Files["cmd/app/root.go"]
+	if !ok {
+		t.Fatalf("root.go was not generated")
+	}
+	if !strings.Contains(string(content), `"flag"`) {
+		t.Fatalf("Expected go-flag runtime flag package import, got:\n%s", content)
 	}
 }
