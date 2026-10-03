@@ -184,7 +184,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 				c.replaceTemplates = append(c.replaceTemplates, value)
 
-			case "projectProvenance", "project-provenance":
+			case "projectProvenance", "project-provenance", "project":
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -306,6 +306,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.Var((*StringSlice)(&v.replaceTemplates), "replace-template", "Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.")
 
 	set.BoolVar(&v.projectProvenance, "project-provenance", true, "Include target Git metadata in provenance")
+	set.BoolVar(&v.projectProvenance, "project", true, "Include target Git metadata in provenance")
 
 	set.BoolVar(&v.timestamp, "timestamp", true, "Include timestamp in provenance")
 

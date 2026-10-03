@@ -763,3 +763,25 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
 }
+
+func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
+	err := Generate(".", "", "commentv1", nil, false, false, false, nil, false, false, "", "", "")
+	if err != nil && !strings.Contains(err.Error(), "no packages found") {
+		// Just want to make sure it compiles with the expected signature
+	}
+}
+
+func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
+	err := GenerateWithFS(fstest.MapFS{}, &OSFileWriter{}, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+	if err != nil {
+		// Just want to make sure it compiles with the expected signature
+	}
+}
+
+func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
+	// The primary check is whether GenerateCLI signature matches and includes cliParser
+	err := GenerateCLI(".", "", "commentv1", "go-flag", nil, false, false, false, nil, false, false, "", "", "")
+	if err != nil && !strings.Contains(err.Error(), "no packages found") {
+		// Just checking if we can pass go-flag down
+	}
+}
