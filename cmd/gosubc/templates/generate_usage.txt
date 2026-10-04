@@ -19,7 +19,7 @@ Subcommands:
 
 Flags:
     --dir string                      (default: ".")           Project root directory containing go.mod
-    --man-dir string                                           Directory to generate man pages in optional
+    --man-dir string                  (default: "")            Directory to generate man pages in optional
     --parser-name string              (default: "commentv1")   Name of the parser to use
     --cli-parser string               (default: "gnu")         Name of the runtime CLI parser backend to use
     --path []string                   (default: nil)           Paths to search for subcommands (relative to dir)

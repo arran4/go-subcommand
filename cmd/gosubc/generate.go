@@ -319,7 +319,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.Generate(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.GenerateCLI(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
