@@ -62,9 +62,10 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 		t.Fatal("root command action missing")
 	} else if dispatch := strings.Index(rootGo, "if !dashDashSeen && len(remainingArgs) > 0"); dispatch == -1 {
 		t.Fatal("root command dispatch missing")
-	} else if action > dispatch {
-		t.Fatalf("root command action should run before subcommand dispatch\nroot.go:\n%s", rootGo)
+	} else if dispatch > action {
+		t.Fatalf("root command dispatch should run before the root action\nroot.go:\n%s", rootGo)
 	}
+	assertContains(t, rootGo, "if err := c.CommandAction(c); err != nil {\n\t\t\treturn err\n\t\t}", "RootCmd.Execute should not add duplicate action context")
 
 	childGo := string(mustGeneratedFile(t, writer, "cmd/app/parent_child.go"))
 	assertContains(t, childGo, `"example.com/test/pkg"`, "external parser/generator package should be imported")
@@ -74,6 +75,7 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 	assertContains(t, childGo, `c.values = append(c.values, value)`, "slice flags should be repeatable")
 	assertContains(t, childGo, `c.ptr = &val`, "pointer flag should preserve omitted-vs-zero state")
 	assertContains(t, childGo, `value = shorts[j+1:]`, "short value flags should consume the rest of a GNU-style short cluster")
+	assertContains(t, childGo, "if err := c.CommandAction(c); err != nil {\n\t\t\treturn err\n\t\t}", "child Execute should not add duplicate action context")
 
 	childUsage := string(mustGeneratedFile(t, writer, "cmd/app/templates/child_usage.txt"))
 	assertContains(t, childUsage, "`parent` Flags:", "from-parent flag should be grouped under parent")

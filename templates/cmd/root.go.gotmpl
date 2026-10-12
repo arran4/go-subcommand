@@ -136,8 +136,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
-      if e, ok := err.(*cmd.ErrExitCode); ok {
-        return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
       }
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
@@ -258,6 +259,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	{{- end }}
 
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
 	{{- if .FunctionName }}
 
 {{- template "positional_args_parsing" .Parameters }}
@@ -272,16 +279,10 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+			return err
 		}
 	}
 	{{- end }}
-
-	if !dashDashSeen && len(remainingArgs) > 0 {
-		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
-			return cmd().Execute(remainingArgs[1:])
-		}
-	}
 
 	{{- if .FunctionName}}
 	return nil
