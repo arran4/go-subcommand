@@ -1,6 +1,7 @@
 package go_subcommand
 
 import (
+	"bytes"
 	_ "embed"
 	"io/fs"
 	"os"
@@ -28,6 +29,9 @@ var aliasIOSource string
 
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
+
+//go:embed testdata/issue478_nested_commands.go
+var issue478NestedCommandsSource string
 
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -343,6 +347,71 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 	if !strings.Contains(s, "math.MaxInt32") {
 		t.Errorf("Missing assignment for limit expression: %s", s)
+	}
+}
+
+func TestGenerate_ImplicitNestedCommandPathsProduceOneExecutable(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/gogenmux\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "commands.go"), issue478NestedCommandsSource)
+
+	generate := func() {
+		t.Helper()
+		if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+			t.Fatalf("Generate failed: %v", err)
+		}
+	}
+	generate()
+	if _, err := os.Stat(filepath.Join(dir, "cmd", "gogenmux")); err != nil {
+		t.Fatalf("single generated executable tree is missing: %v", err)
+	}
+	for _, unexpected := range []string{"generate", "inspect", "validate", "show"} {
+		if _, err := os.Stat(filepath.Join(dir, "cmd", unexpected)); !os.IsNotExist(err) {
+			t.Fatalf("generated a separate %q executable tree", unexpected)
+		}
+	}
+
+	compile := exec.Command("go", "test", "-run=^$", "./...")
+	compile.Dir = dir
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("generated nested module did not compile: %v\n%s", err, output)
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		command := exec.Command("go", append([]string{"run", "./cmd/gogenmux"}, args...)...)
+		command.Dir = dir
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("run %v: %v\n%s", args, err, output)
+		}
+		return string(output)
+	}
+	for _, scenario := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"generate", "--name", "Ada"}, want: "generate:Ada"},
+		{args: []string{"inspect", "README.md"}, want: "inspect:README.md"},
+		{args: []string{"validate", "--strict"}, want: "validate:true"},
+		{args: []string{"config", "show", "--format", "json"}, want: "show:json"},
+		{args: []string{"help"}, want: "gogenmux <subcommand>"},
+	} {
+		if output := run(scenario.args...); !strings.Contains(output, scenario.want) {
+			t.Errorf("run %v output = %q, want %q", scenario.args, output, scenario.want)
+		}
+	}
+
+	first, err := os.ReadFile(filepath.Join(dir, "cmd", "gogenmux", "root.go"))
+	if err != nil {
+		t.Fatalf("read first generated root: %v", err)
+	}
+	generate()
+	second, err := os.ReadFile(filepath.Join(dir, "cmd", "gogenmux", "root.go"))
+	if err != nil {
+		t.Fatalf("read repeated generated root: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("repeat implicit nested generation changed root.go")
 	}
 }
 
