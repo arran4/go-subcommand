@@ -39,7 +39,26 @@ type FileWriter interface {
 	MkdirAll(path string, perm os.FileMode) error
 	ReadFile(path string) ([]byte, error)
 	ReadDir(path string, ops ...any) ([]fs.DirEntry, error)
+}
+
+// FileRemover is an optional FileWriter capability used only by migrations
+// which must remove an obsolete generated file.  It is deliberately separate
+// from FileWriter so existing user implementations of FileWriter remain source
+// compatible.
+type FileRemover interface {
 	Remove(path string) error
+}
+
+// FileRenamer is an optional FileWriter capability used for a case-only
+// generated-file migration on case-insensitive filesystems.
+type FileRenamer interface {
+	Rename(oldPath, newPath string) error
+}
+
+// FileIdentity is an optional FileWriter capability for determining whether
+// two spellings refer to one underlying file.
+type FileIdentity interface {
+	SameFile(path1, path2 string) (bool, error)
 }
 
 // OSFileWriter implements FileWriter using os package
@@ -64,12 +83,33 @@ func (w *OSFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
 	return os.ReadDir(path)
 }
 func (w *OSFileWriter) Remove(path string) error { return os.Remove(path) }
+func (w *OSFileWriter) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+func (w *OSFileWriter) SameFile(path1, path2 string) (bool, error) {
+	first, err := os.Stat(path1)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	second, err := os.Stat(path2)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return os.SameFile(first, second), nil
+}
 
 // CollectingFileWriter collects files and directories to be written
 type CollectingFileWriter struct {
 	Files   map[string][]byte
 	Dirs    map[string]bool
 	Deletes map[string]bool
+	Renames map[string]string
 }
 
 func NewCollectingFileWriter() *CollectingFileWriter {
@@ -77,6 +117,7 @@ func NewCollectingFileWriter() *CollectingFileWriter {
 		Files:   make(map[string][]byte),
 		Dirs:    make(map[string]bool),
 		Deletes: make(map[string]bool),
+		Renames: make(map[string]string),
 	}
 }
 
@@ -84,6 +125,18 @@ func (w *CollectingFileWriter) Remove(path string) error {
 	delete(w.Files, path)
 	w.Deletes[path] = true
 	return nil
+}
+
+func (w *CollectingFileWriter) Rename(oldPath, newPath string) error {
+	if content, ok := w.Files[oldPath]; ok {
+		delete(w.Files, oldPath)
+		w.Files[newPath] = content
+	}
+	return nil
+}
+
+func (w *CollectingFileWriter) SameFile(path1, path2 string) (bool, error) {
+	return path1 == path2, nil
 }
 
 func (w *CollectingFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
@@ -208,7 +261,7 @@ func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 						continue
 					}
 					fullPath := filepath.Join(dir, entry.Name())
-					if _, ok := w.Files[fullPath]; !ok && !w.Deletes[fullPath] {
+					if _, ok := w.Files[fullPath]; !ok && !w.Deletes[fullPath] && w.Renames[fullPath] == "" {
 						return fmt.Errorf("file %s is present in the directory but not in the generated set (use --force to ignore)", fullPath)
 					}
 				}
@@ -219,6 +272,15 @@ func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 }
 
 func (w *CollectingFileWriter) Commit(writer FileWriter) error {
+	for oldPath, newPath := range w.Renames {
+		renamer, ok := writer.(FileRenamer)
+		if !ok {
+			return fmt.Errorf("cannot rename legacy generated file %s to %s: supplied FileWriter does not implement FileRenamer", oldPath, newPath)
+		}
+		if err := renamer.Rename(oldPath, newPath); err != nil {
+			return fmt.Errorf("failed to rename legacy generated file %s to %s: %w", oldPath, newPath, err)
+		}
+	}
 	for path, content := range w.Files {
 		if err := writer.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", filepath.Dir(path), err)
@@ -228,7 +290,11 @@ func (w *CollectingFileWriter) Commit(writer FileWriter) error {
 		}
 	}
 	for path := range w.Deletes {
-		if err := writer.Remove(path); err != nil && !os.IsNotExist(err) {
+		remover, ok := writer.(FileRemover)
+		if !ok {
+			return fmt.Errorf("cannot remove obsolete generated file %s: supplied FileWriter does not implement FileRemover", path)
+		}
+		if err := remover.Remove(path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove file %s: %w", path, err)
 		}
 	}
@@ -572,7 +638,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		}
 	}
 
-	if err := planLegacyAgentsMigration(writer, collector, filepath.Join(dir, "cmd", "agents.md")); err != nil {
+	if err := planLegacyAgentsMigration(writer, collector, filepath.Join(dir, "cmd", "AGENTS.md"), filepath.Join(dir, "cmd", "agents.md")); err != nil {
 		return err
 	}
 
@@ -583,7 +649,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	return collector.Commit(writer)
 }
 
-func planLegacyAgentsMigration(writer FileWriter, collector *CollectingFileWriter, legacyPath string) error {
+const generatedAgentGuidanceHeader = "<!-- Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT. -->"
+
+func planLegacyAgentsMigration(writer FileWriter, collector *CollectingFileWriter, canonicalPath, legacyPath string) error {
 	content, err := writer.ReadFile(legacyPath)
 	if os.IsNotExist(err) {
 		return nil
@@ -591,11 +659,35 @@ func planLegacyAgentsMigration(writer FileWriter, collector *CollectingFileWrite
 	if err != nil {
 		return fmt.Errorf("inspect legacy agent guidance %s: %w", legacyPath, err)
 	}
-	if !isGenerated(content) {
+	if !isOwnedGeneratedAgentGuidance(content) {
 		return fmt.Errorf("legacy agent guidance %s is not generated by gosubc; rename or remove it before generating AGENTS.md", legacyPath)
+	}
+	if _, ok := writer.(FileRemover); !ok {
+		return fmt.Errorf("cannot remove obsolete generated file %s: supplied FileWriter does not implement FileRemover", legacyPath)
+	}
+	if strings.EqualFold(canonicalPath, legacyPath) {
+		identity, ok := writer.(FileIdentity)
+		if !ok {
+			return fmt.Errorf("cannot safely migrate legacy agent guidance %s: supplied FileWriter does not implement FileIdentity for a case-only rename", legacyPath)
+		}
+		same, err := identity.SameFile(canonicalPath, legacyPath)
+		if err != nil {
+			return fmt.Errorf("identify legacy agent guidance %s: %w", legacyPath, err)
+		}
+		if same {
+			if _, ok := writer.(FileRenamer); !ok {
+				return fmt.Errorf("cannot safely migrate legacy agent guidance %s: supplied FileWriter does not implement FileRenamer for a case-only rename", legacyPath)
+			}
+			collector.Renames[legacyPath] = canonicalPath
+			return nil
+		}
 	}
 	collector.Deletes[legacyPath] = true
 	return nil
+}
+
+func isOwnedGeneratedAgentGuidance(content []byte) bool {
+	return bytes.HasPrefix(content, []byte(generatedAgentGuidanceHeader+"\n")) || bytes.Equal(content, []byte(generatedAgentGuidanceHeader))
 }
 
 func isGenerated(content []byte) bool {
