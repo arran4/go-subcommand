@@ -148,7 +148,7 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
 *   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
 *   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
-*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag.
+*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag. Providers may name parameter dependencies, for example `generator: BuildClient(endpoint, token)`. Dependencies are bound first, providers run once per command execution in deterministic dependency order, and unknown dependencies or cycles fail generation with diagnostics.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.

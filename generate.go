@@ -665,6 +665,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"paramImportsExcept": parameterImportsExcept,
 		"commandImports":     commandImports,
 		"subCommandImports":  subCommandImports,
+		"orderedGenerators":  model.OrderedGenerators,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -875,6 +876,9 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	}
 
 	for _, p := range cmd.Parameters {
+		if p.HasGenerator() {
+			imports = append(imports, templateImport{Path: "io"})
+		}
 		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
 			imports = append(imports, templateImport{Path: "time"})
 		}
