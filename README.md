@@ -343,6 +343,19 @@ Generates release configuration.
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
 
+#### `plus-minus` runtime parser
+
+Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
+It keeps GNU-style long options and value-option behavior, but adds explicit
+short boolean polarity: `-x` enables and `+x` disables a short boolean option.
+`+abc` is a group of boolean disables. A plus form never consumes a value, so
+non-boolean or unknown plus flags fail with `unknown plus flag`. `--` ends all
+option parsing; subsequent `+x` text is positional. Long options and
+non-boolean options retain the ordinary GNU spellings (`--count=3`,
+`--count 3`, or their declared `-x` form). Parser selection inherits from the
+nearest command ancestor, and individual command scopes do not combine parser
+grammars.
+
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 

@@ -29,6 +29,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue464_plus_minus.go
+var issue464PlusMinusSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -426,7 +429,7 @@ func TestResolveCLIParser(t *testing.T) {
 		{name: "generator default go flag", fallback: "go-flag", want: "go-flag"},
 		{name: "explicit gnu overrides unsupported generator default", local: "gnu", fallback: "go-flag", want: "gnu"},
 		{name: "explicit go flag", local: "go-flag", fallback: "gnu", want: "go-flag"},
-		{name: "plus minus reserved", local: "plus-minus", wantErr: true},
+		{name: "plus minus", local: "plus-minus", want: "plus-minus"},
 		{name: "unknown", local: "unknown", wantErr: true},
 	}
 
@@ -455,8 +458,11 @@ func TestResolveCLIParsers(t *testing.T) {
 	legacyImport := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "import"}
 	modern := &model.SubCommand{Command: root, SubCommandName: "modern"}
 	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CLIParser: "gnu"}
+	plusMinus := &model.SubCommand{Command: root, SubCommandName: "toggle", CLIParser: "plus-minus"}
+	plusMinusChild := &model.SubCommand{Command: root, Parent: plusMinus, SubCommandName: "inherited"}
 	legacy.SubCommands = []*model.SubCommand{legacyImport, gnuOverride}
-	root.SubCommands = []*model.SubCommand{modern, legacy}
+	plusMinus.SubCommands = []*model.SubCommand{plusMinusChild}
+	root.SubCommands = []*model.SubCommand{modern, legacy, plusMinus}
 
 	if err := resolveCLIParsers([]*model.Command{root}, "gnu"); err != nil {
 		t.Fatalf("resolveCLIParsers: %v", err)
@@ -472,6 +478,8 @@ func TestResolveCLIParsers(t *testing.T) {
 		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "go-flag"},
 		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "go-flag"},
 		{name: "descendant overrides back", got: gnuOverride.ResolvedCLIParser, want: "gnu"},
+		{name: "plus minus override", got: plusMinus.ResolvedCLIParser, want: "plus-minus"},
+		{name: "plus minus descendant inherits nearest", got: plusMinusChild.ResolvedCLIParser, want: "plus-minus"},
 	}
 
 	for _, check := range checks {
@@ -505,6 +513,11 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 			comment:      "// CLI-Parser: go-flag\n",
 			expectParser: "cli_parser_go-flag",
 		},
+		{
+			name:         "generation default plus minus",
+			cliParser:    "plus-minus",
+			expectParser: "cli_parser_plus-minus",
+		},
 	}
 
 	for _, tt := range tests {
@@ -526,6 +539,9 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 
 			if tt.expectParser == "cli_parser_go-flag" && !strings.Contains(generatedContent, "fs.Parse(args)") {
 				t.Fatalf("Expected output to contain Go flag parser logic, got: \n%s", generatedContent)
+			}
+			if tt.expectParser == "cli_parser_plus-minus" && !strings.Contains(generatedContent, "unknown plus flag") {
+				t.Fatalf("Expected output to contain plus-minus parser logic, got: \n%s", generatedContent)
 			}
 		})
 	}
@@ -834,18 +850,62 @@ func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
 	}
 	accept(GenerateCLI)
 
-	// 2. Verify actual forwarding of --cli-parser to the internal system
-	// Using the reserved identifier "plus-minus" ensures we get the exact rejection error
-	// directly from resolveCLIParser to prove the string made it through GenerateCLI
+	// 2. Verify actual forwarding of --cli-parser to the internal system.
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
 
-	err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", "")
-	if err == nil {
-		t.Fatal("Expected GenerateCLI with 'plus-minus' to fail, but it succeeded")
+	if err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("GenerateCLI with plus-minus: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	generated, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated parser: %v", err)
+	}
+	if !strings.Contains(string(generated), "unknown plus flag") {
+		t.Fatalf("plus-minus parser was not rendered:\n%s", generated)
+	}
+}
+
+func TestGenerate_PlusMinusRuntimeParser(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/toggle\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue464PlusMinusSource)
+	if err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("GenerateCLI: %v", err)
+	}
+
+	bin := filepath.Join(dir, "toggle")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/toggle")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build plus-minus executable: %v\n%s", err, output)
+	}
+
+	for _, tt := range []struct {
+		name    string
+		args    []string
+		want    string
+		wantErr bool
+	}{
+		{name: "minus enables", args: []string{"-xv", "--count", "3"}, want: "enabled=true verbose=true count=3 args=[]"},
+		{name: "plus disables", args: []string{"-xv", "+xv", "--count=4"}, want: "enabled=false verbose=false count=4 args=[]"},
+		{name: "termination leaves plus positional", args: []string{"--", "+x"}, want: "enabled=false verbose=false count=0 args=[+x]"},
+		{name: "unknown plus", args: []string{"+z"}, want: "unknown plus flag: +z", wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(bin, tt.args...)
+			cmd.Dir = dir
+			output, err := cmd.CombinedOutput()
+			if tt.wantErr && err == nil {
+				t.Fatalf("%v unexpectedly succeeded: %s", tt.args, output)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("%v failed: %v\n%s", tt.args, err, output)
+			}
+			if !strings.Contains(string(output), tt.want) {
+				t.Fatalf("%v output = %q, want %q", tt.args, output, tt.want)
+			}
+		})
 	}
 }
