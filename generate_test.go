@@ -846,6 +846,11 @@ func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
 			t.Fatalf("run %v = %q, %v; want %q", test.args, output, err, test.want)
 		}
 	}
+	run := exec.Command(bin, "pointers", "--items=first", "--items", "-i=")
+	output, err := run.CombinedOutput()
+	if err != nil || !strings.Contains(string(output), `bare=1 values=["first" ""]`) {
+		t.Fatalf("plus-minus pointer/slice optional values = %q, %v", output, err)
+	}
 }
 
 func TestOptionalValueRejectsGoFlagBackend(t *testing.T) {
