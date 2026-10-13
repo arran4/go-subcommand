@@ -1123,7 +1123,17 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
 }
 
-// GenerateCLICommand is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLICommand is retained for source compatibility with gosubc commands
+// generated before configuration-file support. New generated commands call
+// GenerateCLIConfiguredCommand.
+func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
+	})
+}
+
+// GenerateCLIConfiguredCommand is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1151,10 +1161,19 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 //	provVersion:       --prov-version    (default: "") Overwrite provenance version
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
-func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
-	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser:          cliParser,
-		SuppressGoGenerate: !emitGoGenerate,
+//	configPath:        --config (default: "") Optional version-one JSON generation configuration.
+func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
+	values := generateCLIValues{dir: dir, manDir: manDir, parserName: parserName, cliParser: cliParser, paths: paths, recursive: recursive, force: force, clean: clean, replaceTemplates: replaceTemplates, projectProvenance: projectProvenance, timestamp: timestamp, emitGoGenerate: emitGoGenerate, provVersion: provVersion, provCommit: provCommit, provDate: provDate}
+	if configPath != "" {
+		config, err := LoadGenerateConfig(configPath)
+		if err != nil {
+			return err
+		}
+		values.applyConfig(config, explicitGenerateFlags(os.Args[1:]))
+	}
+	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
+		CLIParser:          values.cliParser,
+		SuppressGoGenerate: !values.emitGoGenerate,
 	})
 }
 

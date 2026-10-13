@@ -46,6 +46,8 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--prov-date")
 	args = append(args, "test")
+	args = append(args, "--config")
+	args = append(args, "test")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -94,6 +96,9 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.provDate != "test" {
 		t.Errorf("Expected provDate to be 'test', got '%v'", cmd.provDate)
+	}
+	if cmd.configPath != "test" {
+		t.Errorf("Expected configPath to be 'test', got '%v'", cmd.configPath)
 	}
 }
 
