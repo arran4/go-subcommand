@@ -374,8 +374,7 @@ func TestGenerate_Clean(t *testing.T) {
 }
 
 func TestGetProvenance(t *testing.T) {
-	_ = os.Setenv("SOURCE_DATE_EPOCH", "1234567890")
-	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
+	t.Setenv("SOURCE_DATE_EPOCH", "1234567890")
 
 	prov := GetProvenance([]string{"usage=foo.txt"}, true, true, "", "", "")
 	if prov.Timestamp != "1234567890" {
@@ -387,19 +386,18 @@ func TestGetProvenance(t *testing.T) {
 }
 
 func TestGetProvenanceExtensive(t *testing.T) {
+	t.Setenv("SOURCE_DATE_EPOCH", "")
 	prov := GetProvenance(nil, false, false, "", "", "")
 	if prov.ProjectCommit != "" || prov.Timestamp != "" || prov.ReplacedTemplates {
 		t.Errorf("Unexpected default provenance values: %+v", prov)
 	}
 
-	_ = os.Unsetenv("SOURCE_DATE_EPOCH")
 	prov = GetProvenance(nil, false, true, "", "", "")
 	if prov.Timestamp == "" {
 		t.Error("Expected timestamp to be generated")
 	}
 
-	_ = os.Setenv("SOURCE_DATE_EPOCH", "987654321")
-	defer func() { _ = os.Unsetenv("SOURCE_DATE_EPOCH") }()
+	t.Setenv("SOURCE_DATE_EPOCH", "987654321")
 	prov = GetProvenance(nil, false, false, "", "", "")
 	if prov.Timestamp != "987654321" {
 		t.Errorf("Expected 987654321, got %v", prov.Timestamp)
