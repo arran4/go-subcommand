@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -359,6 +360,10 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 type GenerateOptions struct {
 	// CLIParser is the generation-wide runtime CLI parser backend fallback.
 	CLIParser string
+	// DispatcherPackage selects importable dispatcher output. When set, gosubc
+	// does not generate main.go and emits the command tree in this package.
+	// It must be a valid, non-main Go package identifier.
+	DispatcherPackage string
 }
 
 func extractGenerateOptions(ops []any) GenerateOptions {
@@ -369,13 +374,29 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value.DispatcherPackage != "" {
+				result.DispatcherPackage = value.DispatcherPackage
+			}
 		case *GenerateOptions:
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value != nil && value.DispatcherPackage != "" {
+				result.DispatcherPackage = value.DispatcherPackage
+			}
 		}
 	}
 	return result
+}
+
+func (o GenerateOptions) validate() error {
+	if o.DispatcherPackage == "" {
+		return nil
+	}
+	if !token.IsIdentifier(o.DispatcherPackage) || o.DispatcherPackage == "main" || o.DispatcherPackage == "_" {
+		return fmt.Errorf("dispatcher package %q must be an importable Go package identifier", o.DispatcherPackage)
+	}
+	return nil
 }
 
 func resolveCLIParser(local, fallback string) (string, error) {
@@ -472,6 +493,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	generateOptions := extractGenerateOptions(ops)
+	if err := generateOptions.validate(); err != nil {
+		return err
+	}
 	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CLIParser); err != nil {
 		return err
 	}
@@ -487,10 +511,13 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	collector := NewCollectingFileWriter()
 
 	for _, cmd := range dataModel.Commands {
+		cmd.GeneratedPackageName = generateOptions.DispatcherPackage
 		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
 		assignUsageFileNames(cmd.SubCommands)
-		if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
-			return err
+		if generateOptions.DispatcherPackage == "" {
+			if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
+				return err
+			}
 		}
 		if err := generateFile(collector, cmdOutDir, "root.go", "root.go.gotmpl", cmd, true); err != nil {
 			return err
