@@ -36,6 +36,12 @@ var issue483RootContextSource string
 //go:embed testdata/issue490_dispatcher_main.go
 var issue490DispatcherMainSource string
 
+//go:embed testdata/issue479_policy_app.go
+var issue479PolicyAppSource string
+
+//go:embed testdata/issue479_policy.go
+var issue479PolicySource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -488,6 +494,46 @@ func TestGenerate_ImportableDispatcherRejectsUnimportablePackage(t *testing.T) {
 	}, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", GenerateOptions{DispatcherPackage: "main"})
 	if err == nil || !strings.Contains(err.Error(), "dispatcher package") {
 		t.Fatalf("invalid dispatcher package error = %v", err)
+	}
+}
+
+func TestGenerate_MainPolicy(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/policyapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue479PolicyAppSource)
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "policyapp", "policy.go"), issue479PolicySource)
+
+	buildPath := filepath.Join(dir, "policyapp")
+	build := exec.Command("go", "build", "-o", buildPath, "./cmd/policyapp")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build policy executable: %v\n%s", err, output)
+	}
+
+	version := exec.Command(buildPath, "version")
+	version.Dir = dir
+	versionOutput, err := version.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run custom-version executable: %v\n%s", err, versionOutput)
+	}
+	if !strings.Contains(string(versionOutput), "policy initialized") || !strings.Contains(string(versionOutput), "Version: custom-version") {
+		t.Fatalf("custom root version was not used:\n%s", versionOutput)
+	}
+
+	fail := exec.Command(buildPath, "fail")
+	fail.Dir = dir
+	failOutput, err := fail.CombinedOutput()
+	if err == nil {
+		t.Fatalf("custom policy failure unexpectedly succeeded: %s", failOutput)
+	}
+	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 23 {
+		t.Fatalf("custom policy exit = %v, want status 23; output:\n%s", err, failOutput)
+	}
+	if !strings.Contains(string(failOutput), "custom error:") || !strings.Contains(string(failOutput), "application failure") {
+		t.Fatalf("custom policy rendering missing:\n%s", failOutput)
 	}
 }
 

@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/arran4/go-subcommand/cmd"
@@ -24,21 +25,80 @@ var (
 	ProjectCommit    = ""
 )
 
+// MainPolicy is the small process-entry adapter for generated executables.
+// A handwritten non-generated Go file in this package may set
+// GeneratedMainPolicy to retain application-specific startup, root
+// construction, error presentation, and exit-code policy without replacing
+// this generated main.go template.
+type MainPolicy struct {
+	// Initialize runs before the root is constructed.
+	Initialize func() error
+	// NewRoot constructs the dispatcher. It can call NewRootWithContext when
+	// the application owns typed root context.
+	NewRoot func() (*RootCmd, error)
+	// Arguments supplies dispatcher arguments. Nil uses os.Args[1:].
+	Arguments func() []string
+	// RenderError receives the selected error and stderr. Nil retains the
+	// compatible "Error: ..." rendering.
+	RenderError func(io.Writer, error)
+	// ExitCode maps the original execution error to a process status. Nil
+	// retains ErrExitCode handling and status 1 for other errors.
+	ExitCode func(error) int
+}
+
+// GeneratedMainPolicy is optional process-entry configuration. It is
+// intentionally separate from command and root context.
+var GeneratedMainPolicy MainPolicy
+
+func generatedMainRoot() (*RootCmd, error) {
+	if GeneratedMainPolicy.NewRoot != nil {
+		return GeneratedMainPolicy.NewRoot()
+	}
+	return NewRoot("gosubc", version, commit, date)
+}
+
+func generatedMainArgs() []string {
+	if GeneratedMainPolicy.Arguments != nil {
+		return GeneratedMainPolicy.Arguments()
+	}
+	return os.Args[1:]
+}
+
+func generatedMainExit(err error) {
+	if err == nil {
+		return
+	}
+	displayErr := err
+	code := 1
+	if e, ok := err.(*cmd.ErrExitCode); ok {
+		displayErr = e.Err
+		code = e.Code
+	}
+	if GeneratedMainPolicy.ExitCode != nil {
+		code = GeneratedMainPolicy.ExitCode(err)
+	}
+	if displayErr != nil {
+		if GeneratedMainPolicy.RenderError != nil {
+			GeneratedMainPolicy.RenderError(os.Stderr, displayErr)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", displayErr)
+		}
+	}
+	os.Exit(code)
+}
+
 func main() {
-	root, err := NewRoot("gosubc", version, commit, date)
+	if GeneratedMainPolicy.Initialize != nil {
+		if err := GeneratedMainPolicy.Initialize(); err != nil {
+			generatedMainExit(err)
+			return
+		}
+	}
+	root, err := generatedMainRoot()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		generatedMainExit(err)
+		return
 	}
 
-	if err := root.Execute(os.Args[1:]); err != nil {
-		if e, ok := err.(*cmd.ErrExitCode); ok {
-			if e.Err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", e.Err)
-			}
-			os.Exit(e.Code)
-		}
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	generatedMainExit(root.Execute(generatedMainArgs()))
 }
