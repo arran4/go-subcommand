@@ -217,7 +217,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader }}
+	{{- if or .IsWriter .IsReader .HasGenerator }}
 	{{- $hasFile = true }}
 	{{- end }}
 	{{- end }}
@@ -266,6 +266,9 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
 		}
 		c.{{.Name}} = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
 	}
 	{{- end }}
 	if c.CommandAction != nil {

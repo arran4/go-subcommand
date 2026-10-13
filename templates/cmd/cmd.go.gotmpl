@@ -54,7 +54,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- $hasFileExec := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader }}
+	{{- if or .IsWriter .IsReader .HasGenerator }}
 	{{- $hasFileExec = true }}
 	{{- end }}
 	{{- end }}
@@ -114,6 +114,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
 		}
 		c.{{.Name}} = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
 	}
 	{{- end }}
 	if c.CommandAction != nil {
