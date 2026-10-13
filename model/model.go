@@ -74,6 +74,9 @@ type FuncRef struct {
 type GeneratorConfig struct {
 	Type SourceType
 	Func *FuncRef
+	// Inputs names parameters made available to a provider. They are resolved
+	// within the command's generated field graph, not through globals.
+	Inputs []string
 }
 
 type ParserConfig struct {
@@ -296,6 +299,47 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	for _, p := range params {
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
+		}
+	}
+	return validateGeneratorDependencies(params, cmdName)
+}
+
+func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) error {
+	all := make(map[string]*FunctionParameter)
+	providers := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		all[param.Name] = param
+		if param.HasGenerator() && !param.Inherited {
+			providers[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var visit func(*FunctionParameter) error
+	visit = func(provider *FunctionParameter) error {
+		switch state[provider.Name] {
+		case 1:
+			return fmt.Errorf("command %s: generator dependency cycle includes %s", cmdName, provider.Name)
+		case 2:
+			return nil
+		}
+		state[provider.Name] = 1
+		for _, input := range provider.Generator.Inputs {
+			param, ok := all[input]
+			if !ok {
+				return fmt.Errorf("command %s: generator %s references unknown dependency %s", cmdName, provider.Name, input)
+			}
+			if dependency := providers[param.Name]; dependency != nil {
+				if err := visit(dependency); err != nil {
+					return err
+				}
+			}
+		}
+		state[provider.Name] = 2
+		return nil
+	}
+	for _, provider := range providers {
+		if err := visit(provider); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -918,11 +962,59 @@ func (p *FunctionParameter) HasGenerator() bool {
 }
 
 func (p *FunctionParameter) GeneratorCall() string {
+	return p.GeneratorCallFor("", false)
+}
+
+// GeneratorCallFor renders a provider invocation using fields owned by receiver.
+// Validation resolves and orders Inputs before templates use this method.
+func (p *FunctionParameter) GeneratorCallFor(receiver string, fields bool) string {
 	if p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
-		if p.Generator.Func.CommandPackageName != "" {
-			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
+		args := make([]string, 0, len(p.Generator.Inputs))
+		for _, input := range p.Generator.Inputs {
+			if fields && receiver != "" {
+				args = append(args, receiver+"."+input)
+			} else {
+				args = append(args, input)
+			}
 		}
-		return fmt.Sprintf("%s()", p.Generator.Func.FunctionName)
+		argumentList := strings.Join(args, ", ")
+		if p.Generator.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName, argumentList)
+		}
+		return fmt.Sprintf("%s(%s)", p.Generator.Func.FunctionName, argumentList)
 	}
 	return ""
+}
+
+// OrderedGenerators returns provider-backed local parameters in deterministic
+// dependency order. Command validation must be called first.
+func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
+	byName := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		if param.HasGenerator() && !param.Inherited {
+			byName[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var ordered []*FunctionParameter
+	var visit func(*FunctionParameter)
+	visit = func(param *FunctionParameter) {
+		if state[param.Name] == 2 {
+			return
+		}
+		state[param.Name] = 1
+		for _, input := range param.Generator.Inputs {
+			if dependency := byName[input]; dependency != nil {
+				visit(dependency)
+			}
+		}
+		state[param.Name] = 2
+		ordered = append(ordered, param)
+	}
+	for _, param := range params {
+		if param.HasGenerator() && !param.Inherited {
+			visit(param)
+		}
+	}
+	return ordered
 }

@@ -231,17 +231,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}()
 	{{- end }}
-	{{- range .Parameters }}
-	{{- if .HasGenerator }}
-	{
-		v, err := {{.GeneratorCall}}
-		if err != nil {
-			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
-		}
-		c.{{.Name}} = v
-	}
-	{{- end }}
-	{{- end }}
 	{{- if eq .ResolvedCLIParser "gnu" }}
 	{{- template "cli_parser_gnu" . }}
 	{{- else if eq .ResolvedCLIParser "go-flag" }}
@@ -269,6 +258,15 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
 	}
 	{{- end }}
+	{{- end }}
+	{{- range orderedGenerators .Parameters }}
+	{
+		v, err := {{.GeneratorCallFor "c" true}}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+		c.{{.Name}} = v
+	}
 	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {

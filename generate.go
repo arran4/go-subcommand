@@ -665,6 +665,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"paramImportsExcept": parameterImportsExcept,
 		"commandImports":     commandImports,
 		"subCommandImports":  subCommandImports,
+		"orderedGenerators":  model.OrderedGenerators,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},

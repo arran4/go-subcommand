@@ -29,6 +29,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/provider_di.go
+var providerDISource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -796,6 +799,25 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
+}
+
+func TestGenerateProviderDependenciesRunAfterFlags(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/providers\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), providerDISource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	run := exec.Command(bin, "--prefix", "value")
+	if output, err := run.CombinedOutput(); err != nil || strings.TrimSpace(string(output)) != "value-generated" {
+		t.Fatalf("run provider graph = %q, %v", output, err)
+	}
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {

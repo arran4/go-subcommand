@@ -70,6 +70,16 @@ func TestExtractParamAttributes(t *testing.T) {
 	}
 }
 
+func TestParseGeneratorInputs(t *testing.T) {
+	got := parseParamDetails("(generator: Build(prefix, config))")
+	if got.Generator.Func == nil || got.Generator.Func.FunctionName != "Build" {
+		t.Fatalf("generator function = %#v", got.Generator.Func)
+	}
+	if !reflect.DeepEqual(got.Generator.Inputs, []string{"prefix", "config"}) {
+		t.Fatalf("generator inputs = %#v", got.Generator.Inputs)
+	}
+}
+
 func TestParseAttributes(t *testing.T) {
 	tests := []struct {
 		name      string

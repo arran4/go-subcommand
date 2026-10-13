@@ -1094,6 +1094,9 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
+			if p.Generator.Func != nil {
+				p.Generator.Func.FunctionName, p.Generator.Inputs = parseGeneratorInputs(p.Generator.Func.FunctionName)
+			}
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
 			if val != "" {
@@ -1148,6 +1151,27 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Inherited = true
 		}
 	}
+}
+
+func parseGeneratorInputs(function string) (string, []string) {
+	open := strings.IndexByte(function, '(')
+	if open < 0 || !strings.HasSuffix(strings.TrimSpace(function), ")") {
+		return strings.TrimSpace(function), nil
+	}
+	name := strings.TrimSpace(function[:open])
+	contents := strings.TrimSpace(function[open+1 : len(function)-1])
+	if contents == "" {
+		return name, nil
+	}
+	parts := splitSafe(contents, ',')
+	inputs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			inputs = append(inputs, part)
+		}
+	}
+	return name, inputs
 }
 
 func parseParamDetails(text string) ParsedParam {

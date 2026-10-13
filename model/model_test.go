@@ -144,6 +144,22 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	}
 }
 
+func TestGeneratorDependenciesRejectUnknownAndCycles(t *testing.T) {
+	provider := func(name string, inputs ...string) *FunctionParameter {
+		return &FunctionParameter{Name: name, Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: inputs}}
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "missing")}, "app"); err == nil {
+		t.Fatal("unknown dependency accepted")
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "b"), provider("b", "a")}, "app"); err == nil {
+		t.Fatal("cycle accepted")
+	}
+	ordered := OrderedGenerators([]*FunctionParameter{provider("label", "prefix"), provider("prefix")})
+	if len(ordered) != 2 || ordered[0].Name != "prefix" || ordered[1].Name != "label" {
+		t.Fatalf("ordered providers = %#v", ordered)
+	}
+}
+
 func TestRequiredFlagPresentIgnoresInheritedParameters(t *testing.T) {
 	params := []*FunctionParameter{
 		{Name: "inherited", Required: true, Inherited: true},
