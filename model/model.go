@@ -185,6 +185,11 @@ type FunctionParameter struct {
 	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
 	Required bool
+	// OptionalValue marks a flag whose durable value observes whether it was
+	// omitted, supplied without a value, or supplied with an explicit value.
+	// The parameter type must implement the documented consumer-owned setter
+	// contract; generated applications never import gosubc at runtime.
+	OptionalValue bool
 	// Generator specifies the source of the parameter value.
 	Generator GeneratorConfig
 	// Parser holds configuration for value parsing.
@@ -294,6 +299,11 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	}
 
 	for _, p := range params {
+		if p.OptionalValue {
+			if p.IsPositional || p.IsVarArg || p.HasDefaultValue || p.HasGenerator() || p.Inherited {
+				return fmt.Errorf("command %s: optional-value parameter %s must be a local flag without a default or generator", cmdName, p.Name)
+			}
+		}
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
 		}
@@ -321,7 +331,9 @@ func (p *FunctionParameter) FlagString() string {
 	flags := strings.Join(parts, ", ")
 
 	typeStr := ""
-	if p.Type != "bool" {
+	if p.OptionalValue {
+		typeStr = " [=" + p.Type + "]"
+	} else if p.Type != "bool" {
 		typeStr = " " + p.Type
 	}
 	return flags + typeStr
@@ -407,7 +419,11 @@ func (p *FunctionParameter) CanonicalBaseType() string {
 // other imported types retain their source qualifier.
 func (p *FunctionParameter) GeneratedType() string {
 	if !p.IsReader() && !p.IsWriter() {
-		return p.Type
+		if p.TypeImportPath == "" || p.TypePackageName == "" || strings.Contains(p.BaseType(), ".") {
+			return p.Type
+		}
+		prefix := strings.TrimSuffix(p.Type, p.BaseType())
+		return prefix + p.TypePackageName + "." + p.BaseType()
 	}
 	prefix := strings.TrimSuffix(p.Type, p.BaseType())
 	return prefix + p.CanonicalBaseType()
