@@ -54,6 +54,9 @@ type SourceType string
 const (
 	SourceTypeFlag      SourceType = "flag"
 	SourceTypeGenerator SourceType = "generator"
+	// SourceTypeConstructor is supplied once when the generated root is
+	// constructed. It is neither parsed from argv nor acquired at execution.
+	SourceTypeConstructor SourceType = "constructor"
 )
 
 type ParserType string
@@ -215,6 +218,11 @@ func (cmd *Command) Validate() error {
 	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
 		return err
 	}
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && (parameter.IsPositional || parameter.Inherited) {
+			return fmt.Errorf("root context parameter %q in command %q cannot be positional or inherited", parameter.Name, cmd.MainCmdName)
+		}
+	}
 	for _, sc := range cmd.SubCommands {
 		if err := sc.Validate(); err != nil {
 			return err
@@ -239,6 +247,22 @@ func (cmd *Command) HasIOParameters() bool {
 	return false
 }
 
+// ConstructorParameters are root-owned values supplied by the caller when it
+// creates a generated command tree.
+func (cmd *Command) ConstructorParameters() []*FunctionParameter {
+	var result []*FunctionParameter
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			result = append(result, parameter)
+		}
+	}
+	return result
+}
+
+func (cmd *Command) HasConstructorParameters() bool {
+	return len(cmd.ConstructorParameters()) > 0
+}
+
 // HasIOParameters reports whether this subcommand tree needs generated file
 // acquisition helpers for reader or writer parameters.
 func (sc *SubCommand) HasIOParameters() bool {
@@ -258,6 +282,11 @@ func (sc *SubCommand) HasIOParameters() bool {
 func (sc *SubCommand) Validate() error {
 	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
 		return err
+	}
+	for _, parameter := range sc.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			return fmt.Errorf("constructor context parameter %q is only supported on the root command", parameter.Name)
+		}
 	}
 	for _, child := range sc.SubCommands {
 		if err := child.Validate(); err != nil {
@@ -635,7 +664,7 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.HasGenerator() {
+		if p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := len(p.FlagString())
@@ -648,7 +677,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			return true
 		}
 	}
@@ -706,6 +735,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
+						}
+						if p.Generator.Type == "" && pp.Generator.Type != "" {
+							p.Generator = pp.Generator
+						}
+						if p.Parser.Type == "" && pp.Parser.Type != "" {
+							p.Parser = pp.Parser
 						}
 						break
 					}
@@ -777,7 +812,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	allParams := sc.AllParameters()
 	grouped := make(map[string][]*FunctionParameter)
 	for _, p := range allParams {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
@@ -842,7 +877,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 func appendFlagsUsage(parts *[]string, params []*FunctionParameter) {
 	hasFlags := false
 	for _, p := range params {
-		if !p.IsPositional && !p.HasGenerator() {
+		if !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			hasFlags = true
 			break
 		}
@@ -902,7 +937,7 @@ func (sc *SubCommand) FullUsageString() string {
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := len(p.DefaultString())
@@ -915,6 +950,12 @@ func (sc *SubCommand) MaxDefaultLength() int {
 
 func (p *FunctionParameter) HasGenerator() bool {
 	return p.Generator.Type == SourceTypeGenerator
+}
+
+// HasConstructor reports whether this value is supplied to the generated root
+// constructor instead of the command-line parser or an execution-time provider.
+func (p *FunctionParameter) HasConstructor() bool {
+	return p.Generator.Type == SourceTypeConstructor
 }
 
 func (p *FunctionParameter) GeneratorCall() string {

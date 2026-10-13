@@ -927,7 +927,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent"}
+	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1094,6 +1094,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
+		case AttributeRootContext, "constructor":
+			p.Generator.Type = model.SourceTypeConstructor
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
 			if val != "" {

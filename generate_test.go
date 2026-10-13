@@ -29,6 +29,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue483_root_context.go
+var issue483RootContextSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -343,6 +346,65 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 	if !strings.Contains(s, "math.MaxInt32") {
 		t.Errorf("Missing assignment for limit expression: %s", s)
+	}
+}
+
+func TestGenerate_ConstructorInjectedRootContext(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/contextapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue483RootContextSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "buildinfo", "buildinfo.go"), `package buildinfo
+
+type BuildInfo struct { Version string }
+`)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	rootSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated root: %v", err)
+	}
+	for _, want := range []string{
+		`"example.com/contextapp/buildinfo"`,
+		"buildInfo buildinfo.BuildInfo",
+		"func NewRootWithContext(name, version, commit, date string, buildInfo buildinfo.BuildInfo)",
+		"buildInfo: buildInfo,",
+	} {
+		if !strings.Contains(string(rootSource), want) {
+			t.Errorf("generated root missing %q:\n%s", want, rootSource)
+		}
+	}
+	childSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "child.go"))
+	if err != nil {
+		t.Fatalf("read generated child: %v", err)
+	}
+	if strings.Contains(string(childSource), "\n\tbuildInfo buildinfo.BuildInfo\n") {
+		t.Fatalf("child redeclared root context:\n%s", childSource)
+	}
+
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "contextapp", "context_test.go"), `package main
+
+import (
+    "testing"
+    "example.com/contextapp/buildinfo"
+)
+
+func TestConstructorContextIsInherited(t *testing.T) {
+    context := buildinfo.BuildInfo{Version: "v1"}
+    root, err := NewRootWithContext("contextapp", "", "", "", context)
+    if err != nil { t.Fatal(err) }
+    if root.buildInfo != context { t.Fatalf("root context = %#v", root.buildInfo) }
+    if err := root.Execute([]string{"child"}); err != nil { t.Fatalf("child: %v", err) }
+    if err := root.Execute([]string{"child", "grandchild"}); err != nil { t.Fatalf("grandchild: %v", err) }
+}
+`)
+
+	compile := exec.Command("go", "test", "./...")
+	compile.Dir = dir
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("generated root-context module failed: %v\n%s", err, output)
 	}
 }
 
