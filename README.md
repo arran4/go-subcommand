@@ -311,6 +311,7 @@ Generates the Go code for your CLI.
 *   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
+*   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
 
 ### `gosubc template`
 
