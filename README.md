@@ -327,6 +327,27 @@ Generates the Go code for your CLI.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
 
+### Importable dispatcher output
+
+The default output is an executable in `package main`. Applications that own
+their process entry point can instead generate an importable dispatcher by
+calling `GenerateWithFS` with a typed `GenerateOptions` value at generation
+time:
+
+```go
+go_subcommand.GenerateWithFS(
+    sourceFS, writer, projectDir, "", "commentv1", parseOptions,
+    false, false, nil, false, false, "", "", "",
+    go_subcommand.GenerateOptions{DispatcherPackage: "dispatch"},
+)
+```
+
+This omits generated `main.go` and writes the command tree as `package
+dispatch`. A handwritten executable can import `your.module/cmd/yourapp`, call
+`NewRoot` (or `NewRootWithContext` when using root context), and choose its own
+startup, error-rendering, and exit policy. This is a generation-time API only:
+the generated dispatcher has no runtime dependency on `go-subcommand`.
+
 ### `gosubc template`
 
 Manage generation templates.
