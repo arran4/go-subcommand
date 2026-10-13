@@ -83,6 +83,53 @@ func TestGenerate_Paths(t *testing.T) {
 	}
 }
 
+func TestGenerate_GoVersionCompatibility(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		goVersion  string
+		wantAny    bool
+		wantSlices bool
+		wantErr    string
+	}{
+		{name: "minimum supported", goVersion: "1.16", wantAny: false, wantSlices: false},
+		{name: "pre any", goVersion: "1.17", wantAny: false, wantSlices: false},
+		{name: "any", goVersion: "1.18", wantAny: true, wantSlices: false},
+		{name: "slices", goVersion: "1.21", wantAny: true, wantSlices: true},
+		{name: "unsupported", goVersion: "1.15", wantErr: "generated applications require Go 1.16"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			input := fstest.MapFS{
+				"go.mod": &fstest.MapFile{Data: []byte("module example.com/app\n\ngo " + tt.goVersion + "\n")},
+				"app.go": &fstest.MapFile{Data: []byte("package app\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+			}
+			writer := NewCollectingFileWriter()
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("GenerateWithFS error = %v, want %q", err, tt.wantErr)
+				}
+				if len(writer.Files) != 0 {
+					t.Fatalf("unsupported target wrote files: %v", writer.Files)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			root := string(mustGeneratedFile(t, writer, "cmd/app/root.go"))
+			if strings.Contains(root, "data any") != tt.wantAny {
+				t.Fatalf("Go %s any output mismatch:\n%s", tt.goVersion, root)
+			}
+			if strings.Contains(root, "slices.Contains") != tt.wantSlices {
+				t.Fatalf("Go %s slices output mismatch:\n%s", tt.goVersion, root)
+			}
+			if !tt.wantSlices && strings.Contains(root, "\"slices\"") {
+				t.Fatalf("Go %s unexpectedly imports slices:\n%s", tt.goVersion, root)
+			}
+		})
+	}
+}
+
 func TestGenerate_RuntimeRequirements(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/e2e\n\ngo 1.22\n")

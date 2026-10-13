@@ -481,6 +481,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 
 	dataModel.GoVersion = getGoVersion(inputFS)
+	if err := validateGeneratedGoVersion(dataModel.GoVersion); err != nil {
+		return err
+	}
 	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate)
 	dataModel.Provenance = &prov
 
@@ -1073,6 +1076,15 @@ func getGoVersion(fsys fs.FS) string {
 		return "1.16"
 	}
 	return f.Go.Version
+}
+
+const minimumGeneratedGoVersion = "1.16"
+
+func validateGeneratedGoVersion(version string) error {
+	if semver.Compare("v"+version, "v"+minimumGeneratedGoVersion) < 0 {
+		return fmt.Errorf("generated applications require Go %s or newer; target module declares go %s", minimumGeneratedGoVersion, version)
+	}
+	return nil
 }
 
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
