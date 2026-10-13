@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	_ "embed"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -28,6 +30,9 @@ var aliasIOSource string
 
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
+
+//go:embed testdata/output_inventory.go
+var outputInventorySource string
 
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -796,6 +801,65 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
+}
+
+func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
+	input := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/outputinventory\n\ngo 1.22\n")},
+		"app.go": &fstest.MapFile{Data: []byte(outputInventorySource)},
+	}
+	generate := func(writer *CollectingFileWriter) {
+		t.Helper()
+		err := GenerateWithFS(input, writer, ".", "man", "commentv1", nil,
+			false, false, nil, false, false, "", "", "")
+		if err != nil {
+			t.Fatalf("GenerateWithFS failed: %v", err)
+		}
+	}
+
+	first := NewCollectingFileWriter()
+	generate(first)
+	want := []string{
+		"cmd/agents.md",
+		"cmd/app/child.go",
+		"cmd/app/child_test.go",
+		"cmd/app/flag_helpers.go",
+		"cmd/app/main.go",
+		"cmd/app/root.go",
+		"cmd/app/root_test.go",
+		"cmd/app/templates/app_usage.txt",
+		"cmd/app/templates/child_usage.txt",
+		"cmd/app/templates/templates.go",
+		"cmd/errors.go",
+		"man/app-child.1",
+	}
+	for _, name := range want {
+		content, ok := first.Files[name]
+		if !ok {
+			t.Errorf("missing generated artifact %q; got %v", name, first.Files)
+			continue
+		}
+		if strings.HasSuffix(name, ".go") {
+			if _, err := parser.ParseFile(token.NewFileSet(), name, content, parser.AllErrors); err != nil {
+				t.Errorf("generated Go source %q does not parse: %v", name, err)
+			}
+			if strings.Contains(string(content), `"github.com/arran4/go-subcommand"`) {
+				t.Errorf("generated consumer source %q has a gosubc runtime import", name)
+			}
+		}
+	}
+
+	second := NewCollectingFileWriter()
+	generate(second)
+	if len(first.Files) != len(second.Files) {
+		t.Fatalf("artifact count changed on repeat generation: %d then %d", len(first.Files), len(second.Files))
+	}
+	for name, firstContent := range first.Files {
+		secondContent, ok := second.Files[name]
+		if !ok || string(firstContent) != string(secondContent) {
+			t.Errorf("generated artifact %q changed on repeat generation", name)
+		}
+	}
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
