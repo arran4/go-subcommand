@@ -155,6 +155,21 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+#### Root constructor context
+
+Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
+
+```go
+// Root is a subcommand `app`.
+//
+// Flags:
+//
+//   buildInfo: (root context) Build metadata created by main
+func Root(buildInfo buildinfo.BuildInfo) {}
+```
+
+The existing `NewRoot(name, version, commit, date)` remains available for compatibility and supplies zero values for declared context. Applications that need the context must call the typed `NewRootWithContext` constructor (or use dispatcher-only generation).
+
 ### Supported Types
 
 The following Go types are supported for function parameters:

@@ -109,13 +109,29 @@ type UsageDataRootCmd struct {
 	Recursive bool
 }
 
+{{- if .HasConstructorParameters}}
+// NewRoot retains the no-context constructor contract. Call
+// NewRootWithContext when the application owns typed root context.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	{{- range .ConstructorParameters}}
+	var {{.Name}} {{.GeneratedType}}
+	{{- end}}
+	return NewRootWithContext(name, version, commit, date{{range .ConstructorParameters}}, {{.Name}}{{end}})
+}
+
+func NewRootWithContext(name, version, commit, date string{{range .ConstructorParameters}}, {{.Name}} {{.GeneratedType}}{{end}}) (*RootCmd, error) {
+{{- else}}
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+{{- end}}
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
+		{{- range .ConstructorParameters}}
+		{{.Name}}: {{.Name}},
+		{{- end}}
 	}
 	c.FlagSet.Usage = c.Usage
 {{- template "flag_definitions" (list "c" "c" .Parameters) }}
@@ -250,7 +266,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 
 	{{- if .HasRequiredFlags }}
 	{{- range .Parameters }}
-	{{- if and .Required (not .IsPositional) (not .HasGenerator) }}
+	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
 	if !seenFlags["{{.Name}}"] {
 		return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
 	}
@@ -263,7 +279,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 {{- template "positional_args_parsing" .Parameters }}
 
 	{{- range $param := .Parameters }}
-	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.HasConstructor) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
 	if !seenFlags["{{$param.Name}}"] {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
