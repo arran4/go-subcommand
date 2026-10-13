@@ -68,14 +68,16 @@ Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
 {{if .Recursive}}
-    foo bar                                  Bar command
-    foo baz                                  Baz command
+    foo bar Bar command
+    foo baz Baz command
+    help    Print this help message
+    usage   Print this usage message
 {{else}}
-    bar        Bar command
-    baz        Baz command
+    bar   Bar command
+    baz   Baz command
+    help  Print this help message
+    usage Print this usage message
 {{end}}
-    help         Print this help message
-    usage        Print this usage message
 
 
 Flags:

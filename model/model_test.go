@@ -227,6 +227,19 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	}
 }
 
+func TestUsageSubcommandWidth(t *testing.T) {
+	root := &Command{MainCmdName: "app"}
+	parent := &SubCommand{Command: root, SubCommandName: "parent", SubCommandFunctionName: "Parent"}
+	child := &SubCommand{Command: root, Parent: parent, SubCommandName: "long-child"}
+	parent.SubCommands = []*SubCommand{child}
+	if got, want := parent.UsageSubcommandWidth(false), len("long-child"); got != want {
+		t.Errorf("shallow width = %d, want %d", got, want)
+	}
+	if got, want := parent.UsageSubcommandWidth(true), len("parent long-child"); got != want {
+		t.Errorf("recursive width = %d, want %d", got, want)
+	}
+}
+
 func TestValidate_OSFile_Fails(t *testing.T) {
 	cmd := &Command{
 		MainCmdName: "test",

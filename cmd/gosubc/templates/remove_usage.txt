@@ -6,8 +6,8 @@ removes an AI agent skill.
 Removes an AI agent skill.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

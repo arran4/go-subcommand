@@ -3,32 +3,32 @@ Usage: gosubc <subcommand>
 
 Subcommands:
 {{if .Recursive}}
-    format                                   formats the subcommand definitions
-    format-source-comments                   formats source comments to match gofmt style
-    generate                                 generates the subcommand code
-    goreleaser                               generates goreleaser configuration and workflows
-    list                                     lists the subcommands
-    scan                                     lists all available subcommands and their flags
-    skill
-    skill inspect                            inspects an AI agent skill.
-    skill install                            installs an AI agent skill.
-    skill list                               lists installed AI agent skills.
-    skill remove                             removes an AI agent skill.
-    skill update                             updates an AI agent skill.
-    syntax                                   prints the available forms of function comments
-    template                                 Manage generation templates
-    template export                          Exports the built-in templates
-    template layout                          Displays the generation template layout
-    validate                                 validates the subcommand code
-{{else}}
-    format     formats the subcommand definitions
+    format                 formats the subcommand definitions
     format-source-comments formats source comments to match gofmt style
-    generate   generates the subcommand code
-    goreleaser generates goreleaser configuration and workflows
-    list       lists the subcommands
-    scan       lists all available subcommands and their flags
+    generate               generates the subcommand code
+    goreleaser             generates goreleaser configuration and workflows
+    list                   lists the subcommands
+    scan                   lists all available subcommands and their flags
     skill
-    syntax     prints the available forms of function comments
-    template   Manage generation templates
-    validate   validates the subcommand code
+    skill inspect          inspects an AI agent skill.
+    skill install          installs an AI agent skill.
+    skill list             lists installed AI agent skills.
+    skill remove           removes an AI agent skill.
+    skill update           updates an AI agent skill.
+    syntax                 prints the available forms of function comments
+    template               Manage generation templates
+    template export        Exports the built-in templates
+    template layout        Displays the generation template layout
+    validate               validates the subcommand code
+{{else}}
+    format                 formats the subcommand definitions
+    format-source-comments formats source comments to match gofmt style
+    generate               generates the subcommand code
+    goreleaser             generates goreleaser configuration and workflows
+    list                   lists the subcommands
+    scan                   lists all available subcommands and their flags
+    skill
+    syntax                 prints the available forms of function comments
+    template               Manage generation templates
+    validate               validates the subcommand code
 {{end}}

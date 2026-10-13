@@ -6,8 +6,8 @@ lists installed AI agent skills.
 Lists installed AI agent skills.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

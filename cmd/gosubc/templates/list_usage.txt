@@ -4,8 +4,8 @@ Usage: gosubc list [flags...]
 lists the subcommands
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

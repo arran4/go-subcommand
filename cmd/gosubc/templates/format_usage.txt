@@ -7,8 +7,8 @@ Format updates the documentation comments for subcommands in the codebase
 to match the defined parameters and standard formatting.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

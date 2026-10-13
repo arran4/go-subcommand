@@ -3,15 +3,15 @@ Usage: gosubc skill <subcommand>
 
 Subcommands:
 {{if .Recursive}}
-    skill inspect                            inspects an AI agent skill.
-    skill install                            installs an AI agent skill.
-    skill list                               lists installed AI agent skills.
-    skill remove                             removes an AI agent skill.
-    skill update                             updates an AI agent skill.
+    skill inspect inspects an AI agent skill.
+    skill install installs an AI agent skill.
+    skill list    lists installed AI agent skills.
+    skill remove  removes an AI agent skill.
+    skill update  updates an AI agent skill.
 {{else}}
-    inspect    inspects an AI agent skill.
-    install    installs an AI agent skill.
-    list       lists installed AI agent skills.
-    remove     removes an AI agent skill.
-    update     updates an AI agent skill.
+    inspect inspects an AI agent skill.
+    install installs an AI agent skill.
+    list    lists installed AI agent skills.
+    remove  removes an AI agent skill.
+    update  updates an AI agent skill.
 {{end}}

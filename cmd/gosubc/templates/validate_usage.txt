@@ -4,8 +4,8 @@ Usage: gosubc validate [flags...]
 validates the subcommand code
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

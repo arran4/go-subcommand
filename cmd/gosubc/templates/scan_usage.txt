@@ -7,8 +7,8 @@ Scan lists all available subcommands and their flags from the parsed codebase.
 It is useful for verifying the command structure and configuration.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

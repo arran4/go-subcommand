@@ -6,8 +6,8 @@ Exports the built-in templates
 Exports the built-in templates to a specified directory or txtar file.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

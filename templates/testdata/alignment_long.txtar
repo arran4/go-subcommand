@@ -48,10 +48,10 @@ Check alignment
 
 Subcommands:
 {{if .Recursive}}
-    align short-cmd                          Short description
-    align very-long-subcommand-name-here     Description for long subcommand
+    align short-cmd                      Short description
+    align very-long-subcommand-name-here Description for long subcommand
 {{else}}
-    short-cmd  Short description
+    short-cmd                      Short description
     very-long-subcommand-name-here Description for long subcommand
 {{end}}
 

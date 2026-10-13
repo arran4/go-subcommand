@@ -23,8 +23,8 @@ Usage: myapp sub1 [flags...]
 Sub1 command description
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:
