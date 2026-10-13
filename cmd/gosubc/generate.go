@@ -35,6 +35,7 @@ type Generate struct {
 	provVersion       string
 	provCommit        string
 	provDate          string
+	configPath        string
 	SubCommands       map[string]func() Cmd
 	CommandAction     func(c *Generate) error
 }
@@ -250,6 +251,17 @@ func (c *Generate) Execute(args []string) (err error) {
 					}
 				}
 				c.provDate = value
+
+			case "configPath", "config", "one":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.configPath = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -329,11 +341,14 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
 
 	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
+
+	set.StringVar(&v.configPath, "config", "", "Optional version JSON generation configuration.")
+	set.StringVar(&v.configPath, "one", "", "Optional version JSON generation configuration.")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.GenerateCLICommand(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.GenerateCLIConfiguredCommand(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.provVersion, c.provCommit, c.provDate, c.configPath)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
