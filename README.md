@@ -288,7 +288,7 @@ Multiple overlays are applied in command-line order. Later definitions with the 
 
 To view or export the built-in templates:
 *   `gosubc template layout`: Displays the directory tree structure of built-in templates.
-*   `gosubc template export [--output <dir>] [--as-txtar]`: Exports all built-in templates to a directory or a single `.txtar` archive file.
+*   `gosubc template export [--output <dir>] [--as-txtar] [--force]`: Exports all built-in templates to a directory or a single `.txtar` archive file. Existing template files and archives are preserved unless `--force` is supplied; unrelated files in an existing directory are left untouched.
 
 Generated CLI usage output automatically wraps parameter descriptions based on the terminal width specified by the `COLUMNS` environment variable (falling back to 80 columns).
 
@@ -316,7 +316,7 @@ Generates the Go code for your CLI.
 
 Manage generation templates.
 
-*   `gosubc template export [--output <path>] [--as-txtar]`: Export built-in templates.
+*   `gosubc template export [--output <path>] [--as-txtar] [--force]`: Export built-in templates without replacing existing files by default. Use `--force` only to replace existing exported template files or archives.
 *   `gosubc template layout`: Display template structure layout.
 
 ### `gosubc list`
