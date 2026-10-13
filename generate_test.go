@@ -29,6 +29,15 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue475_root.go
+var issue475RootSource string
+
+//go:embed testdata/issue475_linux.go
+var issue475LinuxSource string
+
+//go:embed testdata/issue475_windows.go
+var issue475WindowsSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -80,6 +89,58 @@ func TestGenerate_Paths(t *testing.T) {
 	}
 	if _, ok := writer.Files["cmd/app/cmd2.go"]; ok {
 		t.Errorf("Expected cmd2.go NOT to be generated")
+	}
+}
+
+func TestGenerate_TargetBuildConstraints(t *testing.T) {
+	for _, target := range []struct {
+		name      string
+		goos      string
+		wantCall  string
+		avoidCall string
+	}{
+		{name: "linux", goos: "linux", wantCall: "PlatformLinux()", avoidCall: "PlatformWindows()"},
+		{name: "windows", goos: "windows", wantCall: "PlatformWindows()", avoidCall: "PlatformLinux()"},
+	} {
+		t.Run(target.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/platform\n\ngo 1.22\n")
+			writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue475RootSource)
+			writeRuntimeFixture(t, filepath.Join(dir, "platform_linux.go"), issue475LinuxSource)
+			writeRuntimeFixture(t, filepath.Join(dir, "platform_windows.go"), issue475WindowsSource)
+
+			parseOptions := &parsers.ParseOptions{Recursive: true, GOOS: target.goos, GOARCH: "amd64"}
+			if err := GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, "", "commentv1", parseOptions, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			generatedPath := filepath.Join(dir, "cmd", "platform", "platform.go")
+			generated, err := os.ReadFile(generatedPath)
+			if err != nil {
+				t.Fatalf("read generated command: %v", err)
+			}
+			if !strings.Contains(string(generated), target.wantCall) || strings.Contains(string(generated), target.avoidCall) {
+				t.Fatalf("target %s generated the wrong action:\n%s", target.name, generated)
+			}
+
+			before := append([]byte(nil), generated...)
+			if err := GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, "", "commentv1", parseOptions, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("repeat GenerateWithFS: %v", err)
+			}
+			after, err := os.ReadFile(generatedPath)
+			if err != nil {
+				t.Fatalf("read repeated generated command: %v", err)
+			}
+			if string(before) != string(after) {
+				t.Fatalf("target %s generation was not deterministic", target.name)
+			}
+
+			build := exec.Command("go", "build", "./...")
+			build.Dir = dir
+			build.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH=amd64")
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("cross-build target %s: %v\n%s", target.name, err, output)
+			}
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"io"
@@ -118,6 +119,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		}
 		recursive = options.Recursive
 	}
+	buildContext := sourceBuildContext(fsys, options)
 
 	for _, startDir := range searchPaths {
 		if startDir == "" {
@@ -144,6 +146,16 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 				return nil
 			}
 			if !strings.HasSuffix(pathStr, ".go") {
+				return nil
+			}
+			if strings.HasSuffix(pathStr, "_test.go") {
+				return nil
+			}
+			matches, err := buildContext.MatchFile(filepath.Dir(pathStr), filepath.Base(pathStr))
+			if err != nil {
+				return fmt.Errorf("evaluate build constraints for %s: %w", pathStr, err)
+			}
+			if !matches {
 				return nil
 			}
 
@@ -216,6 +228,33 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 	}
 	d.Commands = commands
 	return d, nil
+}
+
+// sourceBuildContext adapts go/build's established constraint evaluator to an
+// fs.FS. This keeps in-memory parser tests hermetic while applying the same
+// GOOS, GOARCH, filename suffix, //go:build, and legacy // +build semantics
+// that Go source selection uses.
+func sourceBuildContext(fsys fs.FS, options *parsers.ParseOptions) build.Context {
+	context := build.Default
+	if options != nil {
+		if options.GOOS != "" {
+			context.GOOS = options.GOOS
+		}
+		if options.GOARCH != "" {
+			context.GOARCH = options.GOARCH
+		}
+		if len(options.BuildTags) > 0 {
+			context.BuildTags = append([]string(nil), options.BuildTags...)
+		}
+	}
+	context.OpenFile = func(name string) (io.ReadCloser, error) {
+		clean := filepath.ToSlash(filepath.Clean(name))
+		if clean == "." {
+			return nil, fs.ErrNotExist
+		}
+		return fsys.Open(clean)
+	}
+	return context
 }
 
 func collectSubCommands(cmd *model.Command, name string, sct *SubCommandTree, parent *model.SubCommand, allocator *parsers.NameAllocator) []*model.SubCommand {
