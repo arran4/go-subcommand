@@ -253,6 +253,18 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
+An explicit function for `app` is optional. Leaf annotations that share the same first path element are coalesced into one generated executable tree, so this produces only `cmd/gogenmux`:
+
+```go
+// Generate is a subcommand `gogenmux generate`
+func Generate(...) { ... }
+
+// Inspect is a subcommand `gogenmux inspect`
+func Inspect(...) { ... }
+```
+
+Missing intermediate paths are generated as dispatch-only commands; durable command functions remain in their source package.
+
 ### Parent Flags (Inheritance)
 
 Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.
