@@ -393,7 +393,7 @@ func resolveCLIParser(local, fallback string) (string, error) {
 	case "go-flag":
 		return backend, nil
 	case "plus-minus":
-		return "", fmt.Errorf("cli-parser %q is reserved for issue #464 and is not implemented", backend)
+		return backend, nil
 	default:
 		return "", fmt.Errorf("unsupported cli-parser %q", backend)
 	}
@@ -928,7 +928,7 @@ func runtimeParserImports(parser string, params []*model.FunctionParameter) []te
 
 	needsStrconv := false
 
-	if parser == "gnu" || parser == "" {
+	if parser == "gnu" || parser == "plus-minus" || parser == "" {
 		imports = append(imports, templateImport{Path: "strings"})
 
 		for _, param := range params {

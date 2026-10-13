@@ -91,6 +91,8 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- template "cli_parser_gnu" . }}
 	{{- else if eq .ResolvedCLIParser "go-flag" }}
 	{{- template "cli_parser_go-flag" . }}
+	{{- else if eq .ResolvedCLIParser "plus-minus" }}
+	{{- template "cli_parser_plus-minus" . }}
 	{{- end }}
 
 	{{- if .HasRequiredFlags }}

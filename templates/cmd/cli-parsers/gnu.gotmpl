@@ -38,7 +38,7 @@
 			{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 			{{$param := .}}
 			{{- $longs := list }}
-			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
+			{{- if .Name }}{{ $longs = append $longs .Name }}{{ end }}
 			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
 			{{- $uniqueLongs := list }}
 			{{- range $l := $longs }}

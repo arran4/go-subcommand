@@ -1,0 +1,42 @@
+{{- define "cli_parser_plus-minus" }}
+	// The plus-minus grammar extends GNU-style parsing with +x to explicitly
+	// disable a short boolean flag. Normalise those toggles into the GNU parser
+	// form so ordinary long flags, value flags, -- termination, and diagnostics
+	// remain one well-tested grammar.
+	normalizedArgs := make([]string, 0, len(args))
+	plusMinusTerminated := false
+	for _, arg := range args {
+		if arg == "--" {
+			plusMinusTerminated = true
+			normalizedArgs = append(normalizedArgs, arg)
+			continue
+		}
+		if !plusMinusTerminated && strings.HasPrefix(arg, "+") && arg != "+" {
+			shorts := arg[1:]
+			for _, char := range shorts {
+				found := false
+				{{- range .Parameters }}
+				{{- if and .IsBool (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+				{{$param := .}}
+				{{- $shorts := list }}
+				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
+				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
+				{{- range $short := $shorts }}
+				if char == '{{ $short }}' {
+					found = true
+					normalizedArgs = append(normalizedArgs, "--{{$param.Name}}=false")
+				}
+				{{- end }}
+				{{- end }}
+				{{- end }}
+				if !found {
+					return fmt.Errorf("unknown plus flag: +%c", char)
+				}
+			}
+			continue
+		}
+		normalizedArgs = append(normalizedArgs, arg)
+	}
+	args = normalizedArgs
+{{- template "cli_parser_gnu" . }}
+{{- end }}
