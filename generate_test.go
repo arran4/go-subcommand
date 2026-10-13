@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -54,6 +55,36 @@ func TestGenerate_Recursive(t *testing.T) {
 	}
 	if _, ok := writer.Files["cmd/app/sub.go"]; ok {
 		t.Errorf("Expected sub.go NOT to be generated with recursive=false")
+	}
+}
+
+func TestGenerateWithFSSuppressGoGenerate(t *testing.T) {
+	input := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"app.go": &fstest.MapFile{Data: []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+	}
+
+	generate := func(options ...any) string {
+		t.Helper()
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", options...); err != nil {
+			t.Fatalf("GenerateWithFS: %v", err)
+		}
+		return string(writer.Files["cmd/app/main.go"])
+	}
+
+	defaultOutput := generate()
+	if !strings.Contains(defaultOutput, "//go:generate") {
+		t.Fatalf("default generated main.go did not contain its regeneration directive:\n%s", defaultOutput)
+	}
+
+	suppressedOutput := generate(GenerateOptions{SuppressGoGenerate: true})
+	if strings.Contains(suppressedOutput, "//go:generate") {
+		t.Fatalf("suppressed generated main.go still contained its regeneration directive:\n%s", suppressedOutput)
+	}
+
+	if repeatedOutput := generate(GenerateOptions{SuppressGoGenerate: true}); suppressedOutput != repeatedOutput {
+		t.Fatal("suppressed generation was not deterministic")
 	}
 }
 
@@ -847,5 +878,65 @@ func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	}
+}
+
+func TestGenerateCLICommandControlsGoGenerateDirective(t *testing.T) {
+	generate := func(t *testing.T, emitGoGenerate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/directive\n\ngo 1.22\n")
+		writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")
+		if err := GenerateCLICommand(dir, "", "commentv1", "gnu", nil, false, true, false, nil, false, false, emitGoGenerate, "", "", ""); err != nil {
+			t.Fatalf("GenerateCLICommand: %v", err)
+		}
+		output, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "main.go"))
+		if err != nil {
+			t.Fatalf("read generated main.go: %v", err)
+		}
+		return string(output)
+	}
+
+	if output := generate(t, true); !strings.Contains(output, "//go:generate") {
+		t.Fatalf("--emit-go-generate=true did not emit the directive:\n%s", output)
+	}
+	if output := generate(t, false); strings.Contains(output, "//go:generate") {
+		t.Fatalf("--emit-go-generate=false did not suppress the directive:\n%s", output)
+	}
+}
+
+func TestGosubcGenerateEmitGoGenerateFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("self-hosted CLI integration test")
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	generate := func(t *testing.T, emitGoGenerate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/directivecli\n\ngo 1.22\n")
+		writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")
+
+		command := exec.Command("go", "run", "./cmd/gosubc", "gen", "--dir", dir, "--project-provenance=false", "--timestamp=false", "--emit-go-generate="+strconv.FormatBool(emitGoGenerate))
+		command.Dir = workingDir
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("gosubc gen --emit-go-generate=%t: %v\n%s", emitGoGenerate, err, output)
+		}
+
+		output, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "main.go"))
+		if err != nil {
+			t.Fatalf("read generated main.go: %v", err)
+		}
+		return string(output)
+	}
+
+	if output := generate(t, true); !strings.Contains(output, "//go:generate") {
+		t.Fatalf("CLI --emit-go-generate=true did not emit the directive:\n%s", output)
+	}
+	if output := generate(t, false); strings.Contains(output, "//go:generate") {
+		t.Fatalf("CLI --emit-go-generate=false did not suppress the directive:\n%s", output)
 	}
 }
