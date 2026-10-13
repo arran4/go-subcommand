@@ -185,6 +185,11 @@ type FunctionParameter struct {
 	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
 	Required bool
+	// OptionalValue marks a flag whose durable value observes whether it was
+	// omitted, supplied without a value, or supplied with an explicit value.
+	// The parameter type must implement the documented consumer-owned setter
+	// contract; generated applications never import gosubc at runtime.
+	OptionalValue bool
 	// Generator specifies the source of the parameter value.
 	Generator GeneratorConfig
 	// Parser holds configuration for value parsing.
@@ -294,6 +299,11 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	}
 
 	for _, p := range params {
+		if p.OptionalValue {
+			if p.IsPositional || p.IsVarArg || p.HasDefaultValue || p.HasGenerator() || p.Inherited {
+				return fmt.Errorf("command %s: optional-value parameter %s must be a local flag without a default or generator", cmdName, p.Name)
+			}
+		}
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
 		}

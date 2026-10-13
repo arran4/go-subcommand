@@ -74,4 +74,8 @@ const (
 	// AttributeAka is an alias for AttributeAliases.
 	// Usage: (aka: f)
 	AttributeAka = "aka"
+
+	// AttributeOptionalValue enables the explicit three-state optional-value
+	// flag contract. Usage: (optional value).
+	AttributeOptionalValue = "optional value"
 )

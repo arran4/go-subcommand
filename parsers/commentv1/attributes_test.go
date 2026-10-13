@@ -70,6 +70,16 @@ func TestExtractParamAttributes(t *testing.T) {
 	}
 }
 
+func TestParseParamDetailsOptionalValue(t *testing.T) {
+	got := parseParamDetails("(optional value; --label) Preserve omitted, bare, and explicit states")
+	if !got.OptionalValue {
+		t.Fatal("optional value attribute was not recorded")
+	}
+	if got.Description != "Preserve omitted, bare, and explicit states" {
+		t.Fatalf("description = %q", got.Description)
+	}
+}
+
 func TestParseAttributes(t *testing.T) {
 	tests := []struct {
 		name      string
