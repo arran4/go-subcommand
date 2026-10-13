@@ -888,9 +888,9 @@ func TestGenerate_PlusMinusRuntimeParser(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "minus enables", args: []string{"-xv", "--count", "3"}, want: "enabled=true verbose=true count=3 args=[]"},
-		{name: "plus disables", args: []string{"-xv", "+xv", "--count=4"}, want: "enabled=false verbose=false count=4 args=[]"},
-		{name: "termination leaves plus positional", args: []string{"--", "+x"}, want: "enabled=false verbose=false count=0 args=[+x]"},
+		{name: "minus enables", args: []string{"-xvq", "--count", "3"}, want: "enabled=true verbose=true x=true count=3 args=[]"},
+		{name: "plus disables", args: []string{"-xvq", "+xvq", "--count=4"}, want: "enabled=false verbose=false x=false count=4 args=[]"},
+		{name: "termination leaves plus positional", args: []string{"--", "+x"}, want: "enabled=false verbose=false x=false count=0 args=[+x]"},
 		{name: "unknown plus", args: []string{"+z"}, want: "unknown plus flag: +z", wantErr: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
