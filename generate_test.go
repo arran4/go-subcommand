@@ -29,6 +29,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/optional_value.go
+var optionalValueSource string
+
 //go:embed testdata/issue464_plus_minus.go
 var issue464PlusMinusSource string
 
@@ -812,6 +815,46 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
+}
+
+func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/optional\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), optionalValueSource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build generated optional-value app: %v\n%s", err, output)
+	}
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "present=false value=false label=\"\""},
+		{[]string{"--label"}, "present=true value=false label=\"\""},
+		{[]string{"--label="}, "present=true value=true label=\"\""},
+		{[]string{"--label=zero"}, "present=true value=true label=\"zero\""},
+		{[]string{"-lblue"}, "present=true value=true label=\"blue\""},
+	} {
+		run := exec.Command(bin, test.args...)
+		output, err := run.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(output)) != test.want {
+			t.Fatalf("run %v = %q, %v; want %q", test.args, output, err, test.want)
+		}
+	}
+}
+
+func TestOptionalValueRejectsGoFlagBackend(t *testing.T) {
+	parameter := &model.FunctionParameter{Name: "label", OptionalValue: true}
+	command := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{parameter}, CLIParser: "go-flag"}
+	err := resolveCLIParsers([]*model.Command{command}, "gnu")
+	if err == nil || !strings.Contains(err.Error(), "unsupported by go-flag") {
+		t.Fatalf("resolveCLIParsers error = %v", err)
+	}
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {

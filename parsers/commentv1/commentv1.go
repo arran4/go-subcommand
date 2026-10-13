@@ -620,6 +620,14 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Generator.Func.PackagePath = importPath
 							fp.Generator.Func.CommandPackageName = f.Name.Name
 						}
+						// Optional-value parameters are consumer-owned state values. A
+						// locally declared type must be qualified from generated code just
+						// like a local parser or provider function.
+						if fp.OptionalValue && fp.TypeImportPath == "" && f.Name.Name != "main" {
+							fp.TypeImportPath = importPath
+							fp.TypePackageName = f.Name.Name
+							fp.TypeName = fp.BaseType()
+						}
 
 						if len(fp.FlagAliases) == 0 {
 							kebab := parsers.ToKebabCase(name.Name)

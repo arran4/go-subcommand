@@ -3,7 +3,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+		{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) (not .OptionalValue) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}

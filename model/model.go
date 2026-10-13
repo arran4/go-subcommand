@@ -331,7 +331,9 @@ func (p *FunctionParameter) FlagString() string {
 	flags := strings.Join(parts, ", ")
 
 	typeStr := ""
-	if p.Type != "bool" {
+	if p.OptionalValue {
+		typeStr = " [=" + p.Type + "]"
+	} else if p.Type != "bool" {
 		typeStr = " " + p.Type
 	}
 	return flags + typeStr
@@ -417,7 +419,11 @@ func (p *FunctionParameter) CanonicalBaseType() string {
 // other imported types retain their source qualifier.
 func (p *FunctionParameter) GeneratedType() string {
 	if !p.IsReader() && !p.IsWriter() {
-		return p.Type
+		if p.TypeImportPath == "" || p.TypePackageName == "" || strings.Contains(p.BaseType(), ".") {
+			return p.Type
+		}
+		prefix := strings.TrimSuffix(p.Type, p.BaseType())
+		return prefix + p.TypePackageName + "." + p.BaseType()
 	}
 	prefix := strings.TrimSuffix(p.Type, p.BaseType())
 	return prefix + p.CanonicalBaseType()
