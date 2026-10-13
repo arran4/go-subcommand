@@ -31,14 +31,14 @@ type UsageDataSkillList struct {
 }
 
 func (c *SkillList) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataSkillList{c, false})
+	err := executeUsage(os.Stderr, "skill_list_usage.txt", UsageDataSkillList{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
 func (c *SkillList) UsageRecursive() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataSkillList{c, true})
+	err := executeUsage(os.Stderr, "skill_list_usage.txt", UsageDataSkillList{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
