@@ -257,6 +257,10 @@ Each generated command owns a distinct usage resource. Commands with the same
 leaf name in different paths (for example, `app serve` and
 `app scenario serve`) retain separate help text and usage syntax.
 
+Subcommand descriptions are aligned from the commands actually displayed.
+Recursive help uses full command paths, while shallow help uses direct child
+names; neither mode relies on a fixed padding width.
+
 ### Parent Flags (Inheritance)
 
 Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.

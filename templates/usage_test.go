@@ -31,6 +31,7 @@ func TestUsageTemplate(t *testing.T) {
 		"upper":    strings.ToUpper,
 		"replace":  strings.ReplaceAll,
 		"add":      func(a, b int) int { return a + b },
+		"list":     func(args ...interface{}) []interface{} { return args },
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 	}
 

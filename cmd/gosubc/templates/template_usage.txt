@@ -5,11 +5,13 @@ Manage generation templates
 
 Subcommands:
 {{if .Recursive}}
-    template export                          Exports the built-in templates
-    template layout                          Displays the generation template layout
+    template export Exports the built-in templates
+    template layout Displays the generation template layout
+    help            Print this help message
+    usage           Print this usage message
 {{else}}
-    export     Exports the built-in templates
-    layout     Displays the generation template layout
+    export Exports the built-in templates
+    layout Displays the generation template layout
+    help   Print this help message
+    usage  Print this usage message
 {{end}}
-    help         Print this help message
-    usage        Print this usage message

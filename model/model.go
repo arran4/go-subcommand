@@ -628,6 +628,38 @@ func (sc *SubCommand) HasSubcommands() bool {
 	return len(sc.SubCommands) > 0
 }
 
+// UsageSubcommandWidth returns the width required by the labels visible in a
+// usage listing. Recursive listings use complete command sequences; shallow
+// listings use direct child names. Built-in help rows participate when they
+// are displayed so their descriptions align with generated commands.
+func (sc *SubCommand) UsageSubcommandWidth(recursive bool) int {
+	max := 0
+	consider := func(label string) {
+		if len(label) > max {
+			max = len(label)
+		}
+	}
+	var visit func([]*SubCommand)
+	visit = func(commands []*SubCommand) {
+		for _, child := range commands {
+			if recursive {
+				consider(child.SubCommandSequence())
+			} else {
+				consider(child.SubCommandName)
+			}
+			if recursive {
+				visit(child.SubCommands)
+			}
+		}
+	}
+	visit(sc.SubCommands)
+	if sc.HasAction() {
+		consider("help")
+		consider("usage")
+	}
+	return max
+}
+
 func (sc *SubCommand) ProgName() string {
 	return sc.MainCmdName + " " + sc.SubCommandSequence()
 }

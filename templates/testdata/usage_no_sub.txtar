@@ -27,8 +27,8 @@
 Usage: myapp leaf [flags...] <file>
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:

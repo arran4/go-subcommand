@@ -32,12 +32,14 @@ Root command
 
 Subcommands:
 {{if .Recursive}}
-    root child1                              First child
-    root child1 grandchild                   Grandchild
-    root child2                              Second child
+    root child1            First child
+    root child1 grandchild Grandchild
+    root child2            Second child
+    help                   Print this help message
+    usage                  Print this usage message
 {{else}}
-    child1     First child
-    child2     Second child
+    child1 First child
+    child2 Second child
+    help   Print this help message
+    usage  Print this usage message
 {{end}}
-    help         Print this help message
-    usage        Print this usage message

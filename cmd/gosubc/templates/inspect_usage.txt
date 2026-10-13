@@ -6,8 +6,8 @@ inspects an AI agent skill.
 Inspects an AI agent skill.
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    help  Print this help message
+    usage Print this usage message
 
 
 Flags:
