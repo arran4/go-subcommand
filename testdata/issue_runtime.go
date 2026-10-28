@@ -1,11 +1,21 @@
 package app
 
+type ActionError struct {
+	Message string
+}
+
+func (e *ActionError) Error() string {
+	return e.Message
+}
+
 // App is a subcommand `app`.
 //
 // Flags:
 //
 //	config: (required) --config Configuration path
-func App(config string) {}
+func App(config string) error {
+	return &ActionError{Message: "root action failed"}
+}
 
 // Parent is a subcommand `app parent`.
 //
@@ -31,7 +41,8 @@ func Parent(dir string, sameDir string) {}
 //	parsed: (parser: "example.com/e2e/parserpkg".Parse) --parsed Imported parser
 //	localParsed: (parser: ParseLocal) --local-parsed Local parser
 //	generated: (generator: "example.com/e2e/parserpkg".Gen) Generated dependency
-func Child(d string, sameDir string, z, x, w bool, q string, value string, values []string, ptr *int, parsed, localParsed, generated string) {
+func Child(d string, sameDir string, z, x, w bool, q string, value string, values []string, ptr *int, parsed, localParsed, generated string) error {
+	return &ActionError{Message: "child action failed"}
 }
 
 func ParseLocal(value string) (string, error) {
