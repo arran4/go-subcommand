@@ -95,6 +95,9 @@ func (c *Skill) Execute(args []string) (err error) {
 	}
 
 	c.Usage()
+	if len(remainingArgs) > 0 {
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+	}
 
 	return nil
 }
@@ -141,7 +144,29 @@ func (c *RootCmd) NewSkill() *Skill {
 	v.SubCommands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
 					v.UsageRecursive()
 					return nil
 				}
@@ -154,7 +179,29 @@ func (c *RootCmd) NewSkill() *Skill {
 	v.SubCommands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
 					v.UsageRecursive()
 					return nil
 				}

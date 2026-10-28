@@ -68,19 +68,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		}
 	}()
 	{{- end }}
-	{{- range .Parameters }}
-	{{- if .HasGenerator }}
-	{{- if not .Inherited }}
-	{
-		v, err := {{.GeneratorCall}}
-		if err != nil {
-			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
-		}
-		c.{{.Name}} = v
-	}
-	{{- end }}
-	{{- end }}
-	{{- end }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
@@ -94,19 +81,37 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- end }}
 
 	{{- if .HasRequiredFlags }}
-	{{- range .Parameters }}
-	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
-	if !seenFlags["{{.Name}}"] {
-		return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
 	}
-	{{- end }}
-	{{- end }}
+	if !isHelpRequest {
+		{{- range .Parameters }}
+		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+		if !seenFlags["{{.Name}}"] {
+			return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+		}
+		{{- end }}
+		{{- end }}
+	}
 	{{- end }}
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+		{{- if and .SubCommandFunctionName .SubCommands (not $needsRemainingArgs) (ne .ResolvedCLIParser "go-flag") }}
+		c.Usage()
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		{{- end }}
 	}
 
 {{- template "positional_args_parsing" .Parameters }}
@@ -120,6 +125,17 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{- end }}
 	{{- end }}
+	{{- range .Parameters }}
+	{{- if .HasGenerator }}
+	{
+		v, err := {{.GeneratorCall}}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+		c.{{.ValueFieldName}} = v
+	}
+	{{- end }}
+	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return err
@@ -129,6 +145,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{else}}
 	c.Usage()
+	{{- if .SubCommands }}
+	if len(remainingArgs) > 0 {
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+	}
+	{{- end }}
 	{{end}}
 	return nil
 }
@@ -183,7 +204,41 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 	v.SubCommands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
+				{{- if .SubCommands }}
 				{{- if minGoVersion "1.21" .GoVersion }}
+				deep := slices.Contains(args, "-deep")
+				{{- else }}
+				deep := false
+				{{- end }}
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						{{- if not (minGoVersion "1.21" .GoVersion) }}
+						deep = true
+						{{- end }}
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				{{- else if minGoVersion "1.21" .GoVersion }}
 				if slices.Contains(args, "-deep") {
 					v.UsageRecursive()
 					return nil
@@ -205,7 +260,41 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 	v.SubCommands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
+				{{- if .SubCommands }}
 				{{- if minGoVersion "1.21" .GoVersion }}
+				deep := slices.Contains(args, "-deep")
+				{{- else }}
+				deep := false
+				{{- end }}
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						{{- if not (minGoVersion "1.21" .GoVersion) }}
+						deep = true
+						{{- end }}
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				{{- else if minGoVersion "1.21" .GoVersion }}
 				if slices.Contains(args, "-deep") {
 					v.UsageRecursive()
 					return nil
