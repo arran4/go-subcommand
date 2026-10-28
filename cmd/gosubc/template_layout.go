@@ -98,7 +98,7 @@ func (c *TemplateLayout) Execute(args []string) (err error) {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("layout failed: %w", err)
+			return err
 		}
 	} else {
 		c.Usage()

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -28,6 +29,9 @@ var aliasIOSource string
 
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
+
+//go:embed testdata/issue456_imports.go
+var issue456ImportsSource string
 
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -390,6 +394,86 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 	if !strings.Contains(s, "math.MaxInt32") {
 		t.Errorf("Missing assignment for limit expression: %s", s)
+	}
+}
+
+func TestGenerate_ImportIdentifierPlanCompilesCollidingRootAndSubcommand(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/importplan\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue456ImportsSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "flag", "flag.go"), `package flag
+
+type Value string
+
+const Count = 1
+
+func Parse(value string) (Value, error) { return Value(value), nil }
+`)
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "first", "shared", "shared.go"), "package shared\n\nfunc Parse(value string) (string, error) { return value, nil }\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "second", "shared", "shared.go"), "package shared\n\nfunc Parse(value string) (string, error) { return value, nil }\nfunc Generate() (string, error) { return \"generated\", nil }\n")
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	rootSource, err := os.ReadFile(filepath.Join(dir, "cmd", "plan", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated root: %v", err)
+	}
+	for _, want := range []string{`pkg_os "example.com/importplan"`, "pkg_os.Root", `pkg_flag "example.com/importplan/deps/flag"`, "pkg_flag.Count"} {
+		if !strings.Contains(string(rootSource), want) {
+			t.Errorf("generated root missing %q:\n%s", want, rootSource)
+		}
+	}
+	if strings.Contains(string(rootSource), "flag.Count") && !strings.Contains(string(rootSource), "pkg_flag.Count") {
+		t.Fatalf("root action did not use the planned alias:\n%s", rootSource)
+	}
+
+	serveSource, err := os.ReadFile(filepath.Join(dir, "cmd", "plan", "serve.go"))
+	if err != nil {
+		t.Fatalf("read generated subcommand: %v", err)
+	}
+	for _, want := range []string{
+		`pkg_flag "example.com/importplan/deps/flag"`, "pkg_flag.Value", "pkg_flag.Parse(value)",
+		`"example.com/importplan/deps/first/shared"`, "shared.Parse(value)",
+		`shared_2 "example.com/importplan/deps/second/shared"`, "shared_2.Parse(value)", "shared_2.Generate()", "pkg_os.Serve",
+	} {
+		if !strings.Contains(string(serveSource), want) {
+			t.Errorf("generated subcommand missing %q:\n%s", want, serveSource)
+		}
+	}
+
+	command := exec.Command("go", "test", "-run=^$", "./...")
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("generated module with colliding imports did not compile: %v\n%s", err, output)
+	}
+}
+
+func TestDeduplicateAndSortImportsPlansDeterministicUniqueIdentifiers(t *testing.T) {
+	plan := deduplicateAndSortImports([]templateImport{
+		{Path: "example.com/a/shared"},
+		{Path: "example.com/b/shared"},
+		{Path: "example.com/external/flag", Alias: "flag"},
+		{Path: "flag"},
+		{Path: "os"},
+	})
+	identifiers := importIdentifiers(plan)
+	for importPath, want := range map[string]string{
+		"flag":                      "flag",
+		"os":                        "os",
+		"example.com/a/shared":      "shared",
+		"example.com/b/shared":      "shared_2",
+		"example.com/external/flag": "pkg_flag",
+	} {
+		if got := identifiers[importPath]; got != want {
+			t.Errorf("identifier for %s = %q, want %q", importPath, got, want)
+		}
+	}
+	if repeated := importIdentifiers(deduplicateAndSortImports([]templateImport{
+		{Path: "os"}, {Path: "example.com/b/shared"}, {Path: "flag"}, {Path: "example.com/external/flag", Alias: "flag"}, {Path: "example.com/a/shared"},
+	})); !reflect.DeepEqual(identifiers, repeated) {
+		t.Fatalf("plan changed with input order:\nfirst: %#v\nsecond: %#v", identifiers, repeated)
 	}
 }
 
