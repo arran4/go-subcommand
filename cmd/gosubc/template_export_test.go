@@ -26,6 +26,7 @@ func TestTemplateExport_Execute(t *testing.T) {
 	args = append(args, "--output")
 	args = append(args, "test")
 	args = append(args, "--as-txtar")
+	args = append(args, "--force")
 
 	err := cmd.Execute(args)
 	if err != nil {
@@ -41,6 +42,9 @@ func TestTemplateExport_Execute(t *testing.T) {
 	}
 	if cmd.asTxtar != true {
 		t.Errorf("Expected asTxtar to be true, got '%v'", cmd.asTxtar)
+	}
+	if cmd.force != true {
+		t.Errorf("Expected force to be true, got '%v'", cmd.force)
 	}
 }
 
