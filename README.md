@@ -302,9 +302,11 @@ gogenmux                  [implicit root: no action function]
     └── show              [Show()]
 ```
 
-**Example B — explicit root and explicit intermediate command.**
-Declare an action for the application root, an intermediate command, or both.
-The hierarchy remains one executable:
+**Example B — explicit root with a default action and explicit intermediate command.**
+An annotated application-root function is not merely a structural declaration:
+it becomes the **default action invoked by bare `gogenmux`**. Likewise, an
+explicitly annotated `config` function handles bare `gogenmux config`.
+The hierarchy still produces one executable:
 
 ```go
 // Gogenmux is a subcommand `gogenmux` -- Multiplexer tools.
@@ -321,17 +323,33 @@ func Show() {}
 ```
 
 ```text
-gogenmux                  [explicit root: Gogenmux()]
+gogenmux                  [explicit root + default action: Gogenmux()]
 ├── generate              [Generate()]
-└── config                [explicit parent: Config()]
+└── config                [explicit command action: Config()]
     └── show              [Show()]
 ```
 
-The root and intermediate actions are **optional**: you can use either
-explicit action independently, without changing the command paths. Durable
-functions stay in their original source package; gosubc generates the
-dispatch wrappers and help resources. In particular, a function named
-`Root` is not required simply to produce the `gogenmux` executable.
+For Example B, invocation selects the corresponding action:
+
+```text
+gogenmux                  → Gogenmux()       (default/root action)
+gogenmux generate         → Generate()       (not Gogenmux())
+gogenmux config           → Config()         (intermediate action)
+gogenmux config show      → Show()           (not Config() or Gogenmux())
+```
+
+An **explicit root action is optional at definition time**, but when declared
+it is also the application's default action. There is currently no separate
+`commentv1` annotation for an *explicit, metadata-only root* that avoids
+registering such a default action. For a dispatch-only root, use the implicit
+root form in Example A rather than adding an empty root function solely to
+declare the executable name. Similarly, omit the explicit `config` function
+when that intermediate node needs no action.
+
+Durable functions stay in their original source package; gosubc generates
+the dispatch wrappers and help resources. A function specifically named
+`Root` is not required. For related distinctions involving a literal child
+command named `root`, see [issue #513](https://github.com/arran4/go-subcommand/issues/513).
 
 **Syntax matters:** use backticks around the entire command path:
 
