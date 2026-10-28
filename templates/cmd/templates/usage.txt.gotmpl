@@ -42,13 +42,13 @@ Subcommands:
 {{- end}}
 {{- end}}
 {{- if .ParameterGroups}}
-{{- $maxFlag := add .MaxFlagLength 2}}{{- $maxDef := .MaxDefaultLength}}{{- if gt $maxDef 0}}{{- $maxDef = add $maxDef 2}}{{- end}}
+{{- $maxFlag := add .MaxFlagLength 2}}{{- $maxDef := .MaxUsageDefaultLength}}{{- if gt $maxDef 0}}{{- $maxDef = add $maxDef 2}}{{- end}}
 
 {{if eq (len .ParameterGroups) 1}}
 {{- range .ParameterGroups}}
 Flags:
 {{- range .Parameters}}
-    {{printf "%-*s %-*s" $maxFlag .FlagString $maxDef .DefaultString}}{{if .Description}} {{wrapFlag $maxFlag $maxDef .FlagString .DefaultString .Description}}{{end}}
+    {{printf "%-*s %-*s" $maxFlag .FlagString $maxDef .UsageDefaultString}}{{if .UsageDescription}} {{wrapFlag $maxFlag $maxDef .FlagString .UsageDefaultString .UsageDescription}}{{end}}
 {{- end}}
 {{- end}}
 {{- else}}
@@ -56,7 +56,7 @@ Flags:
 
 `{{.CommandName}}` Flags:
 {{- range .Parameters}}
-    {{printf "%-*s %-*s" $maxFlag .FlagString $maxDef .DefaultString}}{{if .Description}} {{wrapFlag $maxFlag $maxDef .FlagString .DefaultString .Description}}{{end}}
+    {{printf "%-*s %-*s" $maxFlag .FlagString $maxDef .UsageDefaultString}}{{if .UsageDescription}} {{wrapFlag $maxFlag $maxDef .FlagString .UsageDefaultString .UsageDescription}}{{end}}
 {{- end}}
 {{- end}}
 {{- end}}
