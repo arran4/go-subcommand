@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -45,7 +45,6 @@ var issue475LinuxSource string
 
 //go:embed testdata/issue475_windows.go
 var issue475WindowsSource string
-
 
 //go:embed testdata/issue456_imports.go
 var issue456ImportsSource string
