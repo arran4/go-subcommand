@@ -1,0 +1,35 @@
+{
+  "MainCmdName": "streamapp",
+  "SubCommandName": "copy",
+  "SubCommandFunctionName": "Copy",
+  "Parameters": [
+    {
+      "Name": "reader",
+      "Type": "io.Reader",
+      "FlagAliases": ["reader"],
+      "Default": "-",
+      "HasDefaultValue": true,
+      "Description": "Input reader"
+    },
+    {
+      "Name": "readCloser",
+      "Type": "io.ReadCloser",
+      "FlagAliases": ["read-closer"],
+      "Description": "Closable input"
+    },
+    {
+      "Name": "writer",
+      "Type": "io.Writer",
+      "FlagAliases": ["writer"],
+      "Default": "-",
+      "HasDefaultValue": true,
+      "Description": "Output writer"
+    },
+    {
+      "Name": "writeCloser",
+      "Type": "io.WriteCloser",
+      "FlagAliases": ["write-closer"],
+      "Description": "Closable output"
+    }
+  ]
+}

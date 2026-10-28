@@ -35,18 +35,18 @@
 				{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
 				{{- $helperName := printf "%sSlice" $baseName }}
 				{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
-	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", "{{$desc}}")
+	{{$set}}.Var((*{{$helperName}})(&{{$struct}}.{{$param.Name}}), "{{.}}", {{goString $desc}})
 			{{- else }}
 				{{- if $param.HasPointer }}
 					{{- if and $param.IsString (not $param.HasCustomParser) }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+	{{$set}}.Func("{{.}}", {{goString $desc}}, func(s string) error {
 		{{$struct}}.{{$param.Name}} = &s
 		return nil
 	})
 					{{- else }}
 						{{- $funcName := "Func" }}
 						{{- if $param.IsBool }}{{ $funcName = "BoolFunc" }}{{ end }}
-	{{$set}}.{{$funcName}}("{{.}}", "{{$desc}}", func(s string) error {
+	{{$set}}.{{$funcName}}("{{.}}", {{goString $desc}}, func(s string) error {
 		parsed, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
@@ -58,7 +58,7 @@
 					{{- end }}
 				{{- else }}
 					{{- if $param.HasCustomParser }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+	{{$set}}.Func("{{.}}", {{goString $desc}}, func(s string) error {
 		parsed, err := {{$param.ParserCall "s"}}
 		if err != nil {
 			return err
@@ -68,19 +68,19 @@
 	})
 					{{- else if $param.IsDuration }}
 						{{- if isDefaultExpression $param.Default }}
-	{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, {{goString $desc}})
 						{{- else }}
 	if d, err := time.ParseDuration("{{$default}}"); err == nil {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, "{{$desc}}")
+		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", d, {{goString $desc}})
 	} else {
-		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, "{{$desc}}")
+		{{$set}}.DurationVar(&{{$struct}}.{{$param.Name}}, "{{.}}", 0, {{goString $desc}})
 	}
 						{{- end }}
 					{{- else if or (eq $param.BaseType "int") (eq $param.BaseType "string") (eq $param.BaseType "bool") (eq $param.BaseType "uint") (eq $param.BaseType "uint64") (eq $param.BaseType "int64") (eq $param.BaseType "float64") }}
 						{{- $varType := $param.BaseType | title }}
-	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, "{{$desc}}")
+	{{$set}}.{{$varType}}Var(&{{$struct}}.{{$param.Name}}, "{{.}}", {{$default}}, {{goString $desc}})
 					{{- else }}
-	{{$set}}.Func("{{.}}", "{{$desc}}", func(s string) error {
+	{{$set}}.Func("{{.}}", {{goString $desc}}, func(s string) error {
 		{{- if or $param.IsWriter $param.IsReader }}
 		// Parsed manually in Execute
 		{{- else }}
