@@ -20,6 +20,9 @@ import (
 //go:embed cmd/templates/usage.txt.gotmpl cmd/templates/templates.go.gotmpl testdata/*.txtar
 var templatesFS embed.FS
 
+//go:embed testdata/usage_io_streams.json
+var usageIOStreamsFixture []byte
+
 var usageTemplateDelimsReplacer = strings.NewReplacer(
 	"{{", `{{"{{"}}`,
 	"}}", `{{"}}"}}`,
