@@ -88,22 +88,132 @@ The primary directive defines where the command lives in the CLI hierarchy:
 // FuncName is a subcommand `root-cmd parent child`
 ```
 
-### Subcommand Aliases
+### Subcommand Aliases & Command Routing
 
-You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive.
+`go-subcommand` provides expressive alias and routing capabilities across child commands, nested hierarchies, and the application root.
 
-```go
-// MyFunc is a subcommand `app cmd`
-// Aliases: c, command
-func MyFunc() { ... }
-```
+#### Child Subcommand Aliases
 
-You can also use an inline syntax:
+You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive, or inline `(alias: ...)` / `(aka: ...)`:
 
 ```go
-// MyFunc is a subcommand `app cmd` (aka: c)
-func MyFunc() { ... }
+// SvcAction is a subcommand `app svc` Manage services.
+// Aliases: service, s
+func SvcAction() error { ... }
+
+// SvcListAction is a subcommand `app svc list` List active services.
+// (aka: ls)
+func SvcListAction(all bool) error { ... }
 ```
+
+Aliases resolve at intermediate and leaf positions across execution and help traversal:
+
+```console
+$ app svc list --all
+$ app service ls --all
+$ app s ls --all
+$ app help s ls
+```
+
+#### Multiple Invocations for a Single Action (Multi-Level Path Aliasing)
+
+An application root action can be made reachable through both bare invocation and an explicit nested command path several levels deep without duplicating the action implementation:
+
+```go
+// RunProg is a subcommand `prog` Root application action.
+// Aliases: tools docs simple, tools docs s
+//
+// Flags:
+//   config: --config (default: "default.cfg") Configuration path
+func RunProg(config string) error { ... }
+
+// ToolsAction is a subcommand `prog tools` Developer tools.
+// Aliases: t
+func ToolsAction() error { ... }
+
+// DocsAction is a subcommand `prog tools docs` Documentation tools.
+// Aliases: d
+func DocsAction() error { ... }
+```
+
+Both bare invocation and the canonical or aliased nested path select the exact same underlying action:
+
+```console
+$ prog --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog tools docs simple --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog t d s --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog help tools docs simple
+# Displays help for the nested path without executing RunProg or providers
+```
+
+#### Default Routes to Built-in Help Destinations
+
+A bare invocation can be explicitly configured to forward to an existing help route using the `Default route:` directive (or inline `(default route: ...)`):
+
+```go
+// SimpleAction is a subcommand `prog simple` Simple demonstration command.
+// Default route: help simple
+//
+// Flags:
+//   name: -n --name (default: "world") Target name
+func SimpleAction(name string) error { ... }
+
+// OtherAction is a subcommand `prog other` Other command.
+func OtherAction() error { ... }
+```
+
+In this configuration, bare invocation and `./prog help simple` produce identical output and exit status 0, while guaranteeing zero business action or provider execution:
+
+```console
+$ prog
+Usage: prog simple [flags...]
+
+Simple demonstration command.
+
+Flags:
+    -n, --name string (default: "world") Target name
+
+$ prog help simple
+Usage: prog simple [flags...]
+
+Simple demonstration command.
+
+Flags:
+    -n, --name string (default: "world") Target name
+
+$ prog help
+Usage: prog <subcommand>
+
+Subcommands:
+    other      Other command.
+    simple     Simple demonstration command.
+```
+
+Built-in commands (`help`, `usage`, `version`) remain side-effect-free and reserved, distinct from user actions.
+
+#### Root Action vs Literal `root` Subcommand
+
+An application root and an ordinary subcommand literally named `root` can coexist cleanly:
+
+```go
+// Downloadsd is a subcommand `downloadsd` Manage downloads and services.
+func Downloadsd(config string) error { ... }
+
+// Root is a subcommand `downloadsd root` Run the optional privileged supervisor.
+// (aka: supervisor, r)
+func Root(config string, serve bool) error { ... }
+```
+
+*   `downloadsd`: Executes the application-level `Downloadsd` action.
+*   `downloadsd root` (or `downloadsd supervisor`, `downloadsd r`): Dispatches only to the explicit supervisor `Root` action.
+*   `downloadsd help` or `downloadsd -h`: Shows application help without starting the supervisor or executing actions.
+*   `downloadsd root --help` or `downloadsd help root`: Shows supervisor child help.
 
 ### Description & Extended Help
 
@@ -275,10 +385,19 @@ branch's displayed labels without fixed padding widths.
 ### Root Actions and Subcommand Dispatch
 
 When an application defines both a root action and subcommands, a recognized
-subcommand (including the built-in `version`, `help`, and `usage` commands) is
-dispatched without running the root action. Root flags are still parsed and
-validated before dispatch. `--` preserves root positional-argument semantics,
-so a token after it is not treated as a subcommand.
+subcommand (including the built-in `version`, `help`, and `usage` commands, or
+an explicitly named child command such as `app root`) is dispatched without
+running the application root action. Application-root identity (`RootCmd` and
+`NewRoot` in `root.go`) is distinct from command-path subcommands, so an
+explicit `app root` child retains its own generated struct, constructor,
+usage resource, and tests without colliding with the application root.
+
+Built-in `help` and `usage` commands also traverse nested subcommand paths
+(for example, `app help services list`) without invoking business actions or
+initializing generator-backed providers. Unrecognized command tokens on a
+non-positional parent fail with an `unknown command` error rather than falling
+through to the parent action. `--` preserves positional-argument semantics so a
+token after it is not treated as a subcommand.
 
 An error returned by a durable command action is annotated once with the
 command name (for example, `app failed: ...`). The generated wrapper uses `%w`,

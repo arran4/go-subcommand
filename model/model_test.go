@@ -263,6 +263,20 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	if child.MaxFlagLength() == 0 || child.MaxDefaultLength() == 0 {
 		t.Error("expected flag and default widths for inherited parameters")
 	}
+	if !root.IsAppRoot() || root.CommandPath() != nil {
+		t.Errorf("root.IsAppRoot() = %v, CommandPath() = %v", root.IsAppRoot(), root.CommandPath())
+	}
+	rootWrapper := &SubCommand{Command: root, SubCommandName: ""}
+	explicitRootChild := &SubCommand{Command: root, SubCommandName: "root", SubCommandFunctionName: "Root"}
+	if !rootWrapper.IsAppRoot() || rootWrapper.CommandPath() != nil {
+		t.Errorf("rootWrapper.IsAppRoot() = %v, CommandPath() = %v", rootWrapper.IsAppRoot(), rootWrapper.CommandPath())
+	}
+	if explicitRootChild.IsAppRoot() || !reflect.DeepEqual(explicitRootChild.CommandPath(), []string{"root"}) {
+		t.Errorf("explicitRootChild.IsAppRoot() = %v, CommandPath() = %v", explicitRootChild.IsAppRoot(), explicitRootChild.CommandPath())
+	}
+	if !reflect.DeepEqual(child.CommandPath(), []string{"parent", "child"}) {
+		t.Errorf("child.CommandPath() = %v, want [parent child]", child.CommandPath())
+	}
 }
 
 func TestValidate_OSFile_Fails(t *testing.T) {
@@ -320,4 +334,40 @@ func TestEffectiveCLIParser(t *testing.T) {
 	if got := unsetChild.EffectiveCLIParser(); got != "" {
 		t.Fatalf("unset child EffectiveCLIParser() = %q, want empty", got)
 	}
+}
+
+func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
+	t.Run("aliases without action rejected", func(t *testing.T) {
+		cmd := &Command{
+			MainCmdName:  "app",
+			FunctionName: "",
+			Aliases:      []string{"run"},
+		}
+		err := cmd.Validate()
+		if err == nil || err.Error() != "command app: aliases (run) cannot be declared on root command without an action" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("empty default route rejected", func(t *testing.T) {
+		cmd := &Command{
+			MainCmdName:  "app",
+			DefaultRoute: "   ",
+		}
+		err := cmd.Validate()
+		if err == nil || err.Error() != "command app: empty default route" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("subcommand alias cannot alias itself", func(t *testing.T) {
+		sc := &SubCommand{
+			SubCommandName: "simple",
+			Aliases:        []string{"simple"},
+		}
+		err := sc.Validate()
+		if err == nil || err.Error() != "command simple: alias \"simple\" on subcommand \"simple\" cannot alias itself" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
