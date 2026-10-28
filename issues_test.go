@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	_ "embed"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -119,6 +121,29 @@ func TestDashDashExecutionLogic(t *testing.T) {
 	cmdGo := string(mustGeneratedFile(t, writer, "cmd/app/command.go"))
 	assertContains(t, cmdGo, `dashDashSeen := false`, "dashDashSeen variable should be tracked in subcommand")
 	assertContains(t, cmdGo, `if !dashDashSeen && len(remainingArgs) > 0 {`, "subcommand dispatch should check dashDashSeen in subcommand")
+}
+
+func TestGeneratedGoEscapesUserDescriptions(t *testing.T) {
+	description := "delimiter is \\\"\\n\\\"\\twith {{template-like}} Unicode: café"
+	for _, parserName := range []string{"gnu", "go-flag"} {
+		t.Run(parserName, func(t *testing.T) {
+			input := fstest.MapFS{
+				"go.mod": &fstest.MapFile{Data: []byte("module example.com/escape\n\ngo 1.22\n")},
+				"app.go": &fstest.MapFile{Data: []byte("package app\n\n// Root is a subcommand `escape`\n// CLI-Parser: " + parserName + "\n// Flags:\n//\tdelim: -d --delim " + description + "\nfunc Root(delim string) {}\n")},
+			}
+			writer := NewCollectingFileWriter()
+			if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			root := string(mustGeneratedFile(t, writer, "cmd/escape/root.go"))
+			if _, err := parser.ParseFile(token.NewFileSet(), "root.go", root, parser.AllErrors); err != nil {
+				t.Fatalf("generated source does not escape its description: %v\n%s", err, root)
+			}
+			if !strings.Contains(root, `\\\"`) || !strings.Contains(root, `\\t`) {
+				t.Fatalf("generated source did not preserve escaped description content:\n%s", root)
+			}
+		})
+	}
 }
 
 func TestIssue18_MoreBasicTypes(t *testing.T) {
