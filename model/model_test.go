@@ -144,6 +144,44 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	}
 }
 
+func TestFunctionParameterUsageStreamHelp(t *testing.T) {
+	tests := []struct {
+		name        string
+		parameter   FunctionParameter
+		wantDefault string
+		wantHelp    string
+	}{
+		{
+			name:        "reader default",
+			parameter:   FunctionParameter{Type: "io.Reader", Default: "-", HasDefaultValue: true, Description: "Input"},
+			wantDefault: "(default: stdin via '-')",
+			wantHelp:    "Input; use '-' for stdin",
+		},
+		{
+			name:        "writer explicit stream",
+			parameter:   FunctionParameter{Type: "io.WriteCloser", Description: "Output"},
+			wantDefault: "",
+			wantHelp:    "Output; use '-' for stdout",
+		},
+		{
+			name:        "ordinary parameter",
+			parameter:   FunctionParameter{Type: "string", Default: "-", HasDefaultValue: true, Description: "Path"},
+			wantDefault: `(default: "-")`,
+			wantHelp:    "Path",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.parameter.UsageDefaultString(); got != tt.wantDefault {
+				t.Errorf("UsageDefaultString() = %q, want %q", got, tt.wantDefault)
+			}
+			if got := tt.parameter.UsageDescription(); got != tt.wantHelp {
+				t.Errorf("UsageDescription() = %q, want %q", got, tt.wantHelp)
+			}
+		})
+	}
+}
+
 func TestRequiredFlagPresentIgnoresInheritedParameters(t *testing.T) {
 	params := []*FunctionParameter{
 		{Name: "inherited", Required: true, Inherited: true},

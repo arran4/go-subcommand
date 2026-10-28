@@ -13,3 +13,4 @@ Subcommands:
 Flags:
     {{formatFlagRow 21 24 "--output, -o string" "(default: \"templates\")" "The destination directory or file."}}
     {{formatFlagRow 21 24 "--as-txtar" "(default: false)" "Export as a txtar archive instead of a directory."}}
+    --force               (default: false)         Replace existing exported template files.

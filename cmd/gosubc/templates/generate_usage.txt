@@ -29,6 +29,7 @@ Flags:
     {{formatFlagRow 33 24 "--replace-template []string" "" "Replace templates. Formats: <alias>=<file>, <folder>, <txtar>."}}
     {{formatFlagRow 33 24 "--project-provenance, --project" "(default: true)" "Include target Git metadata in provenance"}}
     {{formatFlagRow 33 24 "--timestamp" "(default: true)" "Include timestamp in provenance"}}
+    {{formatFlagRow 33 24 "--emit-go-generate" "(default: true)" "Emit nested //go:generate directive in generated main.go"}}
     {{formatFlagRow 33 24 "--prov-version string" "(default: \"\")" "Overwrite provenance version"}}
     {{formatFlagRow 33 24 "--prov-commit string" "(default: \"\")" "Overwrite provenance commit"}}
     {{formatFlagRow 33 24 "--prov-date string" "(default: \"\")" "Overwrite provenance date"}}

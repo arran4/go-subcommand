@@ -239,6 +239,51 @@ func TestUsageTemplate(t *testing.T) {
 	}
 }
 
+func TestUsageTemplateIOStreams(t *testing.T) {
+	tmplContent, err := templatesFS.ReadFile("cmd/templates/usage.txt.gotmpl")
+	if err != nil {
+		t.Fatalf("read usage template: %v", err)
+	}
+	tmpl, err := template.New("usage").Funcs(stage1UsageFuncs()).Parse(string(tmplContent))
+	if err != nil {
+		t.Fatalf("parse usage template: %v", err)
+	}
+
+	var input struct {
+		model.SubCommand
+		Recursive bool
+	}
+	if err := json.Unmarshal(usageIOStreamsFixture, &input); err != nil {
+		t.Fatalf("parse IO streams fixture: %v", err)
+	}
+	data := struct {
+		*model.SubCommand
+		Recursive bool
+	}{SubCommand: &input.SubCommand, Recursive: input.Recursive}
+	populateParentsUsage(data.SubCommand, nil)
+
+	var output bytes.Buffer
+	if err := tmpl.Execute(&output, data); err != nil {
+		t.Fatalf("execute usage template: %v", err)
+	}
+	for _, want := range []string{
+		"--reader io.Reader",
+		"(default: stdin via '-')",
+		"Input reader; use '-' for stdin",
+		"--read-closer io.ReadCloser",
+		"Closable input; use '-' for stdin",
+		"--writer io.Writer",
+		"(default: stdout via '-')",
+		"Output writer; use '-' for stdout",
+		"--write-closer io.WriteCloser",
+		"Closable output; use '-' for stdout",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("generated usage missing %q:\n%s", want, output.String())
+		}
+	}
+}
+
 func populateParentsUsage(sc *model.SubCommand, parent *model.SubCommand) {
 	sc.Parent = parent
 	childParent := sc

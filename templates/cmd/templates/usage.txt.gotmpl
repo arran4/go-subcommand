@@ -50,13 +50,13 @@ Subcommands:
 {{- end}}
 {{- end}}
 {{- if .ParameterGroups}}
-{{- $maxFlag := add .MaxFlagLength 2}}{{- $maxDef := .MaxDefaultLength}}{{- if gt $maxDef 0}}{{- $maxDef = add $maxDef 2}}{{- end}}
+{{- $maxFlag := add .MaxFlagLength 2}}{{- $maxDef := .MaxUsageDefaultLength}}{{- if gt $maxDef 0}}{{- $maxDef = add $maxDef 2}}{{- end}}
 
 {{if eq (len .ParameterGroups) 1}}
 {{- range .ParameterGroups}}
 Flags:
 {{- range .Parameters}}
-    {{ "{{" }}formatFlagRow {{$maxFlag}} {{$maxDef}} {{printf "%q" .FlagString}} {{printf "%q" .DefaultString}} {{printf "%q" .Description}}{{ "}}" }}
+    {{ "{{" }}formatFlagRow {{$maxFlag}} {{$maxDef}} {{printf "%q" .FlagString}} {{printf "%q" .UsageDefaultString}} {{printf "%q" .UsageDescription}}{{ "}}" }}
 {{- end}}
 {{- end}}
 {{- else}}
@@ -64,7 +64,7 @@ Flags:
 
 `{{escapeUsageText .CommandName}}` Flags:
 {{- range .Parameters}}
-    {{ "{{" }}formatFlagRow {{$maxFlag}} {{$maxDef}} {{printf "%q" .FlagString}} {{printf "%q" .DefaultString}} {{printf "%q" .Description}}{{ "}}" }}
+    {{ "{{" }}formatFlagRow {{$maxFlag}} {{$maxDef}} {{printf "%q" .FlagString}} {{printf "%q" .UsageDefaultString}} {{printf "%q" .UsageDescription}}{{ "}}" }}
 {{- end}}
 {{- end}}
 {{- end}}
