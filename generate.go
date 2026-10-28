@@ -557,20 +557,44 @@ func isGenerated(content []byte) bool {
 	return false
 }
 func assignUsageFileNames(subCommands []*model.SubCommand) {
-	seen := make(map[string]int)
-	for _, sc := range subCommands {
-		lower := strings.ToLower(sc.SubCommandName)
-		count := seen[lower]
-		seen[lower]++
-		suffix := ""
-		if count > 0 {
-			suffix = fmt.Sprintf("_%d", count)
-		}
-		sc.UsageFileName = fmt.Sprintf("%s%s_usage.txt", lower, suffix)
+	type usageTarget struct {
+		command *model.SubCommand
+		path    []string
+	}
 
-		if len(sc.SubCommands) > 0 {
-			assignUsageFileNames(sc.SubCommands)
+	var targets []usageTarget
+	var collect func([]*model.SubCommand, []string)
+	collect = func(commands []*model.SubCommand, parentPath []string) {
+		for _, sc := range commands {
+			path := append(append([]string(nil), parentPath...), sc.SubCommandName)
+			targets = append(targets, usageTarget{command: sc, path: path})
+			collect(sc.SubCommands, path)
 		}
+	}
+	collect(subCommands, nil)
+
+	leafCount := make(map[string]int)
+	for _, target := range targets {
+		leafCount[strings.ToLower(target.path[len(target.path)-1])]++
+	}
+
+	seen := make(map[string]int)
+	for _, target := range targets {
+		name := strings.ToLower(target.path[len(target.path)-1])
+		if leafCount[name] > 1 && len(target.path) > 1 {
+			parts := make([]string, len(target.path))
+			for i, part := range target.path {
+				parts[i] = strings.ToLower(part)
+			}
+			name = strings.Join(parts, "_")
+		}
+
+		count := seen[name]
+		seen[name]++
+		if count > 0 {
+			name = fmt.Sprintf("%s_%d", name, count)
+		}
+		target.command.UsageFileName = fmt.Sprintf("%s_usage.txt", name)
 	}
 }
 
