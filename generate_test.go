@@ -1243,7 +1243,7 @@ func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
 	first := NewCollectingFileWriter()
 	generate(first)
 	want := []string{
-		"cmd/agents.md",
+		"cmd/AGENTS.md",
 		"cmd/app/child.go",
 		"cmd/app/child_test.go",
 		"cmd/app/flag_helpers.go",
