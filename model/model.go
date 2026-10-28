@@ -241,7 +241,6 @@ func (cmd *Command) Validate() error {
 	if err := validateSubCommandCollisions(cmd.MainCmdName, true, cmd.SubCommands); err != nil {
 		return err
 	}
-	}
 	for _, sc := range cmd.SubCommands {
 		if err := sc.Validate(); err != nil {
 			return err

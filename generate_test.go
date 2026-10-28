@@ -734,8 +734,6 @@ func TestGenerate_ImplicitNestedCommandPathsProduceOneExecutable(t *testing.T) {
 		t.Fatal("repeat implicit nested generation changed root.go")
 	}
 }
-	}
-}
 
 func TestGenerate_Clean(t *testing.T) {
 	dir := t.TempDir()
