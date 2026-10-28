@@ -197,8 +197,6 @@ func TestFunctionParameterUsageStreamHelp(t *testing.T) {
 		})
 	}
 }
-	}
-}
 
 func TestRequiredFlagPresentIgnoresInheritedParameters(t *testing.T) {
 	params := []*FunctionParameter{
