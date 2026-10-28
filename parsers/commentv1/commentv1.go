@@ -54,6 +54,7 @@ type CommandTree struct {
 	ReturnCount        int
 	Description        string
 	ExtendedHelp       string
+	Aliases            []string
 	CLIParser          string
 	ImportPath         string
 }
@@ -204,6 +205,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ReturnCount:        cmdTree.ReturnCount,
 			Description:        cmdTree.Description,
 			ExtendedHelp:       cmdTree.ExtendedHelp,
+			Aliases:            cmdTree.Aliases,
 			CLIParser:          cmdTree.CLIParser,
 		}
 
@@ -684,6 +686,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.ReturnCount = returnCount
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
+				ct.Aliases = aliases
 				ct.CLIParser = cliParser
 				continue
 			}
@@ -867,6 +870,17 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 		}
 
 		lowerTrimmedLine := strings.ToLower(trimmedLine)
+		if matches := reAlias.FindStringSubmatch(trimmedLine); matches != nil {
+			aliasStr := matches[1]
+			parts := strings.Split(aliasStr, ",")
+			for _, p := range parts {
+				a := strings.TrimSpace(p)
+				if a != "" {
+					aliases = append(aliases, a)
+				}
+			}
+			continue
+		}
 		if strings.HasPrefix(lowerTrimmedLine, DirectiveAliasesPrefix) || strings.HasPrefix(lowerTrimmedLine, DirectiveAliasPrefix) {
 			lineParts := strings.SplitN(trimmedLine, ":", 2)
 			if len(lineParts) > 1 {

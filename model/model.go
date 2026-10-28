@@ -112,6 +112,8 @@ type Command struct {
 	ReturnsError bool
 	// ReturnCount is the number of return values.
 	ReturnCount int
+	// Aliases holds aliases defined on the application root, validated and rejected in Validate().
+	Aliases []string
 	// CLIParser is the explicit runtime CLI parser backend selected for this command.
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
@@ -212,11 +214,32 @@ func (dm *DataModel) Validate() error {
 }
 
 func (cmd *Command) Validate() error {
+	if len(cmd.Aliases) > 0 {
+		return fmt.Errorf("command %s: aliases (%s) are not supported on the application root command", cmd.MainCmdName, strings.Join(cmd.Aliases, ", "))
+	}
 	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
+		return err
+	}
+	if err := validateSubCommandCollisions(cmd.MainCmdName, true, cmd.SubCommands); err != nil {
 		return err
 	}
 	for _, sc := range cmd.SubCommands {
 		if err := sc.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sc *SubCommand) Validate() error {
+	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
+		return err
+	}
+	if err := validateSubCommandCollisions(sc.ProgName(), false, sc.SubCommands); err != nil {
+		return err
+	}
+	for _, child := range sc.SubCommands {
+		if err := child.Validate(); err != nil {
 			return err
 		}
 	}
@@ -255,13 +278,44 @@ func (sc *SubCommand) HasIOParameters() bool {
 	return false
 }
 
-func (sc *SubCommand) Validate() error {
-	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
-		return err
+func validateSubCommandCollisions(parentName string, isRoot bool, subCommands []*SubCommand) error {
+	seenCanonical := make(map[string]string)
+	for _, sc := range subCommands {
+		canonLower := strings.ToLower(sc.SubCommandName)
+		if canonLower == "help" || canonLower == "usage" || (isRoot && canonLower == "version") {
+			return fmt.Errorf("command %s: subcommand %q conflicts with built-in command %q", parentName, sc.SubCommandName, canonLower)
+		}
+		if _, ok := seenCanonical[sc.SubCommandName]; ok {
+			return fmt.Errorf("command %s: duplicate subcommand %q", parentName, sc.SubCommandName)
+		}
+		seenCanonical[sc.SubCommandName] = sc.SubCommandName
 	}
-	for _, child := range sc.SubCommands {
-		if err := child.Validate(); err != nil {
-			return err
+
+	seenAliases := make(map[string]string)
+	for _, sc := range subCommands {
+		seenChildAliases := make(map[string]bool)
+		for _, rawAlias := range sc.Aliases {
+			alias := strings.TrimSpace(rawAlias)
+			aliasLower := strings.ToLower(alias)
+			if aliasLower == "" || strings.ContainsAny(aliasLower, " \t\r\n") {
+				return fmt.Errorf("command %s: invalid alias %q on subcommand %q", parentName, rawAlias, sc.SubCommandName)
+			}
+			if aliasLower == "help" || aliasLower == "usage" || (isRoot && aliasLower == "version") {
+				return fmt.Errorf("command %s: alias %q on subcommand %q conflicts with built-in command %q", parentName, rawAlias, sc.SubCommandName, aliasLower)
+			}
+			for canon := range seenCanonical {
+				if strings.EqualFold(alias, canon) {
+					return fmt.Errorf("command %s: alias %q on subcommand %q conflicts with subcommand %q", parentName, rawAlias, sc.SubCommandName, canon)
+				}
+			}
+			if seenChildAliases[aliasLower] {
+				return fmt.Errorf("command %s: duplicate alias %q on subcommand %q", parentName, rawAlias, sc.SubCommandName)
+			}
+			if otherOwner, exists := seenAliases[aliasLower]; exists {
+				return fmt.Errorf("command %s: alias %q on subcommand %q conflicts with alias on subcommand %q", parentName, rawAlias, sc.SubCommandName, otherOwner)
+			}
+			seenChildAliases[aliasLower] = true
+			seenAliases[aliasLower] = sc.SubCommandName
 		}
 	}
 	return nil

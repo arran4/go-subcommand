@@ -36,6 +36,24 @@ var issue456ImportsSource string
 //go:embed testdata/issue513_root_collision.go
 var issue513RootCollisionSource string
 
+//go:embed testdata/issue513_aliases.go
+var issue513AliasesSource string
+
+//go:embed testdata/issue513_config1.go
+var issue513Config1Source string
+
+//go:embed testdata/issue513_config2.go
+var issue513Config2Source string
+
+//go:embed testdata/issue513_config4.go
+var issue513Config4Source string
+
+//go:embed testdata/issue513_config5.go
+var issue513Config5Source string
+
+//go:embed testdata/issue513_alias_root.go
+var issue513AliasRootSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -1156,6 +1174,413 @@ func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 			t.Fatalf("unknown command %v unexpectedly invoked actions/providers: %v", badArgs, markers)
 		}
 	}
+}
+
+func TestGenerate_Issue513_AllDefaultActionConfigurations(t *testing.T) {
+	configs := []struct {
+		name       string
+		source     string
+		testInvocs func(t *testing.T, run func(args ...string) (string, error))
+	}{
+		{
+			name:   "config1_default_root_no_children",
+			source: issue513Config1Source,
+			testInvocs: func(t *testing.T, run func(args ...string) (string, error)) {
+				// Bare invocation runs root action
+				out, err := run()
+				if err != nil {
+					t.Fatalf("bare invocation failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config1:flag=default_val") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Flag override
+				out, err = run("--flag", "custom_val")
+				if err != nil {
+					t.Fatalf("flag invocation failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config1:flag=custom_val") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Help invocation prints usage without executing action
+				out, err = run("--help")
+				if err != nil {
+					t.Fatalf("help failed: %v\n%s", err, out)
+				}
+				if strings.Contains(out, "executed:") {
+					t.Errorf("action executed during help: %s", out)
+				}
+				if !strings.Contains(out, "Usage: app [flags...]") {
+					t.Errorf("usage missing in help output: %s", out)
+				}
+			},
+		},
+		{
+			name:   "config2_default_root_with_ordinary_children",
+			source: issue513Config2Source,
+			testInvocs: func(t *testing.T, run func(args ...string) (string, error)) {
+				// Bare invocation runs root action
+				out, err := run()
+				if err != nil {
+					t.Fatalf("bare invocation failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config2-root:flag=root_val") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Child command runs child action
+				out, err = run("child", "--val", "custom_child")
+				if err != nil {
+					t.Fatalf("child invocation failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config2-child:val=custom_child") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Unknown command fails
+				out, err = run("unknown-cmd")
+				if err == nil {
+					t.Fatalf("expected error for unknown command, got success:\n%s", out)
+				}
+				if !strings.Contains(out, "unknown command: unknown-cmd") {
+					t.Errorf("expected unknown command error, got: %s", out)
+				}
+			},
+		},
+		{
+			name:   "config4_no_default_root_with_children",
+			source: issue513Config4Source,
+			testInvocs: func(t *testing.T, run func(args ...string) (string, error)) {
+				// Bare invocation displays usage and exits 0 (no default action declared)
+				out, err := run()
+				if err != nil {
+					t.Fatalf("bare invocation failed: %v\n%s", err, out)
+				}
+				if strings.Contains(out, "executed:") {
+					t.Errorf("action executed on bare invocation: %s", out)
+				}
+				if !strings.Contains(out, "Usage: app <subcommand>") {
+					t.Errorf("usage missing in bare output: %s", out)
+				}
+				// Child command runs
+				out, err = run("child", "--val", "active")
+				if err != nil {
+					t.Fatalf("child invocation failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config4-child:val=active") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Unknown command fails
+				out, err = run("unknown-cmd")
+				if err == nil {
+					t.Fatalf("expected error for unknown command, got success:\n%s", out)
+				}
+				if !strings.Contains(out, "unknown command: unknown-cmd") {
+					t.Errorf("expected unknown command error, got: %s", out)
+				}
+			},
+		},
+		{
+			name:   "config5_no_default_root_with_explicit_root_child",
+			source: issue513Config5Source,
+			testInvocs: func(t *testing.T, run func(args ...string) (string, error)) {
+				// Bare invocation displays usage and exits 0 (no default action declared)
+				out, err := run()
+				if err != nil {
+					t.Fatalf("bare invocation failed: %v\n%s", err, out)
+				}
+				if strings.Contains(out, "executed:") {
+					t.Errorf("action executed on bare invocation: %s", out)
+				}
+				if !strings.Contains(out, "Usage: app <subcommand>") {
+					t.Errorf("usage missing in bare output: %s", out)
+				}
+				// app root runs the explicit child root action!
+				out, err = run("root", "--serve")
+				if err != nil {
+					t.Fatalf("app root failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config5-child-root:serve=true") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// app other runs the other child
+				out, err = run("other")
+				if err != nil {
+					t.Fatalf("app other failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:config5-other") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				// Unknown command fails
+				out, err = run("unknown-cmd")
+				if err == nil {
+					t.Fatalf("expected error for unknown command, got success:\n%s", out)
+				}
+				if !strings.Contains(out, "unknown command: unknown-cmd") {
+					t.Errorf("expected unknown command error, got: %s", out)
+				}
+			},
+		},
+		{
+			name:   "child_alias_named_root_without_canonical_root_child",
+			source: issue513AliasRootSource,
+			testInvocs: func(t *testing.T, run func(args ...string) (string, error)) {
+				// Child has alias "root" when no canonical root child exists
+				out, err := run("root")
+				if err != nil {
+					t.Fatalf("app root via alias failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:status-via-root-alias") {
+					t.Errorf("unexpected output: %s", out)
+				}
+				out, err = run("status")
+				if err != nil {
+					t.Fatalf("app status via canonical failed: %v\n%s", err, out)
+				}
+				if !strings.Contains(out, "executed:status-via-root-alias") {
+					t.Errorf("unexpected output: %s", out)
+				}
+			},
+		},
+	}
+
+	for _, cfg := range configs {
+		t.Run(cfg.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/testapp\n\ngo 1.22\n")
+			writeRuntimeFixture(t, filepath.Join(dir, "app.go"), cfg.source)
+
+			if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("Generate failed: %v", err)
+			}
+
+			binPath := filepath.Join(dir, "app-bin")
+			buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/app")
+			buildCmd.Dir = dir
+			if out, err := buildCmd.CombinedOutput(); err != nil {
+				t.Fatalf("go build failed: %v\n%s", err, out)
+			}
+
+			run := func(args ...string) (string, error) {
+				cmd := exec.Command(binPath, args...)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				return string(out), err
+			}
+
+			cfg.testInvocs(t, run)
+		})
+	}
+}
+
+func TestGenerate_Issue513_AliasesAndHelpTraversal(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue513AliasesSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "aliasapp-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/aliasapp")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, out)
+	}
+
+	markerFile := filepath.Join(dir, "markers.txt")
+	resetMarkers := func() {
+		t.Helper()
+		_ = os.Remove(markerFile)
+	}
+	readMarkers := func() []string {
+		t.Helper()
+		data, err := os.ReadFile(markerFile)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatalf("read markers: %v", err)
+		}
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+
+	runExec := func(failOnAction bool, args ...string) (string, error) {
+		t.Helper()
+		resetMarkers()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		failVal := "0"
+		if failOnAction {
+			failVal = "1"
+		}
+		cmd.Env = append(os.Environ(),
+			"ISSUE513_ALIAS_MARKER_FILE="+markerFile,
+			"ISSUE513_ALIAS_FAIL_ON_ACTION="+failVal,
+		)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// 1. Bare invocation runs application root (custom function RunApp, not Root)
+	out, err := runExec(false)
+	if err != nil {
+		t.Fatalf("bare invocation failed: %v\n%s", err, out)
+	}
+	wantRootMarkers := []string{"provider:alias-runtime", "app-root:config=default.cfg,state=alias-ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+		t.Fatalf("markers = %v, want %v", got, wantRootMarkers)
+	}
+
+	// 2. Explicit root child invocation via canonical name and aliases
+	for _, aliasArgs := range [][]string{
+		{"root", "--serve"},
+		{"supervisor", "--serve"},
+		{"r", "--serve"},
+	} {
+		out, err = runExec(false, aliasArgs...)
+		if err != nil {
+			t.Fatalf("explicit root invocation %v failed: %v\n%s", aliasArgs, err, out)
+		}
+		wantChildMarkers := []string{"provider:alias-runtime", "child-root:config=default.cfg,serve=true,state=alias-ready"}
+		if got := readMarkers(); !reflect.DeepEqual(got, wantChildMarkers) {
+			t.Fatalf("markers for %v = %v, want %v", aliasArgs, got, wantChildMarkers)
+		}
+	}
+
+	// 3. Nested child dispatch via canonical and alias names
+	for _, nestedArgs := range [][]string{
+		{"svc", "list", "--all"},
+		{"service", "ls", "--all"},
+		{"s", "list", "--all"},
+		{"service", "list", "--all"},
+		{"s", "ls", "--all"},
+	} {
+		out, err = runExec(false, nestedArgs...)
+		if err != nil {
+			t.Fatalf("nested invocation %v failed: %v\n%s", nestedArgs, err, out)
+		}
+		if got, want := readMarkers(), []string{"svc-list:all=true"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("markers for %v = %v, want %v", nestedArgs, got, want)
+		}
+	}
+
+	// 4. Aliased help and usage traversal executes ZERO actions or providers
+	for _, helpArgs := range [][]string{
+		{"help", "supervisor"},
+		{"supervisor", "--help"},
+		{"r", "--help"},
+		{"help", "r"},
+		{"help", "service", "ls"},
+		{"service", "ls", "--help"},
+		{"help", "s", "list"},
+		{"s", "ls", "--help"},
+	} {
+		out, err = runExec(true, helpArgs...)
+		if err != nil {
+			t.Fatalf("help invocation %v failed: %v\n%s", helpArgs, err, out)
+		}
+		if markers := readMarkers(); len(markers) > 0 {
+			t.Fatalf("help invocation %v unexpectedly executed actions/providers: %v", helpArgs, markers)
+		}
+	}
+}
+
+func TestValidate_Issue513_Collisions(t *testing.T) {
+	testCollision := func(name, src, wantErrSubstring string) {
+		t.Run(name, func(t *testing.T) {
+			fs := setupProject(t, src)
+			p, err := parsers.Get("commentv1")
+			if err != nil {
+				t.Fatalf("get parser: %v", err)
+			}
+			dm, err := p.Parse(fs, ".", nil)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			err = dm.Validate()
+			if err == nil {
+				t.Fatalf("expected validation error containing %q, got nil", wantErrSubstring)
+			}
+			if !strings.Contains(err.Error(), wantErrSubstring) {
+				t.Errorf("validation error mismatch:\nwant substring: %q\ngot: %v", wantErrSubstring, err)
+			}
+		})
+	}
+
+	// Canonical conflicts with built-in commands
+	testCollision("canonical_help", `package main
+// Help is a subcommand `+"`app help`"+`
+func Help() {}
+`, `subcommand "help" conflicts with built-in command "help"`)
+
+	testCollision("canonical_usage", `package main
+// Usage is a subcommand `+"`app usage`"+`
+func Usage() {}
+`, `subcommand "usage" conflicts with built-in command "usage"`)
+
+	testCollision("canonical_version", `package main
+// Version is a subcommand `+"`app version`"+`
+func Version() {}
+`, `subcommand "version" conflicts with built-in command "version"`)
+
+	// Alias conflicts with built-in commands
+	testCollision("alias_help", `package main
+// Child is a subcommand `+"`app child`"+` (alias: help)
+func Child() {}
+`, `alias "help" on subcommand "child" conflicts with built-in command "help"`)
+
+	testCollision("alias_usage", `package main
+// Child is a subcommand `+"`app child`"+`
+// Aliases: usage
+func Child() {}
+`, `alias "usage" on subcommand "child" conflicts with built-in command "usage"`)
+
+	testCollision("alias_version", `package main
+// Child is a subcommand `+"`app child`"+` (aka: version)
+func Child() {}
+`, `alias "version" on subcommand "child" conflicts with built-in command "version"`)
+
+	// Alias conflicts with canonical command at same level
+	testCollision("alias_conflicts_with_canonical_root", `package main
+// Root is a subcommand `+"`app root`"+`
+func Root() {}
+
+// Child is a subcommand `+"`app child`"+` (aka: root)
+func Child() {}
+`, `alias "root" on subcommand "child" conflicts with subcommand "root"`)
+
+	testCollision("alias_conflicts_with_other_canonical", `package main
+// Status is a subcommand `+"`app status`"+`
+func Status() {}
+
+// Child is a subcommand `+"`app child`"+` (aka: status)
+func Child() {}
+`, `alias "status" on subcommand "child" conflicts with subcommand "status"`)
+
+	// Alias conflicts with another alias at same level
+	testCollision("alias_conflicts_with_other_alias", `package main
+// Status is a subcommand `+"`app status`"+` (alias: s)
+func Status() {}
+
+// Child is a subcommand `+"`app child`"+` (alias: s)
+func Child() {}
+`, `conflicts with alias on subcommand`)
+
+	// Duplicate alias on same command
+	testCollision("duplicate_alias_on_same_command", `package main
+// Status is a subcommand `+"`app status`"+` (aliases: s, s)
+func Status() {}
+`, `duplicate alias "s" on subcommand "status"`)
+
+	// Aliases on application root command
+	testCollision("aliases_on_application_root", `package main
+// App is a subcommand `+"`app`"+` (aka: myapp)
+func App() {}
+`, `aliases (myapp) are not supported on the application root command`)
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
