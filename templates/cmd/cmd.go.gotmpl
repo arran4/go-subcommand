@@ -122,7 +122,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
+			return err
 		}
 	} else {
 		c.Usage()
@@ -159,8 +159,9 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
-      if e, ok := err.(*cmd.ErrExitCode); ok {
-        return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
       }
       return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
