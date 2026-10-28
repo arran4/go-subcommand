@@ -165,7 +165,29 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
 					c.UsageRecursive()
 					return nil
 				}
@@ -178,7 +200,29 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
 					c.UsageRecursive()
 					return nil
 				}

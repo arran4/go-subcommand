@@ -22,6 +22,7 @@ type TemplateExport struct {
 	Flags         *flag.FlagSet
 	output        string
 	asTxtar       bool
+	force         bool
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *TemplateExport) error
 }
@@ -94,6 +95,17 @@ func (c *TemplateExport) Execute(args []string) (err error) {
 				} else {
 					c.asTxtar = true
 				}
+
+			case "force":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.force = b
+				} else {
+					c.force = true
+				}
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -149,7 +161,7 @@ func (c *TemplateExport) Execute(args []string) (err error) {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("export failed: %w", err)
+			return err
 		}
 	} else {
 		c.Usage()
@@ -170,11 +182,13 @@ func (c *Template) NewTemplateExport() *TemplateExport {
 	set.StringVar(&v.output, "o", "templates", "The destination directory or file.")
 
 	set.BoolVar(&v.asTxtar, "as-txtar", false, "Export as a txtar archive instead of a directory.")
+
+	set.BoolVar(&v.force, "force", false, "Replace existing exported template files.")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *TemplateExport) error {
 
-		err := go_subcommand.TemplateExport(c.output, c.asTxtar)
+		err := go_subcommand.TemplateExportCommand(c.output, c.asTxtar, c.force)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -184,8 +198,9 @@ func (c *Template) NewTemplateExport() *TemplateExport {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			if e, ok := err.(*cmd.ErrExitCode); ok {
-				return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
 			}
 			return fmt.Errorf("export failed: %w", err)
 		}

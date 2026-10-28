@@ -2,6 +2,8 @@ package go_subcommand
 
 import (
 	_ "embed"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -62,9 +64,10 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 		t.Fatal("root command action missing")
 	} else if dispatch := strings.Index(rootGo, "if !dashDashSeen && len(remainingArgs) > 0"); dispatch == -1 {
 		t.Fatal("root command dispatch missing")
-	} else if action > dispatch {
-		t.Fatalf("root command action should run before subcommand dispatch\nroot.go:\n%s", rootGo)
+	} else if dispatch > action {
+		t.Fatalf("root command dispatch should run before the root action\nroot.go:\n%s", rootGo)
 	}
+	assertContains(t, rootGo, "if err := c.CommandAction(c); err != nil {\n\t\t\treturn err\n\t\t}", "RootCmd.Execute should not add duplicate action context")
 
 	childGo := string(mustGeneratedFile(t, writer, "cmd/app/parent_child.go"))
 	assertContains(t, childGo, `"example.com/test/pkg"`, "external parser/generator package should be imported")
@@ -74,6 +77,7 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 	assertContains(t, childGo, `c.values = append(c.values, value)`, "slice flags should be repeatable")
 	assertContains(t, childGo, `c.ptr = &val`, "pointer flag should preserve omitted-vs-zero state")
 	assertContains(t, childGo, `value = shorts[j+1:]`, "short value flags should consume the rest of a GNU-style short cluster")
+	assertContains(t, childGo, "if err := c.CommandAction(c); err != nil {\n\t\t\treturn err\n\t\t}", "child Execute should not add duplicate action context")
 
 	childUsage := string(mustGeneratedFile(t, writer, "cmd/app/templates/child_usage.txt"))
 	assertContains(t, childUsage, "`parent` Flags:", "from-parent flag should be grouped under parent")
@@ -117,6 +121,29 @@ func TestDashDashExecutionLogic(t *testing.T) {
 	cmdGo := string(mustGeneratedFile(t, writer, "cmd/app/command.go"))
 	assertContains(t, cmdGo, `dashDashSeen := false`, "dashDashSeen variable should be tracked in subcommand")
 	assertContains(t, cmdGo, `if !dashDashSeen && len(remainingArgs) > 0 {`, "subcommand dispatch should check dashDashSeen in subcommand")
+}
+
+func TestGeneratedGoEscapesUserDescriptions(t *testing.T) {
+	description := "delimiter is \\\"\\n\\\"\\twith {{template-like}} Unicode: café"
+	for _, parserName := range []string{"gnu", "go-flag"} {
+		t.Run(parserName, func(t *testing.T) {
+			input := fstest.MapFS{
+				"go.mod": &fstest.MapFile{Data: []byte("module example.com/escape\n\ngo 1.22\n")},
+				"app.go": &fstest.MapFile{Data: []byte("package app\n\n// Root is a subcommand `escape`\n// CLI-Parser: " + parserName + "\n// Flags:\n//\tdelim: -d --delim " + description + "\nfunc Root(delim string) {}\n")},
+			}
+			writer := NewCollectingFileWriter()
+			if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			root := string(mustGeneratedFile(t, writer, "cmd/escape/root.go"))
+			if _, err := parser.ParseFile(token.NewFileSet(), "root.go", root, parser.AllErrors); err != nil {
+				t.Fatalf("generated source does not escape its description: %v\n%s", err, root)
+			}
+			if !strings.Contains(root, `\\\"`) || !strings.Contains(root, `\\t`) {
+				t.Fatalf("generated source did not preserve escaped description content:\n%s", root)
+			}
+		})
+	}
 }
 
 func TestIssue18_MoreBasicTypes(t *testing.T) {
@@ -1037,6 +1064,49 @@ func CatTail() {}
 	if !ok2 {
 		t.Errorf("Expected %s to exist (mitigation for collision)", cattailUsage)
 	}
+}
+
+func TestIssue470_NestedUsageFilesUseFullPath(t *testing.T) {
+	src := `package main
+
+// Serve is a subcommand ` + "`app serve`" + `.
+// Flags:
+//
+//	port: --port Port to serve.
+func Serve(port int) {}
+
+// ScenarioServe is a subcommand ` + "`app scenario serve`" + `.
+// Flags:
+//
+//	name: @1 Scenario name.
+func ScenarioServe(name string) {}
+`
+	input := setupProject(t, src)
+	first := runGenerateInMemory(t, input)
+	second := runGenerateInMemory(t, input)
+
+	for path, content := range first.Files {
+		if got, ok := second.Files[path]; !ok || string(got) != string(content) {
+			t.Fatalf("generation is not deterministic for %s", path)
+		}
+	}
+	if len(first.Files) != len(second.Files) {
+		t.Fatalf("generated file count changed: %d then %d", len(first.Files), len(second.Files))
+	}
+
+	directUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/serve_usage.txt"))
+	nestedUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/scenario_serve_usage.txt"))
+	if !strings.Contains(directUsage, "Usage: app serve [flags...]") {
+		t.Fatalf("direct usage has wrong command path or flags:\n%s", directUsage)
+	}
+	if !strings.Contains(nestedUsage, "Usage: app scenario serve <name>") {
+		t.Fatalf("nested usage has wrong command path or positional argument:\n%s", nestedUsage)
+	}
+
+	directCode := string(mustGeneratedFile(t, first, "cmd/app/serve.go"))
+	nestedCode := string(mustGeneratedFile(t, first, "cmd/app/scenario_serve.go"))
+	assertContains(t, directCode, `"serve_usage.txt"`, "direct command should select its own usage resource")
+	assertContains(t, nestedCode, `"scenario_serve_usage.txt"`, "nested command should select its own usage resource")
 }
 
 func TestErrorHandlingGeneration(t *testing.T) {
