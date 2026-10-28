@@ -119,9 +119,6 @@ func TestGenerate_ExecuteHelpAndUnknownFlags(t *testing.T) {
 	if err := cmd.Execute([]string{"--not-a-real-flag"}); err == nil {
 		t.Error("expected an error for an unknown long flag")
 	}
-	if err := cmd.Execute([]string{"--one", "config.json"}); err == nil {
-		t.Error("expected an error for unintended --one alias flag")
-	}
 	if err := cmd.Execute([]string{"-?"}); err == nil {
 		t.Error("expected an error for an unknown short flag")
 	}

@@ -102,3 +102,15 @@ func TestGenerateCLIConfiguredCommandUsesFileThenExplicitFlags(t *testing.T) {
 		t.Fatalf("explicit flags did not override config:\nroot:\n%s\nmain:\n%s", root, main)
 	}
 }
+
+func TestGenerateRejectsUnintendedOneFlag(t *testing.T) {
+	command := exec.Command("go", "run", "./cmd/gosubc", "generate", "--one", "gosubc.json")
+	command.Dir = "."
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error for unintended --one flag, got success: %s", output)
+	}
+	if !strings.Contains(string(output), "unknown flag") && !strings.Contains(string(output), "flag provided but not defined") {
+		t.Fatalf("expected unknown flag error, got: %s", output)
+	}
+}
