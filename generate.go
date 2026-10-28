@@ -360,6 +360,9 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 type GenerateOptions struct {
 	// CLIParser is the generation-wide runtime CLI parser backend fallback.
 	CLIParser string
+	// SuppressGoGenerate omits the nested go:generate directive from generated
+	// main.go. Its zero value retains the compatible default of emitting it.
+	SuppressGoGenerate bool
 }
 
 func extractGenerateOptions(ops []any) GenerateOptions {
@@ -370,9 +373,15 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value.SuppressGoGenerate {
+				result.SuppressGoGenerate = true
+			}
 		case *GenerateOptions:
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
+			}
+			if value != nil && value.SuppressGoGenerate {
+				result.SuppressGoGenerate = true
 			}
 		}
 	}
@@ -476,12 +485,18 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CLIParser); err != nil {
 		return err
 	}
+	for _, cmd := range dataModel.Commands {
+		cmd.SuppressGoGenerate = generateOptions.SuppressGoGenerate
+	}
 
 	if err := dataModel.Validate(); err != nil {
 		return err
 	}
 
 	dataModel.GoVersion = getGoVersion(inputFS)
+	if err := validateGeneratedGoVersion(dataModel.GoVersion); err != nil {
+		return err
+	}
 	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate)
 	dataModel.Provenance = &prov
 
@@ -1284,6 +1299,15 @@ func importIdentifiers(imports fileImports) map[string]string {
 	return identifiers
 }
 
+const minimumGeneratedGoVersion = "1.16"
+
+func validateGeneratedGoVersion(version string) error {
+	if semver.Compare("v"+version, "v"+minimumGeneratedGoVersion) < 0 {
+		return fmt.Errorf("generated applications require Go %s or newer; target module declares go %s", minimumGeneratedGoVersion, version)
+	}
+	return nil
+}
+
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
 	restore := prepareGeneratedIdentifiers(data, templateName)
 	defer restore()
@@ -1316,7 +1340,13 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 	return nil
 }
 
-// GenerateCLI is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLI generates code using the legacy public CLI-facing API. It remains
+// available so previously generated gosubc commands can bootstrap newer ones.
+func GenerateCLI(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
+}
+
+// GenerateCLICommand is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1340,10 +1370,18 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 //	replaceTemplates:	--replace-template			Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
 //	projectProvenance: --project-provenance, --project (default: true) Include target Git metadata in provenance
 //	timestamp:         --timestamp (default: true) Include timestamp in provenance
+//	emitGoGenerate:    --emit-go-generate (default: true) Emit nested //go:generate directive in generated main.go
 //	provVersion:       --prov-version    (default: "") Overwrite provenance version
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
-func GenerateCLI(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error {
+func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
+	})
+}
+
+func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {
 	if dir == "." {
 		if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
 			if root, err := findModuleRoot("."); err == nil {
@@ -1354,5 +1392,5 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	}, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
+	}, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, options)
 }
