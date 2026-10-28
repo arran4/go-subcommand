@@ -271,6 +271,98 @@ An error returned by a durable command action is annotated once with the
 command name (for example, `app failed: ...`). The generated wrapper uses `%w`,
 so callers can still use `errors.Is` and `errors.As` with the underlying error.
 
+### Implicit and explicit command trees
+
+The command path inside backticks determines the generated executable and its
+nested command hierarchy. All of the examples below produce **one**
+`cmd/gogenmux` executable, not a separate executable per function.
+
+**Example A — implicit root and implicit intermediate command.**
+Only the leaf commands are annotated; `gogenmux` and `config` are created
+automatically as dispatch-only parents:
+
+```go
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Inspect is a subcommand `gogenmux inspect` -- Inspect the model.
+func Inspect() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+The generated command tree is:
+
+```text
+gogenmux                  [implicit root: no action function]
+├── generate              [Generate()]
+├── inspect               [Inspect()]
+└── config                [implicit parent: no action function]
+    └── show              [Show()]
+```
+
+**Example B — explicit root with a default action and explicit intermediate command.**
+An annotated application-root function is not merely a structural declaration:
+it becomes the **default action invoked by bare `gogenmux`**. Likewise, an
+explicitly annotated `config` function handles bare `gogenmux config`.
+The hierarchy still produces one executable:
+
+```go
+// Gogenmux is a subcommand `gogenmux` -- Multiplexer tools.
+func Gogenmux() {}
+
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Config is a subcommand `gogenmux config` -- Manage configuration.
+func Config() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+```text
+gogenmux                  [explicit root + default action: Gogenmux()]
+├── generate              [Generate()]
+└── config                [explicit command action: Config()]
+    └── show              [Show()]
+```
+
+For Example B, invocation selects the corresponding action:
+
+```text
+gogenmux                  → Gogenmux()       (default/root action)
+gogenmux generate         → Generate()       (not Gogenmux())
+gogenmux config           → Config()         (intermediate action)
+gogenmux config show      → Show()           (not Config() or Gogenmux())
+```
+
+An **explicit root action is optional at definition time**, but when declared
+it is also the application's default action. There is currently no separate
+`commentv1` annotation for an *explicit, metadata-only root* that avoids
+registering such a default action. For a dispatch-only root, use the implicit
+root form in Example A rather than adding an empty root function solely to
+declare the executable name. Similarly, omit the explicit `config` function
+when that intermediate node needs no action.
+
+Durable functions stay in their original source package; gosubc generates
+the dispatch wrappers and help resources. A function specifically named
+`Root` is not required. For related distinctions involving a literal child
+command named `root`, see [issue #513](https://github.com/arran4/go-subcommand/issues/513).
+
+**Syntax matters:** use backticks around the entire command path:
+
+```go
+// Show is a subcommand `gogenmux config show`
+```
+
+A comment such as `// Show is a subcommand gogenmux config show` (without backticks)
+is **not equivalent** in the current `commentv1` parser; it can fall back to
+the Go function name and create an unintended executable tree. See
+[issue #478](https://github.com/arran4/go-subcommand/issues/478) for
+tracking of that ambiguity.
+
 ### Parent Flags (Inheritance)
 
 Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.
