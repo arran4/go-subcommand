@@ -373,6 +373,39 @@ func (p *FunctionParameter) DefaultString() string {
 	return fmt.Sprintf("(default: %s)", def)
 }
 
+// UsageDefaultString returns the default text shown in generated usage. IO
+// parameters use '-' as a stream selector, so their help must describe the
+// stream rather than leave users to infer that '-' is not a literal filename.
+func (p *FunctionParameter) UsageDefaultString() string {
+	if p.HasDefaultValue && p.Default == "-" {
+		if p.IsReader() {
+			return "(default: stdin via '-')"
+		}
+		if p.IsWriter() {
+			return "(default: stdout via '-')"
+		}
+	}
+	return p.DefaultString()
+}
+
+// UsageDescription returns help text with the explicit standard-stream
+// spelling for IO parameters. Other parameter descriptions remain unchanged.
+func (p *FunctionParameter) UsageDescription() string {
+	stream := ""
+	if p.IsReader() {
+		stream = "stdin"
+	} else if p.IsWriter() {
+		stream = "stdout"
+	}
+	if stream == "" {
+		return p.Description
+	}
+	if p.Description == "" {
+		return fmt.Sprintf("Use '-' for %s", stream)
+	}
+	return fmt.Sprintf("%s; use '-' for %s", p.Description, stream)
+}
+
 // IsSlice returns true if the type is a slice.
 func (p *FunctionParameter) IsSlice() bool {
 	return strings.HasPrefix(p.Type, "[]")
@@ -909,6 +942,22 @@ func (sc *SubCommand) MaxDefaultLength() int {
 			continue
 		}
 		l := len(p.DefaultString())
+		if l > max {
+			max = l
+		}
+	}
+	return max
+}
+
+// MaxUsageDefaultLength reports the display width of defaults after applying
+// usage-specific stream descriptions.
+func (sc *SubCommand) MaxUsageDefaultLength() int {
+	max := 0
+	for _, p := range sc.AllParameters() {
+		if p.IsPositional || p.HasGenerator() {
+			continue
+		}
+		l := len(p.UsageDefaultString())
 		if l > max {
 			max = l
 		}
