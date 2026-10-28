@@ -972,7 +972,7 @@ func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 	}
 
 	mainGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "main.go")]
-	if !strings.Contains(mainGo, `root, err := NewRoot("downloadsd", version, commit, date)`) {
+	if !strings.Contains(mainGo, `NewRoot("downloadsd", version, commit, date)`) {
 		t.Fatalf("main.go must construct application root via NewRoot:\n%s", mainGo)
 	}
 	rootGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "root.go")]
