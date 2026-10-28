@@ -488,7 +488,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 
 	for _, cmd := range dataModel.Commands {
 		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
-		assignUsageFileNames(cmd.SubCommands)
+		assignUsageFileNames(cmd.MainCmdName, cmd.SubCommands)
 		if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
@@ -555,7 +555,7 @@ func isGenerated(content []byte) bool {
 	}
 	return false
 }
-func assignUsageFileNames(subCommands []*model.SubCommand) {
+func assignUsageFileNames(mainCmdName string, subCommands []*model.SubCommand) {
 	type usageTarget struct {
 		command *model.SubCommand
 		path    []string
@@ -578,6 +578,9 @@ func assignUsageFileNames(subCommands []*model.SubCommand) {
 	}
 
 	seen := make(map[string]int)
+	if mainCmdName != "" {
+		seen[strings.ToLower(mainCmdName)] = 1
+	}
 	for _, target := range targets {
 		name := strings.ToLower(target.path[len(target.path)-1])
 		if leafCount[name] > 1 && len(target.path) > 1 {
@@ -612,8 +615,19 @@ func sanitizeManFileName(mainCmdName, subCmdSequence string) string {
 	return fmt.Sprintf("%s-%s.1", safeMain, safeSeq)
 }
 
-func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
+func subCommandFileBaseName(subCmd *model.SubCommand) string {
 	fileName := strings.ReplaceAll(parsers.ToKebabCase(subCmd.SubCommandStructName), "-", "_")
+	if !subCmd.IsAppRoot() {
+		switch fileName {
+		case "root", "main", "flag_helpers", "errors":
+			return fileName + "2"
+		}
+	}
+	return fileName
+}
+
+func generateSubCommandFiles(writer FileWriter, cmdOutDir, cmdTemplatesDir, manDir string, subCmd *model.SubCommand) error {
+	fileName := subCommandFileBaseName(subCmd)
 	if err := generateFile(writer, cmdOutDir, fileName+".go", "cmd.go.gotmpl", subCmd, true); err != nil {
 		return err
 	}

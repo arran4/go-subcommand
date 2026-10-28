@@ -33,6 +33,9 @@ var aliasRootIOSource string
 //go:embed testdata/issue456_imports.go
 var issue456ImportsSource string
 
+//go:embed testdata/issue513_root_collision.go
+var issue513RootCollisionSource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -931,5 +934,278 @@ func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	}
+}
+
+func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/downloadsd\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue513RootCollisionSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("first Generate failed: %v", err)
+	}
+
+	snapshotTree := func() map[string]string {
+		t.Helper()
+		snap := make(map[string]string)
+		err := filepath.WalkDir(filepath.Join(dir, "cmd"), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			snap[rel] = string(data)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("failed to snapshot generated tree: %v", err)
+		}
+		return snap
+	}
+
+	firstSnapshot := snapshotTree()
+	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("second Generate failed: %v", err)
+	}
+	secondSnapshot := snapshotTree()
+	if !reflect.DeepEqual(firstSnapshot, secondSnapshot) {
+		t.Fatalf("deterministic double generation changed output")
+	}
+
+	// Verify generated files and usage resources do not collide.
+	for _, wantFile := range []string{
+		filepath.Join("cmd", "downloadsd", "main.go"),
+		filepath.Join("cmd", "downloadsd", "root.go"),
+		filepath.Join("cmd", "downloadsd", "root_test.go"),
+		filepath.Join("cmd", "downloadsd", "root2.go"),
+		filepath.Join("cmd", "downloadsd", "root2_test.go"),
+		filepath.Join("cmd", "downloadsd", "services.go"),
+		filepath.Join("cmd", "downloadsd", "services_list.go"),
+		filepath.Join("cmd", "downloadsd", "queue.go"),
+		filepath.Join("cmd", "downloadsd", "queue_list.go"),
+		filepath.Join("cmd", "downloadsd", "templates", "downloadsd_usage.txt"),
+		filepath.Join("cmd", "downloadsd", "templates", "root_usage.txt"),
+		filepath.Join("cmd", "downloadsd", "templates", "services_usage.txt"),
+		filepath.Join("cmd", "downloadsd", "templates", "services_list_usage.txt"),
+		filepath.Join("cmd", "downloadsd", "templates", "queue_usage.txt"),
+		filepath.Join("cmd", "downloadsd", "templates", "queue_list_usage.txt"),
+	} {
+		if _, ok := firstSnapshot[wantFile]; !ok {
+			t.Fatalf("expected generated file %s to exist; got files: %v", wantFile, firstSnapshot)
+		}
+	}
+
+	mainGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "main.go")]
+	if !strings.Contains(mainGo, `root, err := NewRoot("downloadsd", version, commit, date)`) {
+		t.Fatalf("main.go must construct application root via NewRoot:\n%s", mainGo)
+	}
+	rootGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "root.go")]
+	if !strings.Contains(rootGo, "type RootCmd struct") || !strings.Contains(rootGo, `c.Commands["root"] = subCmd`) {
+		t.Fatalf("root.go must define RootCmd and register the explicit root subcommand:\n%s", rootGo)
+	}
+	for rel, content := range firstSnapshot {
+		if strings.HasSuffix(rel, ".go") && strings.Contains(content, `"github.com/arran4/go-subcommand`) {
+			t.Fatalf("generated file %s must not have a runtime import of go-subcommand:\n%s", rel, content)
+		}
+	}
+
+	// Verify all generated unit tests compile and pass.
+	testCmd := exec.Command("go", "test", "./...")
+	testCmd.Dir = dir
+	if out, err := testCmd.CombinedOutput(); err != nil {
+		t.Fatalf("generated go test ./... failed: %v\n%s", err, out)
+	}
+
+	// Build the standalone executable and exercise all invocation forms from issue #513.
+	binPath := filepath.Join(dir, "downloadsd-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/downloadsd")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build ./cmd/downloadsd failed: %v\n%s", err, out)
+	}
+
+	markerFile := filepath.Join(dir, "markers.txt")
+	readMarkers := func() []string {
+		t.Helper()
+		data, err := os.ReadFile(markerFile)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatalf("read markers: %v", err)
+		}
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+	resetMarkers := func() {
+		t.Helper()
+		_ = os.Remove(markerFile)
+	}
+
+	runExec := func(failOnAction bool, args ...string) (string, error) {
+		t.Helper()
+		resetMarkers()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		failVal := "0"
+		if failOnAction {
+			failVal = "1"
+		}
+		cmd.Env = append(os.Environ(),
+			"ISSUE513_MARKER_FILE="+markerFile,
+			"ISSUE513_FAIL_ON_ACTION="+failVal,
+		)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// 1. Help requests must succeed, show the intended usage, and invoke ZERO actions or providers.
+	helpCases := []struct {
+		args        []string
+		wantSubstrs []string
+		notSubstrs  []string
+	}{
+		{
+			args:        []string{"--help"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] <subcommand>", "Manage downloads and services.", "Run the privileged system supervisor."},
+			notSubstrs:  []string{"Usage: downloadsd [flags...] root"},
+		},
+		{
+			args:        []string{"-h"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] <subcommand>", "Manage downloads and services."},
+			notSubstrs:  []string{"Usage: downloadsd [flags...] root"},
+		},
+		{
+			args:        []string{"help"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] <subcommand>", "Manage downloads and services."},
+			notSubstrs:  []string{"Usage: downloadsd [flags...] root"},
+		},
+		{
+			args:        []string{"usage"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] <subcommand>", "Manage downloads and services."},
+			notSubstrs:  []string{"Usage: downloadsd [flags...] root"},
+		},
+		{
+			args:        []string{"help", "-deep"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] <subcommand>", "services list", "queue list", "List configured services.", "List queued downloads."},
+		},
+		{
+			args:        []string{"root", "--help"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] root [flags...]", "Run the privileged system supervisor.", "--serve"},
+			notSubstrs:  []string{"Manage downloads and services."},
+		},
+		{
+			args:        []string{"help", "root"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] root [flags...]", "Run the privileged system supervisor.", "--serve"},
+		},
+		{
+			args:        []string{"help", "services", "list"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] services list [flags...] [filter]", "List configured services.", "--all"},
+			notSubstrs:  []string{"List queued downloads."},
+		},
+		{
+			args:        []string{"services", "list", "--help"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] services list [flags...] [filter]", "List configured services.", "--all"},
+			notSubstrs:  []string{"List queued downloads."},
+		},
+		{
+			args:        []string{"help", "queue", "list"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] queue list [flags...] <target> [extra...]", "List queued downloads.", "--limit"},
+			notSubstrs:  []string{"List configured services."},
+		},
+		{
+			args:        []string{"queue", "list", "--help"},
+			wantSubstrs: []string{"Usage: downloadsd [flags...] queue list [flags...] <target> [extra...]", "List queued downloads.", "--limit"},
+			notSubstrs:  []string{"List configured services."},
+		},
+	}
+
+	for _, tc := range helpCases {
+		out, err := runExec(true, tc.args...)
+		if err != nil {
+			t.Fatalf("help invocation %v failed: %v\n%s", tc.args, err, out)
+		}
+		if markers := readMarkers(); len(markers) > 0 {
+			t.Fatalf("help invocation %v unexpectedly executed actions/providers: %v", tc.args, markers)
+		}
+		for _, want := range tc.wantSubstrs {
+			if !strings.Contains(out, want) {
+				t.Errorf("help invocation %v missing %q:\n%s", tc.args, want, out)
+			}
+		}
+		for _, notWant := range tc.notSubstrs {
+			if strings.Contains(out, notWant) {
+				t.Errorf("help invocation %v unexpectedly contained %q:\n%s", tc.args, notWant, out)
+			}
+		}
+	}
+
+	// 2. Bare invocation executes the application root action (not the explicit root child).
+	out, err := runExec(false)
+	if err != nil {
+		t.Fatalf("bare downloadsd invocation failed: %v\n%s", err, out)
+	}
+	wantRootMarkers := []string{"provider:runtime-state", "app-root:config=/etc/downloadsd.conf,host=127.0.0.1,state=ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+		t.Fatalf("bare downloadsd markers = %v, want %v", got, wantRootMarkers)
+	}
+
+	// 3. Explicit `downloadsd root` invocation executes only the child root action.
+	out, err = runExec(false, "--config", "/custom/root.conf", "root", "--serve")
+	if err != nil {
+		t.Fatalf("downloadsd root invocation failed: %v\n%s", err, out)
+	}
+	wantChildRootMarkers := []string{"provider:runtime-state", "child-root:config=/custom/root.conf,serve=true,state=ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantChildRootMarkers) {
+		t.Fatalf("downloadsd root markers = %v, want %v", got, wantChildRootMarkers)
+	}
+
+	// 4. Nested commands with root flags, child flags, positional arguments, and `--` termination.
+	out, err = runExec(false, "--config", "/custom/svc.conf", "services", "list", "--all", "running")
+	if err != nil {
+		t.Fatalf("downloadsd services list failed: %v\n%s", err, out)
+	}
+	if got, want := readMarkers(), []string{"services-list:config=/custom/svc.conf,all=true,filter=running"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("services list markers = %v, want %v", got, want)
+	}
+
+	out, err = runExec(false, "--config", "/custom/queue.conf", "queue", "list", "--limit", "25", "--", "--dash-target", "--literal-extra")
+	if err != nil {
+		t.Fatalf("downloadsd queue list with -- failed: %v\n%s", err, out)
+	}
+	if got, want := readMarkers(), []string{"queue-list:config=/custom/queue.conf,limit=25,target=--dash-target,extra=[--literal-extra]"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("queue list markers = %v, want %v", got, want)
+	}
+
+	// 5. Unknown commands fail nonzero and do not invoke root or child business actions.
+	for _, badArgs := range [][]string{
+		{"unknown-cmd"},
+		{"services", "unknown-sub"},
+		{"help", "unknown-cmd"},
+		{"help", "services", "unknown-sub"},
+	} {
+		out, err := runExec(true, badArgs...)
+		if err == nil {
+			t.Fatalf("expected nonzero error for unknown command %v, but succeeded with:\n%s", badArgs, out)
+		}
+		if !strings.Contains(out, "unknown command:") {
+			t.Errorf("expected 'unknown command:' in output for %v, got:\n%s", badArgs, out)
+		}
+		if markers := readMarkers(); len(markers) > 0 {
+			t.Fatalf("unknown command %v unexpectedly invoked actions/providers: %v", badArgs, markers)
+		}
 	}
 }

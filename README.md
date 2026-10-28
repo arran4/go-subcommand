@@ -262,10 +262,19 @@ leaf name in different paths (for example, `app serve` and
 ### Root Actions and Subcommand Dispatch
 
 When an application defines both a root action and subcommands, a recognized
-subcommand (including the built-in `version`, `help`, and `usage` commands) is
-dispatched without running the root action. Root flags are still parsed and
-validated before dispatch. `--` preserves root positional-argument semantics,
-so a token after it is not treated as a subcommand.
+subcommand (including the built-in `version`, `help`, and `usage` commands, or
+an explicitly named child command such as `app root`) is dispatched without
+running the application root action. Application-root identity (`RootCmd` and
+`NewRoot` in `root.go`) is distinct from command-path subcommands, so an
+explicit `app root` child retains its own generated struct, constructor,
+usage resource, and tests without colliding with the application root.
+
+Built-in `help` and `usage` commands also traverse nested subcommand paths
+(for example, `app help services list`) without invoking business actions or
+initializing generator-backed providers. Unrecognized command tokens on a
+non-positional parent fail with an `unknown command` error rather than falling
+through to the parent action. `--` preserves positional-argument semantics so a
+token after it is not treated as a subcommand.
 
 An error returned by a durable command action is annotated once with the
 command name (for example, `app failed: ...`). The generated wrapper uses `%w`,

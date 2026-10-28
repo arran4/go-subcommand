@@ -225,6 +225,20 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	if child.MaxFlagLength() == 0 || child.MaxDefaultLength() == 0 {
 		t.Error("expected flag and default widths for inherited parameters")
 	}
+	if !root.IsAppRoot() || root.CommandPath() != nil {
+		t.Errorf("root.IsAppRoot() = %v, CommandPath() = %v", root.IsAppRoot(), root.CommandPath())
+	}
+	rootWrapper := &SubCommand{Command: root, SubCommandName: ""}
+	explicitRootChild := &SubCommand{Command: root, SubCommandName: "root", SubCommandFunctionName: "Root"}
+	if !rootWrapper.IsAppRoot() || rootWrapper.CommandPath() != nil {
+		t.Errorf("rootWrapper.IsAppRoot() = %v, CommandPath() = %v", rootWrapper.IsAppRoot(), rootWrapper.CommandPath())
+	}
+	if explicitRootChild.IsAppRoot() || !reflect.DeepEqual(explicitRootChild.CommandPath(), []string{"root"}) {
+		t.Errorf("explicitRootChild.IsAppRoot() = %v, CommandPath() = %v", explicitRootChild.IsAppRoot(), explicitRootChild.CommandPath())
+	}
+	if !reflect.DeepEqual(child.CommandPath(), []string{"parent", "child"}) {
+		t.Errorf("child.CommandPath() = %v, want [parent child]", child.CommandPath())
+	}
 }
 
 func TestValidate_OSFile_Fails(t *testing.T) {

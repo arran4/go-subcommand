@@ -68,8 +68,9 @@ func NewNameAllocator() *NameAllocator {
 	}
 	// Reserve names used in generated code
 	reserved := []string{
-		"Cmd", "RootCmd", "UserError",
+		"Cmd", "Root", "RootCmd", "UserError",
 		"NewRoot", "NewUserError", "executeUsage",
+		"Main", "FlagHelpers",
 		"main", "init", // Standard Go
 	}
 	for _, r := range reserved {

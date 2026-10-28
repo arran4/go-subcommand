@@ -610,11 +610,39 @@ func (sc *SubCommand) HasAction() bool {
 	return sc != nil && sc.SubCommandFunctionName != ""
 }
 
-func (sc *SubCommand) SubCommandSequence() string {
-	if sc.Parent == nil {
-		return sc.SubCommandName
+// IsAppRoot reports whether c represents the application-level root command.
+func (c *Command) IsAppRoot() bool {
+	return c != nil
+}
+
+// CommandPath returns the subcommand path segments for the application root (always nil).
+func (c *Command) CommandPath() []string {
+	return nil
+}
+
+// IsAppRoot reports whether sc is the synthetic application-root usage wrapper
+// rather than a subcommand on a command path (even if that subcommand is named "root").
+func (sc *SubCommand) IsAppRoot() bool {
+	return sc != nil && sc.Parent == nil && sc.SubCommandName == ""
+}
+
+// CommandPath returns the explicit subcommand path segments relative to the application root.
+func (sc *SubCommand) CommandPath() []string {
+	if sc == nil || sc.IsAppRoot() {
+		return nil
 	}
-	return sc.Parent.SubCommandSequence() + " " + sc.SubCommandName
+	if sc.Parent == nil || sc.Parent.IsAppRoot() {
+		return []string{sc.SubCommandName}
+	}
+	parentPath := sc.Parent.CommandPath()
+	path := make([]string, 0, len(parentPath)+1)
+	path = append(path, parentPath...)
+	path = append(path, sc.SubCommandName)
+	return path
+}
+
+func (sc *SubCommand) SubCommandSequence() string {
+	return strings.Join(sc.CommandPath(), " ")
 }
 
 func (sc *SubCommand) ParentCmdName() string {
