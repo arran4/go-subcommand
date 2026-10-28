@@ -39,13 +39,13 @@
 		value := s
 		{{- template "acquire_io" (list $param "value") }}
 		return nil
-	}, false), "{{.}}", "{{$param.Description}}")
+	}, false), "{{.}}", {{goString $param.Description}})
 	{{- else if $param.IsSlice }}
 	{{- $baseName := $param.BaseType | title }}
 	{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
 	{{- $helperName := printf "%sSlice" $baseName }}
 	{{- if $param.HasPointer }}{{ $helperName = printf "%sPointerSlice" $baseName }}{{ end }}
-	fs.Var((*{{$helperName}})(&c.{{$param.Name}}), "{{.}}", "{{$param.Description}}")
+	fs.Var((*{{$helperName}})(&c.{{$param.Name}}), "{{.}}", {{goString $param.Description}})
 	{{- else }}
 	{{- if $param.HasPointer }}
 	fs.Var(goFlagCustom(func(s string) error {
@@ -126,30 +126,30 @@
 		return fmt.Errorf("pointer flag type {{$param.Type}} unsupported")
 		{{- end }}
 		return nil
-	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", "{{$param.Description}}")
+	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", {{goString $param.Description}})
 	{{- else if $param.HasCustomParser }}
 	fs.Var(goFlagCustom(func(s string) error {
 		v, err := {{$param.ParserCall "s"}}
 		if err != nil { return err }
 		c.{{$param.Name}} = {{$param.CastCode "v"}}
 		return nil
-	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", "{{$param.Description}}")
+	}, {{if eq $param.BaseType "bool"}}true{{else}}false{{end}}), "{{.}}", {{goString $param.Description}})
 	{{- else if eq $param.Type "string" }}
-	fs.StringVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.StringVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "bool" }}
-	fs.BoolVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.BoolVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "int" }}
-	fs.IntVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.IntVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "int64" }}
-	fs.Int64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.Int64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "uint" }}
-	fs.UintVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.UintVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "uint64" }}
-	fs.Uint64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.Uint64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "float64" }}
-	fs.Float64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.Float64Var(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else if eq $param.Type "time.Duration" }}
-	fs.DurationVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, "{{$param.Description}}")
+	fs.DurationVar(&c.{{$param.Name}}, "{{.}}", c.{{$param.Name}}, {{goString $param.Description}})
 	{{- else }}
 	fs.Var(goFlagCustom(func(s string) error {
 		// Types handled directly or custom parsing
@@ -185,7 +185,7 @@
 		return fmt.Errorf("parsing for flag type {{$param.Type}} is not implemented")
 		{{- end }}
 		return nil
-	}, false), "{{.}}", "{{$param.Description}}")
+	}, false), "{{.}}", {{goString $param.Description}})
 	{{- end }}
 	{{- end }}
 	{{- end }}
