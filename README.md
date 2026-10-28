@@ -333,9 +333,13 @@ functions stay in their original source package; gosubc generates the
 dispatch wrappers and help resources. In particular, a function named
 `Root` is not required simply to produce the `gogenmux` executable.
 
-**Syntax matters:** use backticks around the entire command path,
-for example `\`gogenmux config show\``. A comment such as
-`// Show is a subcommand gogenmux config show` (without backticks)
+**Syntax matters:** use backticks around the entire command path:
+
+```go
+// Show is a subcommand `gogenmux config show`
+```
+
+A comment such as `// Show is a subcommand gogenmux config show` (without backticks)
 is **not equivalent** in the current `commentv1` parser; it can fall back to
 the Go function name and create an unintended executable tree. See
 [issue #478](https://github.com/arran4/go-subcommand/issues/478) for
