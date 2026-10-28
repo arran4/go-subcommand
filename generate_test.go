@@ -71,9 +71,17 @@ var issue513Config5Source string
 //go:embed testdata/issue513_alias_root.go
 var issue513AliasRootSource string
 
-
 //go:embed testdata/output_inventory.go
 var outputInventorySource string
+
+//go:embed testdata/issue513_default_help_route.go
+var issue513DefaultHelpRouteSource string
+
+//go:embed testdata/issue513_nested_action_alias.go
+var issue513NestedActionAliasSource string
+
+//go:embed testdata/issue513_subcommand_default.go
+var issue513SubcommandDefaultSource string
 
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -1761,6 +1769,356 @@ func TestGenerate_Issue513_AliasesAndHelpTraversal(t *testing.T) {
 	}
 }
 
+func TestGenerate_Issue513_DefaultHelpRouteEquivalence(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/helprouteapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue513DefaultHelpRouteSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "helprouteapp-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/prog")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, out)
+	}
+
+	markerFile := filepath.Join(dir, "markers.txt")
+	resetMarkers := func() {
+		t.Helper()
+		_ = os.Remove(markerFile)
+	}
+	readMarkers := func() []string {
+		t.Helper()
+		data, err := os.ReadFile(markerFile)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatalf("read markers: %v", err)
+		}
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+
+	runExec := func(failOnAction bool, args ...string) (string, error) {
+		t.Helper()
+		resetMarkers()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		failVal := "0"
+		if failOnAction {
+			failVal = "1"
+		}
+		cmd.Env = append(os.Environ(),
+			"ISSUE513_MARKER_FILE="+markerFile,
+			"ISSUE513_FAIL_ON_ACTION="+failVal,
+		)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// 1. Bare invocation and "help simple" must produce identical output and execute zero actions/providers
+	outBare, err := runExec(true)
+	if err != nil {
+		t.Fatalf("bare invocation failed: %v\n%s", err, outBare)
+	}
+	if markers := readMarkers(); len(markers) > 0 {
+		t.Fatalf("bare invocation unexpectedly executed actions/providers: %v", markers)
+	}
+
+	outHelpSimple, err := runExec(true, "help", "simple")
+	if err != nil {
+		t.Fatalf("help simple invocation failed: %v\n%s", err, outHelpSimple)
+	}
+	if markers := readMarkers(); len(markers) > 0 {
+		t.Fatalf("help simple unexpectedly executed actions/providers: %v", markers)
+	}
+
+	if outBare != outHelpSimple {
+		t.Errorf("expected bare invocation output to match 'help simple':\nbare:\n%s\nhelp simple:\n%s", outBare, outHelpSimple)
+	}
+	if !strings.Contains(outBare, "Usage: prog simple") {
+		t.Errorf("bare usage output missing 'Usage: prog simple':\n%s", outBare)
+	}
+
+	// 2. prog help shows root usage, not simple's usage
+	outHelp, err := runExec(true, "help")
+	if err != nil {
+		t.Fatalf("help invocation failed: %v\n%s", err, outHelp)
+	}
+	if !strings.Contains(outHelp, "Usage: prog <subcommand>") {
+		t.Errorf("root help output missing expected root usage:\n%s", outHelp)
+	}
+
+	// 3. prog help -deep shows recursive usage
+	outDeep, err := runExec(true, "help", "-deep")
+	if err != nil {
+		t.Fatalf("help -deep invocation failed: %v\n%s", err, outDeep)
+	}
+	if !strings.Contains(outDeep, "Usage: prog <subcommand>") || !strings.Contains(outDeep, "Simple demonstration command.") {
+		t.Errorf("recursive help output missing expected command trees:\n%s", outDeep)
+	}
+
+	// 4. Action execution when explicitly invoked
+	out, err := runExec(false, "simple", "--name", "alice")
+	if err != nil {
+		t.Fatalf("prog simple failed: %v\n%s", err, out)
+	}
+	wantSimpleMarkers := []string{"provider:state", "action:simple:name=alice,state=ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantSimpleMarkers) {
+		t.Fatalf("markers for simple = %v, want %v", got, wantSimpleMarkers)
+	}
+
+	// 5. Explicit root child execution
+	out, err = runExec(false, "root", "--serve")
+	if err != nil {
+		t.Fatalf("prog root failed: %v\n%s", err, out)
+	}
+	wantRootMarkers := []string{"action:root:serve=true"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+		t.Fatalf("markers for root = %v, want %v", got, wantRootMarkers)
+	}
+
+	// 6. Unknown command returns error
+	out, err = runExec(false, "nonexistent")
+	if err == nil {
+		t.Fatalf("expected error for nonexistent command, got nil:\n%s", out)
+	}
+	if !strings.Contains(out, "unknown command: nonexistent") {
+		t.Errorf("expected unknown command error message, got:\n%s", out)
+	}
+}
+
+func TestGenerate_Issue513_NestedActionAliasMultiLevel(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/nestedaliasapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue513NestedActionAliasSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "nestedaliasapp-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/prog")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, out)
+	}
+
+	markerFile := filepath.Join(dir, "markers.txt")
+	resetMarkers := func() {
+		t.Helper()
+		_ = os.Remove(markerFile)
+	}
+	readMarkers := func() []string {
+		t.Helper()
+		data, err := os.ReadFile(markerFile)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatalf("read markers: %v", err)
+		}
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+
+	runExec := func(failOnAction bool, args ...string) (string, error) {
+		t.Helper()
+		resetMarkers()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		failVal := "0"
+		if failOnAction {
+			failVal = "1"
+		}
+		cmd.Env = append(os.Environ(),
+			"ISSUE513_MARKER_FILE="+markerFile,
+			"ISSUE513_FAIL_ON_ACTION="+failVal,
+		)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// 1. Bare invocation runs application root action
+	out, err := runExec(false)
+	if err != nil {
+		t.Fatalf("bare invocation failed: %v\n%s", err, out)
+	}
+	wantRootMarkers := []string{"provider:state", "app-root:config=default.cfg,state=ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+		t.Fatalf("markers for bare invocation = %v, want %v", got, wantRootMarkers)
+	}
+
+	// 2. Explicit 3-level-deep command path invocations (canonical and intermediate aliases)
+	// All select the EXACT same underlying action without duplicate invocations
+	for _, pathArgs := range [][]string{
+		{"tools", "docs", "simple"},
+		{"tools", "docs", "s"},
+		{"t", "d", "simple"},
+		{"t", "d", "s"},
+	} {
+		out, err = runExec(false, pathArgs...)
+		if err != nil {
+			t.Fatalf("nested path invocation %v failed: %v\n%s", pathArgs, err, out)
+		}
+		if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+			t.Fatalf("markers for %v = %v, want %v", pathArgs, got, wantRootMarkers)
+		}
+	}
+
+	// 3. Flags and inherited properties on nested path
+	out, err = runExec(false, "tools", "docs", "simple", "--config", "custom.cfg")
+	if err != nil {
+		t.Fatalf("nested path with flags failed: %v\n%s", err, out)
+	}
+	wantCustomMarkers := []string{"provider:state", "app-root:config=custom.cfg,state=ready"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantCustomMarkers) {
+		t.Fatalf("markers for nested path with flag = %v, want %v", got, wantCustomMarkers)
+	}
+
+	// 4. Explicit root child invocation is independent and not confused with root action
+	out, err = runExec(false, "root", "--serve")
+	if err != nil {
+		t.Fatalf("explicit root child failed: %v\n%s", err, out)
+	}
+	wantChildMarkers := []string{"child-root:serve=true"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantChildMarkers) {
+		t.Fatalf("markers for root child = %v, want %v", got, wantChildMarkers)
+	}
+
+	out, err = runExec(false, "supervisor", "--serve")
+	if err != nil {
+		t.Fatalf("explicit root child via supervisor alias failed: %v\n%s", err, out)
+	}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantChildMarkers) {
+		t.Fatalf("markers for supervisor alias = %v, want %v", got, wantChildMarkers)
+	}
+
+	out, err = runExec(false, "r")
+	if err != nil {
+		t.Fatalf("explicit root child via r alias failed: %v\n%s", err, out)
+	}
+	wantRMarkers := []string{"child-root:serve=false"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRMarkers) {
+		t.Fatalf("markers for r alias = %v, want %v", got, wantRMarkers)
+	}
+
+	// 5. Help traversal on nested paths and aliases executes ZERO actions or providers
+	for _, helpArgs := range [][]string{
+		{"help", "tools", "docs", "simple"},
+		{"tools", "docs", "simple", "--help"},
+		{"tools", "docs", "s", "--help"},
+		{"t", "d", "s", "--help"},
+		{"help", "root"},
+		{"root", "--help"},
+		{"supervisor", "--help"},
+		{"r", "--help"},
+	} {
+		out, err = runExec(true, helpArgs...)
+		if err != nil {
+			t.Fatalf("help invocation %v failed: %v\n%s", helpArgs, err, out)
+		}
+		if markers := readMarkers(); len(markers) > 0 {
+			t.Fatalf("help invocation %v unexpectedly executed actions/providers: %v", helpArgs, markers)
+		}
+	}
+}
+
+func TestGenerate_Issue513_SubcommandDefaultRoute(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/subdefaultapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue513SubcommandDefaultSource)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "subdefaultapp-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/prog")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v\n%s", err, out)
+	}
+
+	markerFile := filepath.Join(dir, "markers.txt")
+	resetMarkers := func() {
+		t.Helper()
+		_ = os.Remove(markerFile)
+	}
+	readMarkers := func() []string {
+		t.Helper()
+		data, err := os.ReadFile(markerFile)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatalf("read markers: %v", err)
+		}
+		trimmed := strings.TrimSpace(string(data))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+
+	runExec := func(failOnAction bool, args ...string) (string, error) {
+		t.Helper()
+		resetMarkers()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		failVal := "0"
+		if failOnAction {
+			failVal = "1"
+		}
+		cmd.Env = append(os.Environ(),
+			"ISSUE513_MARKER_FILE="+markerFile,
+			"ISSUE513_FAIL_ON_ACTION="+failVal,
+		)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// 1. Bare invocation executes default subcommand
+	out, err := runExec(false)
+	if err != nil {
+		t.Fatalf("bare invocation failed: %v\n%s", err, out)
+	}
+	wantDefaultMarkers := []string{"simple:val=nested-default"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantDefaultMarkers) {
+		t.Fatalf("markers for bare invocation = %v, want %v", got, wantDefaultMarkers)
+	}
+
+	// 2. Direct nested invocation executes with custom flags
+	out, err = runExec(false, "tools", "docs", "simple", "--val", "custom-val")
+	if err != nil {
+		t.Fatalf("direct invocation failed: %v\n%s", err, out)
+	}
+	wantCustomMarkers := []string{"simple:val=custom-val"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantCustomMarkers) {
+		t.Fatalf("markers for direct invocation = %v, want %v", got, wantCustomMarkers)
+	}
+
+	// 3. Explicit root child
+	out, err = runExec(false, "root")
+	if err != nil {
+		t.Fatalf("root child failed: %v\n%s", err, out)
+	}
+	wantRootMarkers := []string{"child-root"}
+	if got := readMarkers(); !reflect.DeepEqual(got, wantRootMarkers) {
+		t.Fatalf("markers for root child = %v, want %v", got, wantRootMarkers)
+	}
+}
+
 func TestValidate_Issue513_Collisions(t *testing.T) {
 	testCollision := func(name, src, wantErrSubstring string) {
 		t.Run(name, func(t *testing.T) {
@@ -1848,11 +2206,57 @@ func Child() {}
 func Status() {}
 `, `duplicate alias "s" on subcommand "status"`)
 
-	// Aliases on application root command
-	testCollision("aliases_on_application_root", `package main
-// App is a subcommand `+"`app`"+` (aka: myapp)
+	// Root alias collisions and validation
+	testCollision("alias_root_self", `package main
+// App is a subcommand `+"`app`"+` (alias: app)
 func App() {}
-`, `aliases (myapp) are not supported on the application root command`)
+`, `alias "app" cannot alias the root command itself`)
+
+	testCollision("alias_root_builtin_help", `package main
+// App is a subcommand `+"`app`"+` (alias: help)
+func App() {}
+`, `alias "help" conflicts with built-in command "help"`)
+
+	testCollision("alias_root_conflicts_with_subcommand", `package main
+// App is a subcommand `+"`app`"+` (alias: child)
+func App() {}
+
+// Child is a subcommand `+"`app child`"+`
+func Child() {}
+`, `alias "child" on root command conflicts with subcommand "child"`)
+
+	testCollision("alias_root_duplicate", `package main
+// App is a subcommand `+"`app`"+` (aliases: run, run)
+func App() {}
+`, `duplicate alias "run" on root command`)
+
+	// Default route validation
+	testCollision("default_route_self", `package main
+// Child is a subcommand `+"`app child`"+`
+// Default route: app
+func Child() {}
+`, `default route cannot reference the root command itself`)
+
+	testCollision("default_route_not_found", `package main
+// Child is a subcommand `+"`app child`"+`
+// Default route: nonexistent
+func Child() {}
+`, `default route target "nonexistent" not found in command tree`)
+
+	testCollision("default_route_help_not_found", `package main
+// Child is a subcommand `+"`app child`"+`
+// Default route: help nonexistent
+func Child() {}
+`, `default route target "help nonexistent" not found in command tree`)
+
+	testCollision("default_route_action_conflict", `package main
+// App is a subcommand `+"`app`"+`
+// Default route: child
+func App() {}
+
+// Child is a subcommand `+"`app child`"+`
+func Child() {}
+`, `cannot declare default route "child" when root command already has an action (App)`)
 }
 
 func TestGenerate_LegacyAPI_Compiles(t *testing.T) {

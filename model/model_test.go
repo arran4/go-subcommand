@@ -335,3 +335,39 @@ func TestEffectiveCLIParser(t *testing.T) {
 		t.Fatalf("unset child EffectiveCLIParser() = %q, want empty", got)
 	}
 }
+
+func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
+	t.Run("aliases without action rejected", func(t *testing.T) {
+		cmd := &Command{
+			MainCmdName:  "app",
+			FunctionName: "",
+			Aliases:      []string{"run"},
+		}
+		err := cmd.Validate()
+		if err == nil || err.Error() != "command app: aliases (run) cannot be declared on root command without an action" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("empty default route rejected", func(t *testing.T) {
+		cmd := &Command{
+			MainCmdName:  "app",
+			DefaultRoute: "   ",
+		}
+		err := cmd.Validate()
+		if err == nil || err.Error() != "command app: empty default route" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("subcommand alias cannot alias itself", func(t *testing.T) {
+		sc := &SubCommand{
+			SubCommandName: "simple",
+			Aliases:        []string{"simple"},
+		}
+		err := sc.Validate()
+		if err == nil || err.Error() != "command simple: alias \"simple\" on subcommand \"simple\" cannot alias itself" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

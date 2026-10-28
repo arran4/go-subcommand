@@ -42,6 +42,17 @@ func (sct *SubCommandTree) Insert(importPath, packageName string, sequence []str
 	subCommandTree.Insert(importPath, packageName, sequence[1:], s)
 }
 
+func (sct *SubCommandTree) Find(sequence []string) *SubCommandTree {
+	curr := sct
+	for _, seg := range sequence {
+		if curr == nil {
+			return nil
+		}
+		curr = curr.SubCommands[seg]
+	}
+	return curr
+}
+
 type CommandTree struct {
 	CommandName string
 	*SubCommandTree
@@ -56,6 +67,7 @@ type CommandTree struct {
 	Description        string
 	ExtendedHelp       string
 	Aliases            []string
+	DefaultRoute       string
 	CLIParser          string
 	ImportPath         string
 }
@@ -202,6 +214,61 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 	sort.Strings(cmdNames)
 	for _, cmdName := range cmdNames {
 		cmdTree := rootCommands.Commands[cmdName]
+
+		// 1. If root command has aliases that specify subcommand paths (e.g. "tools docs simple"),
+		// insert them into the subcommand tree so the nested path resolves to the root action:
+		for _, alias := range cmdTree.Aliases {
+			segments := strings.Fields(alias)
+			if len(segments) > 0 && cmdTree.FunctionName != "" {
+				existingNode := cmdTree.Find(segments)
+				if existingNode != nil && existingNode.SubCommand != nil && existingNode.SubCommandFunctionName != "" && existingNode.SubCommandFunctionName != cmdTree.FunctionName {
+					// Conflicting subcommand already exists! Do not overwrite,
+					// allow model.Validate() to report the collision.
+					continue
+				}
+				leafName := segments[len(segments)-1]
+				subCmd := &model.SubCommand{
+					SubCommandFunctionName: cmdTree.FunctionName,
+					SubCommandDescription:  cmdTree.Description,
+					SubCommandExtendedHelp: cmdTree.ExtendedHelp,
+					CLIParser:              cmdTree.CLIParser,
+					SubCommandName:         leafName,
+					DefinitionFile:         cmdTree.DefinitionFile,
+					DocStart:               cmdTree.DocStart,
+					DocEnd:                 cmdTree.DocEnd,
+					Parameters:             cmdTree.Parameters,
+					ReturnsError:           cmdTree.ReturnsError,
+					ReturnCount:            cmdTree.ReturnCount,
+				}
+				cmdTree.Insert(cmdTree.ImportPath, cmdTree.CommandPackageName, segments, subCmd)
+			}
+		}
+
+		// 2. If cmdTree has no DefaultRoute, check if any subcommand is marked IsDefault or has DefaultRoute:
+		if cmdTree.DefaultRoute == "" {
+			var findDefault func(sct *SubCommandTree, seq []string) string
+			findDefault = func(sct *SubCommandTree, seq []string) string {
+				if sct.SubCommand != nil && (sct.IsDefault || sct.DefaultRoute != "") {
+					if sct.DefaultRoute != "" {
+						return sct.DefaultRoute
+					}
+					return strings.Join(seq, " ")
+				}
+				var names []string
+				for n := range sct.SubCommands {
+					names = append(names, n)
+				}
+				sort.Strings(names)
+				for _, n := range names {
+					if res := findDefault(sct.SubCommands[n], append(seq, n)); res != "" {
+						return res
+					}
+				}
+				return ""
+			}
+			cmdTree.DefaultRoute = findDefault(cmdTree.SubCommandTree, nil)
+		}
+
 		cmd := &model.Command{
 			DataModel:          d,
 			MainCmdName:        cmdName,
@@ -218,6 +285,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			Description:        cmdTree.Description,
 			ExtendedHelp:       cmdTree.ExtendedHelp,
 			Aliases:            cmdTree.Aliases,
+			DefaultRoute:       cmdTree.DefaultRoute,
 			CLIParser:          cmdTree.CLIParser,
 		}
 
@@ -332,6 +400,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			}
 			cmdName, subCommandSequence, description, extendedHelp, aliases, parsedParams, ok := ParseSubCommandComments(s.Doc.Text())
 			cliParser := parseCliParserDirective(s.Doc.Text())
+			defaultRoute, isDefault := parseDefaultDirective(s.Doc.Text())
 			if !ok {
 				continue
 			}
@@ -726,6 +795,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
 				ct.Aliases = aliases
+				if defaultRoute != "" {
+					ct.DefaultRoute = defaultRoute
+				}
 				ct.CLIParser = cliParser
 				continue
 			}
@@ -738,6 +810,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				CLIParser:              cliParser,
 				SubCommandName:         subCommandName,
 				Aliases:                aliases,
+				DefaultRoute:           defaultRoute,
+				IsDefault:              isDefault,
 				// SubCommandStructName is assigned during collection
 				DefinitionFile: filename,
 				DocStart:       s.Doc.Pos(),
@@ -799,6 +873,10 @@ var (
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
 	reFlag            = regexp.MustCompile(`-[\w-]+`)
 	reCliParser       = regexp.MustCompile(`(?i)^CLI-Parser:\s*([A-Za-z0-9][A-Za-z0-9-]*)\s*$`)
+	reDefaultRouteDirective = regexp.MustCompile(`(?i)^(?:default\s+route|default\s+command):\s*(.+)$`)
+	reDefaultDirective      = regexp.MustCompile(`(?i)^default:\s*(.+)$`)
+	reDefaultRouteInline    = regexp.MustCompile(`\((?i:default\s+route|default\s+command):\s*([^)]+)\)`)
+	reDefaultInline         = regexp.MustCompile(`\((?i:default)\)`)
 )
 
 type ParsedParam struct {
@@ -820,6 +898,55 @@ type ParsedParam struct {
 }
 
 var reImplicitParam = regexp.MustCompile(`^([\w]+):\s*(.*)$`)
+
+func parseDefaultDirective(text string) (defaultRoute string, isDefault bool) {
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	inFlags := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == DirectiveFlags {
+			inFlags = true
+			continue
+		}
+		if inFlags {
+			continue
+		}
+		if match := reDefaultRouteDirective.FindStringSubmatch(line); match != nil {
+			val := strings.TrimSpace(match[1])
+			if strings.EqualFold(val, "true") {
+				isDefault = true
+			} else if val != "" {
+				defaultRoute = val
+			}
+			continue
+		}
+		if match := reDefaultDirective.FindStringSubmatch(line); match != nil {
+			val := strings.TrimSpace(match[1])
+			if !strings.HasPrefix(val, "-") && !strings.HasPrefix(val, "@") && !strings.HasPrefix(val, "\"") && !strings.Contains(val, "(default") {
+				if strings.EqualFold(val, "true") {
+					isDefault = true
+				} else if val != "" {
+					defaultRoute = val
+				}
+			}
+			continue
+		}
+		if match := reDefaultRouteInline.FindStringSubmatch(line); match != nil {
+			val := strings.TrimSpace(match[1])
+			if strings.EqualFold(val, "true") {
+				isDefault = true
+			} else if val != "" {
+				defaultRoute = val
+			}
+			continue
+		}
+		if reDefaultInline.MatchString(line) {
+			isDefault = true
+			continue
+		}
+	}
+	return defaultRoute, isDefault
+}
 
 func parseCliParserDirective(text string) string {
 	scanner := bufio.NewScanner(strings.NewReader(text))

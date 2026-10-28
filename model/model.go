@@ -112,8 +112,10 @@ type Command struct {
 	ReturnsError bool
 	// ReturnCount is the number of return values.
 	ReturnCount int
-	// Aliases holds aliases defined on the application root, validated and rejected in Validate().
+	// Aliases holds aliases defined on the application root.
 	Aliases []string
+	// DefaultRoute specifies an explicit default route for bare invocation (e.g. "help simple" or "tools docs simple").
+	DefaultRoute string
 	// CLIParser is the explicit runtime CLI parser backend selected for this command.
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
@@ -217,8 +219,13 @@ func (dm *DataModel) Validate() error {
 }
 
 func (cmd *Command) Validate() error {
-	if len(cmd.Aliases) > 0 {
-		return fmt.Errorf("command %s: aliases (%s) are not supported on the application root command", cmd.MainCmdName, strings.Join(cmd.Aliases, ", "))
+	if cmd.DefaultRoute != "" {
+		if err := cmd.validateDefaultRoute(); err != nil {
+			return err
+		}
+	}
+	if err := cmd.validateRootAliases(); err != nil {
+		return err
 	}
 	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
 		return err
@@ -234,7 +241,84 @@ func (cmd *Command) Validate() error {
 	return nil
 }
 
+func (cmd *Command) validateDefaultRoute() error {
+	parts := cmd.DefaultRouteParts()
+	if len(parts) == 0 {
+		return fmt.Errorf("command %s: empty default route", cmd.MainCmdName)
+	}
+
+	// Self-reference check:
+	if len(parts) == 1 && strings.EqualFold(parts[0], cmd.MainCmdName) {
+		return fmt.Errorf("command %s: default route cannot reference the root command itself", cmd.MainCmdName)
+	}
+
+	if cmd.IsHelpDefaultRoute() {
+		targetPath := parts[1:]
+		if len(targetPath) == 0 {
+			// Bare "help" or "usage"
+			return nil
+		}
+		targetSc := cmd.FindSubCommand(targetPath)
+		if targetSc == nil {
+			return fmt.Errorf("command %s: default route target %q not found in command tree", cmd.MainCmdName, cmd.DefaultRoute)
+		}
+		return nil
+	}
+
+	// An action default route is ambiguous if the root command already defines its own action
+	if cmd.FunctionName != "" {
+		return fmt.Errorf("command %s: cannot declare default route %q when root command already has an action (%s)", cmd.MainCmdName, cmd.DefaultRoute, cmd.FunctionName)
+	}
+
+	targetSc := cmd.FindSubCommand(parts)
+	if targetSc == nil {
+		return fmt.Errorf("command %s: default route target %q not found in command tree", cmd.MainCmdName, cmd.DefaultRoute)
+	}
+	if targetSc.IsAppRoot() {
+		return fmt.Errorf("command %s: default route cycle detected", cmd.MainCmdName)
+	}
+	return nil
+}
+
+func (cmd *Command) validateRootAliases() error {
+	seenAliases := make(map[string]bool)
+	for _, rawAlias := range cmd.Aliases {
+		alias := strings.TrimSpace(rawAlias)
+		aliasLower := strings.ToLower(alias)
+		if aliasLower == "" {
+			return fmt.Errorf("command %s: invalid empty alias on root command", cmd.MainCmdName)
+		}
+		segments := strings.Fields(alias)
+		if len(segments) == 1 && strings.EqualFold(segments[0], cmd.MainCmdName) {
+			return fmt.Errorf("command %s: alias %q cannot alias the root command itself", cmd.MainCmdName, rawAlias)
+		}
+		if strings.EqualFold(segments[0], "help") || strings.EqualFold(segments[0], "usage") || strings.EqualFold(segments[0], "version") {
+			return fmt.Errorf("command %s: alias %q conflicts with built-in command %q", cmd.MainCmdName, rawAlias, strings.ToLower(segments[0]))
+		}
+		if seenAliases[aliasLower] {
+			return fmt.Errorf("command %s: duplicate alias %q on root command", cmd.MainCmdName, rawAlias)
+		}
+		seenAliases[aliasLower] = true
+
+		if cmd.FunctionName == "" {
+			return fmt.Errorf("command %s: aliases (%s) cannot be declared on root command without an action", cmd.MainCmdName, rawAlias)
+		}
+
+		if existing := cmd.FindSubCommand(segments); existing != nil {
+			if existing.SubCommandFunctionName != "" && existing.SubCommandFunctionName != cmd.FunctionName {
+				return fmt.Errorf("command %s: alias %q on root command conflicts with subcommand %q", cmd.MainCmdName, rawAlias, strings.Join(segments, " "))
+			}
+		}
+	}
+	return nil
+}
+
 func (sc *SubCommand) Validate() error {
+	for _, alias := range sc.Aliases {
+		if strings.EqualFold(alias, sc.SubCommandName) {
+			return fmt.Errorf("command %s: alias %q on subcommand %q cannot alias itself", sc.ProgName(), alias, sc.SubCommandName)
+		}
+	}
 	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
 		return err
 	}
@@ -619,6 +703,10 @@ type SubCommand struct {
 	SubCommandName string
 	// Aliases is a list of alternative names for this subcommand.
 	Aliases []string
+	// DefaultRoute specifies an explicit default route configured on or inherited by this subcommand.
+	DefaultRoute string
+	// IsDefault indicates whether this subcommand is marked as the application's default command on bare invocation.
+	IsDefault bool
 	// SubCommandStructName is the name of the generated struct for this subcommand.
 	SubCommandStructName string
 	// ConstructorMethodName is the name of the generated constructor method.
@@ -710,6 +798,50 @@ func (c *Command) CommandPath() []string {
 	return nil
 }
 
+// DefaultRouteParts splits DefaultRoute into whitespace-delimited tokens.
+func (c *Command) DefaultRouteParts() []string {
+	if c == nil || c.DefaultRoute == "" {
+		return nil
+	}
+	return strings.Fields(c.DefaultRoute)
+}
+
+// IsHelpDefaultRoute reports whether DefaultRoute targets the built-in help system.
+func (c *Command) IsHelpDefaultRoute() bool {
+	parts := c.DefaultRouteParts()
+	return len(parts) > 0 && (strings.EqualFold(parts[0], "help") || strings.EqualFold(parts[0], "usage"))
+}
+
+// FindSubCommand looks up a subcommand path (e.g. ["tools", "docs", "simple"]) within the command tree,
+// resolving canonical names and aliases at each intermediate and leaf step.
+func (c *Command) FindSubCommand(path []string) *SubCommand {
+	if c == nil || len(path) == 0 {
+		return nil
+	}
+	currentList := c.SubCommands
+	var found *SubCommand
+	for _, segment := range path {
+		found = nil
+		for _, sc := range currentList {
+			if strings.EqualFold(sc.SubCommandName, segment) {
+				found = sc
+				break
+			}
+			for _, alias := range sc.Aliases {
+				if strings.EqualFold(alias, segment) {
+					found = sc
+					break
+				}
+			}
+		}
+		if found == nil {
+			return nil
+		}
+		currentList = found.SubCommands
+	}
+	return found
+}
+
 // IsAppRoot reports whether sc is the synthetic application-root usage wrapper
 // rather than a subcommand on a command path (even if that subcommand is named "root").
 func (sc *SubCommand) IsAppRoot() bool {
@@ -747,7 +879,14 @@ func (sc *SubCommand) HasSubcommands() bool {
 }
 
 func (sc *SubCommand) ProgName() string {
-	return sc.MainCmdName + " " + sc.SubCommandSequence()
+	if sc == nil {
+		return ""
+	}
+	prefix := ""
+	if sc.Command != nil && sc.MainCmdName != "" {
+		prefix = sc.MainCmdName + " "
+	}
+	return prefix + sc.SubCommandSequence()
 }
 
 func (sc *SubCommand) MaxFlagLength() int {

@@ -323,6 +323,13 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			}
 		}
 	}
+	{{- if .DefaultRoute }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		isHelpRequest = true
+	}
+	{{- end }}
+	{{- end }}
 	if !isHelpRequest {
 		{{- range .Parameters }}
 		{{- if and .Required (not .IsPositional) (not .HasGenerator) }}
@@ -378,6 +385,28 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	return nil
 
 	{{- else}}
+	{{- if .DefaultRoute }}
+	{{- $routeParts := .DefaultRouteParts }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		{{- if gt (len $routeParts) 1 }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+		{{- else }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute(nil)
+		{{- end }}
+	}
+	{{- else }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		if sub, ok := c.Commands["{{index $routeParts 0 | lower}}"]; ok {
+			{{- if gt (len $routeParts) 1 }}
+			return sub().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+			{{- else }}
+			return sub().Execute(nil)
+			{{- end }}
+		}
+	}
+	{{- end }}
+	{{- end }}
 	c.Usage()
 	if len(remainingArgs) > 0 {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])
