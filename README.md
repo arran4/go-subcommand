@@ -253,6 +253,10 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
+Each generated command owns a distinct usage resource. Commands with the same
+leaf name in different paths (for example, `app serve` and
+`app scenario serve`) retain separate help text and usage syntax.
+
 ### Root Actions and Subcommand Dispatch
 
 When an application defines both a root action and subcommands, a recognized

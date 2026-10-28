@@ -1041,6 +1041,49 @@ func CatTail() {}
 	}
 }
 
+func TestIssue470_NestedUsageFilesUseFullPath(t *testing.T) {
+	src := `package main
+
+// Serve is a subcommand ` + "`app serve`" + `.
+// Flags:
+//
+//	port: --port Port to serve.
+func Serve(port int) {}
+
+// ScenarioServe is a subcommand ` + "`app scenario serve`" + `.
+// Flags:
+//
+//	name: @1 Scenario name.
+func ScenarioServe(name string) {}
+`
+	input := setupProject(t, src)
+	first := runGenerateInMemory(t, input)
+	second := runGenerateInMemory(t, input)
+
+	for path, content := range first.Files {
+		if got, ok := second.Files[path]; !ok || string(got) != string(content) {
+			t.Fatalf("generation is not deterministic for %s", path)
+		}
+	}
+	if len(first.Files) != len(second.Files) {
+		t.Fatalf("generated file count changed: %d then %d", len(first.Files), len(second.Files))
+	}
+
+	directUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/serve_usage.txt"))
+	nestedUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/scenario_serve_usage.txt"))
+	if !strings.Contains(directUsage, "Usage: app serve [flags...]") {
+		t.Fatalf("direct usage has wrong command path or flags:\n%s", directUsage)
+	}
+	if !strings.Contains(nestedUsage, "Usage: app scenario serve <name>") {
+		t.Fatalf("nested usage has wrong command path or positional argument:\n%s", nestedUsage)
+	}
+
+	directCode := string(mustGeneratedFile(t, first, "cmd/app/serve.go"))
+	nestedCode := string(mustGeneratedFile(t, first, "cmd/app/scenario_serve.go"))
+	assertContains(t, directCode, `"serve_usage.txt"`, "direct command should select its own usage resource")
+	assertContains(t, nestedCode, `"scenario_serve_usage.txt"`, "nested command should select its own usage resource")
+}
+
 func TestErrorHandlingGeneration(t *testing.T) {
 	src := `package main
 
