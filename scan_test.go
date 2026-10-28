@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
-	"io"
 	"io/fs"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -61,18 +59,6 @@ func TestScan(t *testing.T) {
 			ar := txtar.Parse(raw)
 			inputFS, expectedFS := splitInputExpected(ar)
 
-			dir := t.TempDir()
-			for name, file := range inputFS {
-				err := os.MkdirAll(path.Join(dir, path.Dir(name)), 0755)
-				if err != nil {
-					t.Fatalf("failed to mkdir for %s: %v", name, err)
-				}
-				err = os.WriteFile(path.Join(dir, name), file.Data, 0644)
-				if err != nil {
-					t.Fatalf("failed to write %s: %v", name, err)
-				}
-			}
-
 			// Read options if provided
 			var options struct {
 				Dir        string   `json:"dir"`
@@ -89,26 +75,21 @@ func TestScan(t *testing.T) {
 				}
 			}
 
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
 			if options.Dir == "" {
-				options.Dir = dir
-			} else {
-				options.Dir = path.Join(dir, options.Dir)
+				options.Dir = "."
 			}
 			if options.ParserName == "" {
 				options.ParserName = "commentv1"
 			}
-
-			err = Scan(options.Dir, options.ParserName, options.Paths, options.Recursive)
-
-			_ = w.Close()
-			os.Stdout = oldStdout
-
 			var buf bytes.Buffer
-			_, _ = io.Copy(&buf, r)
+			testFS := fs.FS(inputFS)
+			if options.Dir != "." {
+				testFS, err = fs.Sub(inputFS, options.Dir)
+				if err != nil {
+					t.Fatalf("sub filesystem %s: %v", options.Dir, err)
+				}
+			}
+			err = ScanWithFS(testFS, &buf, options.ParserName, options.Paths, options.Recursive)
 			output := buf.String()
 
 			if err != nil {
@@ -127,7 +108,7 @@ func TestScan(t *testing.T) {
 }
 
 func TestScan_Error(t *testing.T) {
-	err := Scan(".", "unknown_parser", nil, false)
+	err := ScanWithFS(fstest.MapFS{}, &bytes.Buffer{}, "unknown_parser", nil, false)
 	if err == nil {
 		t.Errorf("Expected error with unknown parser, got nil")
 	}

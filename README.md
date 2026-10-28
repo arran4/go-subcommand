@@ -88,22 +88,132 @@ The primary directive defines where the command lives in the CLI hierarchy:
 // FuncName is a subcommand `root-cmd parent child`
 ```
 
-### Subcommand Aliases
+### Subcommand Aliases & Command Routing
 
-You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive.
+`go-subcommand` provides expressive alias and routing capabilities across child commands, nested hierarchies, and the application root.
 
-```go
-// MyFunc is a subcommand `app cmd`
-// Aliases: c, command
-func MyFunc() { ... }
-```
+#### Child Subcommand Aliases
 
-You can also use an inline syntax:
+You can define aliases for a subcommand using the `Aliases:` or `Alias:` directive, or inline `(alias: ...)` / `(aka: ...)`:
 
 ```go
-// MyFunc is a subcommand `app cmd` (aka: c)
-func MyFunc() { ... }
+// SvcAction is a subcommand `app svc` Manage services.
+// Aliases: service, s
+func SvcAction() error { ... }
+
+// SvcListAction is a subcommand `app svc list` List active services.
+// (aka: ls)
+func SvcListAction(all bool) error { ... }
 ```
+
+Aliases resolve at intermediate and leaf positions across execution and help traversal:
+
+```console
+$ app svc list --all
+$ app service ls --all
+$ app s ls --all
+$ app help s ls
+```
+
+#### Multiple Invocations for a Single Action (Multi-Level Path Aliasing)
+
+An application root action can be made reachable through both bare invocation and an explicit nested command path several levels deep without duplicating the action implementation:
+
+```go
+// RunProg is a subcommand `prog` Root application action.
+// Aliases: tools docs simple, tools docs s
+//
+// Flags:
+//   config: --config (default: "default.cfg") Configuration path
+func RunProg(config string) error { ... }
+
+// ToolsAction is a subcommand `prog tools` Developer tools.
+// Aliases: t
+func ToolsAction() error { ... }
+
+// DocsAction is a subcommand `prog tools docs` Documentation tools.
+// Aliases: d
+func DocsAction() error { ... }
+```
+
+Both bare invocation and the canonical or aliased nested path select the exact same underlying action:
+
+```console
+$ prog --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog tools docs simple --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog t d s --config custom.cfg
+# Executes RunProg(config="custom.cfg")
+
+$ prog help tools docs simple
+# Displays help for the nested path without executing RunProg or providers
+```
+
+#### Default Routes to Built-in Help Destinations
+
+A bare invocation can be explicitly configured to forward to an existing help route using the `Default route:` directive (or inline `(default route: ...)`):
+
+```go
+// SimpleAction is a subcommand `prog simple` Simple demonstration command.
+// Default route: help simple
+//
+// Flags:
+//   name: -n --name (default: "world") Target name
+func SimpleAction(name string) error { ... }
+
+// OtherAction is a subcommand `prog other` Other command.
+func OtherAction() error { ... }
+```
+
+In this configuration, bare invocation and `./prog help simple` produce identical output and exit status 0, while guaranteeing zero business action or provider execution:
+
+```console
+$ prog
+Usage: prog simple [flags...]
+
+Simple demonstration command.
+
+Flags:
+    -n, --name string (default: "world") Target name
+
+$ prog help simple
+Usage: prog simple [flags...]
+
+Simple demonstration command.
+
+Flags:
+    -n, --name string (default: "world") Target name
+
+$ prog help
+Usage: prog <subcommand>
+
+Subcommands:
+    other      Other command.
+    simple     Simple demonstration command.
+```
+
+Built-in commands (`help`, `usage`, `version`) remain side-effect-free and reserved, distinct from user actions.
+
+#### Root Action vs Literal `root` Subcommand
+
+An application root and an ordinary subcommand literally named `root` can coexist cleanly:
+
+```go
+// Downloadsd is a subcommand `downloadsd` Manage downloads and services.
+func Downloadsd(config string) error { ... }
+
+// Root is a subcommand `downloadsd root` Run the optional privileged supervisor.
+// (aka: supervisor, r)
+func Root(config string, serve bool) error { ... }
+```
+
+*   `downloadsd`: Executes the application-level `Downloadsd` action.
+*   `downloadsd root` (or `downloadsd supervisor`, `downloadsd r`): Dispatches only to the explicit supervisor `Root` action.
+*   `downloadsd help` or `downloadsd -h`: Shows application help without starting the supervisor or executing actions.
+*   `downloadsd root --help` or `downloadsd help root`: Shows supervisor child help.
 
 ### Description & Extended Help
 
@@ -154,6 +264,8 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Description:** Any remaining text is treated as the parameter description.
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
+
+Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 
 ### Supported Types
 
@@ -237,6 +349,13 @@ The CLI uses a custom parser generated by `gosubc` rather than delegating entire
 
 To enforce that a specific flag must be provided at runtime, mark the parameter with the `required` keyword inside parentheses (e.g., `(required)`). The execution will fail gracefully if a user omits the required parameter. For optional parameters, omitting the flag relies on Go zero-values unless overridden by `default:`.
 
+### Stream Parameters
+
+For `io.Reader` and `io.ReadCloser` parameters, pass `-` to select standard
+input. For `io.Writer` and `io.WriteCloser`, pass `-` to select standard
+output. Generated usage repeats this direction-specific meaning, including for
+`default: -`. Names such as `stdin` and `stdout` remain ordinary file paths.
+
 ### Nesting Commands
 
 Nesting is implicit based on the command path string.
@@ -252,6 +371,123 @@ func CreateUser(...) { ... }
 // ListUsers is a subcommand `app users list`
 func ListUsers(...) { ... }
 ```
+
+Each generated command owns a distinct usage resource. Commands with the same
+leaf name in different paths (for example, `app serve` and
+`app scenario serve`) retain separate help text and usage syntax.
+
+### Root Actions and Subcommand Dispatch
+
+When an application defines both a root action and subcommands, a recognized
+subcommand (including the built-in `version`, `help`, and `usage` commands, or
+an explicitly named child command such as `app root`) is dispatched without
+running the application root action. Application-root identity (`RootCmd` and
+`NewRoot` in `root.go`) is distinct from command-path subcommands, so an
+explicit `app root` child retains its own generated struct, constructor,
+usage resource, and tests without colliding with the application root.
+
+Built-in `help` and `usage` commands also traverse nested subcommand paths
+(for example, `app help services list`) without invoking business actions or
+initializing generator-backed providers. Unrecognized command tokens on a
+non-positional parent fail with an `unknown command` error rather than falling
+through to the parent action. `--` preserves positional-argument semantics so a
+token after it is not treated as a subcommand.
+
+An error returned by a durable command action is annotated once with the
+command name (for example, `app failed: ...`). The generated wrapper uses `%w`,
+so callers can still use `errors.Is` and `errors.As` with the underlying error.
+
+### Implicit and explicit command trees
+
+The command path inside backticks determines the generated executable and its
+nested command hierarchy. All of the examples below produce **one**
+`cmd/gogenmux` executable, not a separate executable per function.
+
+**Example A — implicit root and implicit intermediate command.**
+Only the leaf commands are annotated; `gogenmux` and `config` are created
+automatically as dispatch-only parents:
+
+```go
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Inspect is a subcommand `gogenmux inspect` -- Inspect the model.
+func Inspect() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+The generated command tree is:
+
+```text
+gogenmux                  [implicit root: no action function]
+├── generate              [Generate()]
+├── inspect               [Inspect()]
+└── config                [implicit parent: no action function]
+    └── show              [Show()]
+```
+
+**Example B — explicit root with a default action and explicit intermediate command.**
+An annotated application-root function is not merely a structural declaration:
+it becomes the **default action invoked by bare `gogenmux`**. Likewise, an
+explicitly annotated `config` function handles bare `gogenmux config`.
+The hierarchy still produces one executable:
+
+```go
+// Gogenmux is a subcommand `gogenmux` -- Multiplexer tools.
+func Gogenmux() {}
+
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Config is a subcommand `gogenmux config` -- Manage configuration.
+func Config() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+```text
+gogenmux                  [explicit root + default action: Gogenmux()]
+├── generate              [Generate()]
+└── config                [explicit command action: Config()]
+    └── show              [Show()]
+```
+
+For Example B, invocation selects the corresponding action:
+
+```text
+gogenmux                  → Gogenmux()       (default/root action)
+gogenmux generate         → Generate()       (not Gogenmux())
+gogenmux config           → Config()         (intermediate action)
+gogenmux config show      → Show()           (not Config() or Gogenmux())
+```
+
+An **explicit root action is optional at definition time**, but when declared
+it is also the application's default action. There is currently no separate
+`commentv1` annotation for an *explicit, metadata-only root* that avoids
+registering such a default action. For a dispatch-only root, use the implicit
+root form in Example A rather than adding an empty root function solely to
+declare the executable name. Similarly, omit the explicit `config` function
+when that intermediate node needs no action.
+
+Durable functions stay in their original source package; gosubc generates
+the dispatch wrappers and help resources. A function specifically named
+`Root` is not required. For related distinctions involving a literal child
+command named `root`, see [issue #513](https://github.com/arran4/go-subcommand/issues/513).
+
+**Syntax matters:** use backticks around the entire command path:
+
+```go
+// Show is a subcommand `gogenmux config show`
+```
+
+A comment such as `// Show is a subcommand gogenmux config show` (without backticks)
+is **not equivalent** in the current `commentv1` parser; it can fall back to
+the Go function name and create an unintended executable tree. See
+[issue #478](https://github.com/arran4/go-subcommand/issues/478) for
+tracking of that ambiguity.
 
 ### Parent Flags (Inheritance)
 
@@ -288,7 +524,7 @@ Multiple overlays are applied in command-line order. Later definitions with the 
 
 To view or export the built-in templates:
 *   `gosubc template layout`: Displays the directory tree structure of built-in templates.
-*   `gosubc template export [--output <dir>] [--as-txtar]`: Exports all built-in templates to a directory or a single `.txtar` archive file.
+*   `gosubc template export [--output <dir>] [--as-txtar] [--force]`: Exports all built-in templates to a directory or a single `.txtar` archive file. Existing template files and archives are preserved unless `--force` is supplied; unrelated files in an existing directory are left untouched.
 
 Generated CLI usage output automatically wraps parameter descriptions based on the terminal width specified by the `COLUMNS` environment variable (falling back to 80 columns).
 
@@ -301,6 +537,8 @@ gosubc generate --man-dir ./man
 ```
 
 This will generate standard Unix man pages in the specified directory, using the descriptions and extended help text from your comments.
+
+When upgrading from a generator version affected by [#469](https://github.com/arran4/go-subcommand/issues/469), regenerating existing man pages will produce a one-time canonical diff that removes deterministic trailing whitespace. Commit the regenerated output from the fixed generator rather than preserving the old spaces.
 
 ## CLI Reference
 
@@ -318,7 +556,7 @@ Generates the Go code for your CLI.
 
 Manage generation templates.
 
-*   `gosubc template export [--output <path>] [--as-txtar]`: Export built-in templates.
+*   `gosubc template export [--output <path>] [--as-txtar] [--force]`: Export built-in templates without replacing existing files by default. Use `--force` only to replace existing exported template files or archives.
 *   `gosubc template layout`: Display template structure layout.
 
 ### `gosubc list`
@@ -341,9 +579,50 @@ Generates release configuration.
 *   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
 
 ### Parser Backend Configuration
+
+### Generated application Go compatibility
+
+The Go version needed to run `gosubc` is separate from the version supported by
+the generated application. Generated command packages require **Go 1.16 or
+newer** because they use standard-library embedding and `io/fs`.
+
+The generator reads the target module's `go` directive and adapts its output:
+
+| Target module version | Generated compatibility form |
+| --- | --- |
+| Go 1.16–1.17 | `interface{}` and local loops (no `slices`) |
+| Go 1.18–1.20 | `any` and local loops |
+| Go 1.21+ | `any` and `slices.Contains` |
+
+Generation fails before writing output when a target module declares Go 1.15 or
+older. The compatibility forms are regression-tested as generated source; the
+local campaign environment currently has a Go 1.25.0 compiler, so it does not
+claim binary compilation with unavailable historical toolchains.
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
+
+### Target-aware source discovery
+
+`commentv1` selects source files with Go build-constraint semantics. In
+particular it excludes `_test.go` files and honours platform filename suffixes,
+`//go:build`, legacy `// +build`, and explicit build tags. A generator invoked
+through `GenerateWithFS` can select the intended output target with
+`parsers.ParseOptions`:
+
+```go
+parseOptions := &parsers.ParseOptions{
+	Recursive: true,
+	GOOS:      "windows",
+	GOARCH:    "amd64",
+	BuildTags: []string{"enterprise"},
+}
+```
+
+The generated command tree is valid for that selected target, not a universal
+mixture of mutually exclusive platform implementations. Compile or package the
+result using the same target values. Empty target fields retain the generator
+host defaults.
 
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).

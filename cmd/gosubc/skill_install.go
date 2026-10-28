@@ -149,7 +149,7 @@ func (c *SkillInstall) Execute(args []string) (err error) {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("install failed: %w", err)
+			return err
 		}
 	} else {
 		c.Usage()
@@ -183,8 +183,9 @@ func (c *Skill) NewSkillInstall() *SkillInstall {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			if e, ok := err.(*cmd.ErrExitCode); ok {
-				return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
 			}
 			return fmt.Errorf("install failed: %w", err)
 		}
