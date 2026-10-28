@@ -885,58 +885,6 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
 }
 
-func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
-	// Verify signature exists and matches compilation
-	accept := func(_ func(
-		dir string,
-		manDir string,
-		parserName string,
-		paths []string,
-		recursive bool,
-		force bool,
-		clean bool,
-		replaceTemplates []string,
-		projectProvenance bool,
-		timestamp bool,
-		provVersion string,
-		provCommit string,
-		provDate string,
-	) error) {
-	}
-
-	accept(Generate)
-}
-
-func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
-	// Verify signature exists and matches compilation
-	accept := func(_ func(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error) {
-	}
-
-	accept(GenerateWithFS)
-}
-
-func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
-	// 1. Verify signature exists and matches compilation
-	accept := func(_ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error) {
-	}
-	accept(GenerateCLI)
-
-	// 2. Verify actual forwarding of --cli-parser to the internal system
-	// Using the reserved identifier "plus-minus" ensures we get the exact rejection error
-	// directly from resolveCLIParser to prove the string made it through GenerateCLI
-	dir := t.TempDir()
-	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
-	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
-
-	err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", "")
-	if err == nil {
-		t.Fatal("Expected GenerateCLI with 'plus-minus' to fail, but it succeeded")
-	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
-	}
-}
-
 func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/downloadsd\n\ngo 1.22\n")
@@ -1207,5 +1155,57 @@ func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 		if markers := readMarkers(); len(markers) > 0 {
 			t.Fatalf("unknown command %v unexpectedly invoked actions/providers: %v", badArgs, markers)
 		}
+	}
+}
+
+func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
+	// Verify signature exists and matches compilation
+	accept := func(_ func(
+		dir string,
+		manDir string,
+		parserName string,
+		paths []string,
+		recursive bool,
+		force bool,
+		clean bool,
+		replaceTemplates []string,
+		projectProvenance bool,
+		timestamp bool,
+		provVersion string,
+		provCommit string,
+		provDate string,
+	) error) {
+	}
+
+	accept(Generate)
+}
+
+func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
+	// Verify signature exists and matches compilation
+	accept := func(_ func(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error) {
+	}
+
+	accept(GenerateWithFS)
+}
+
+func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
+	// 1. Verify signature exists and matches compilation
+	accept := func(_ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error) {
+	}
+	accept(GenerateCLI)
+
+	// 2. Verify actual forwarding of --cli-parser to the internal system
+	// Using the reserved identifier "plus-minus" ensures we get the exact rejection error
+	// directly from resolveCLIParser to prove the string made it through GenerateCLI
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
+
+	err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", "")
+	if err == nil {
+		t.Fatal("Expected GenerateCLI with 'plus-minus' to fail, but it succeeded")
+	}
+	if !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
 	}
 }
