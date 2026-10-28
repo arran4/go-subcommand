@@ -1,11 +1,59 @@
 package commentv1
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/arran4/go-subcommand/model"
+	"github.com/arran4/go-subcommand/parsers"
 )
+
+func TestCommentParser_RespectsBuildConstraints(t *testing.T) {
+	files := fstest.MapFS{
+		"go.mod":                     {Data: []byte("module example.com/app\n\ngo 1.22\n")},
+		"shared.go":                  {Data: []byte("package app\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+		"commands_linux_amd64.go":    {Data: []byte("package app\n// Linux is a subcommand `app linux`\nfunc Linux() {}\n")},
+		"commands_linux_arm64.go":    {Data: []byte("package app\n// Arm is a subcommand `app arm`\nfunc Arm() {}\n")},
+		"commands_windows.go":        {Data: []byte("package app\n// Windows is a subcommand `app windows`\nfunc Windows() {}\n")},
+		"commands_legacy.go":         {Data: []byte("// +build darwin\n\npackage app\n// Legacy is a subcommand `app legacy`\nfunc Legacy() {}\n")},
+		"commands_tag.go":            {Data: []byte("//go:build special\n\npackage app\n// Tagged is a subcommand `app tagged`\nfunc Tagged() {}\n")},
+		"commands_excluded_test.go":  {Data: []byte("this is intentionally not Go source")},
+		"nested/commands_linux.go":   {Data: []byte("package nested\n// Nested is a subcommand `app nested`\nfunc Nested() {}\n")},
+		"nested/commands_windows.go": {Data: []byte("package nested\n// NestedWin is a subcommand `app nested-windows`\nfunc NestedWin() {}\n")},
+	}
+
+	tests := []struct {
+		name string
+		opts parsers.ParseOptions
+		want []string
+	}{
+		{"linux amd64", parsers.ParseOptions{Recursive: true, GOOS: "linux", GOARCH: "amd64"}, []string{"linux", "nested"}},
+		{"linux arm64", parsers.ParseOptions{Recursive: true, GOOS: "linux", GOARCH: "arm64"}, []string{"arm", "nested"}},
+		{"windows", parsers.ParseOptions{Recursive: true, GOOS: "windows", GOARCH: "amd64"}, []string{"nested-windows", "windows"}},
+		{"legacy darwin", parsers.ParseOptions{Recursive: true, GOOS: "darwin", GOARCH: "amd64"}, []string{"legacy"}},
+		{"explicit tag", parsers.ParseOptions{Recursive: true, GOOS: "linux", GOARCH: "amd64", BuildTags: []string{"special"}}, []string{"linux", "nested", "tagged"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model, err := (&CommentParser{}).Parse(files, ".", &tt.opts)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(model.Commands) != 1 {
+				t.Fatalf("commands = %d, want one root", len(model.Commands))
+			}
+			got := make([]string, 0, len(model.Commands[0].SubCommands))
+			for _, command := range model.Commands[0].SubCommands {
+				got = append(got, command.SubCommandName)
+			}
+			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
+				t.Fatalf("subcommands = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestSubCommandTree_Insert(t *testing.T) {
 	tests := []struct {
@@ -68,7 +116,6 @@ func TestSubCommandTree_Insert(t *testing.T) {
 				t.Errorf("Expected SubCommand to be set at the leaf node")
 			}
 
-			// Fix: QF1008: could remove embedded field "SubCommand" from selector (staticcheck)
 			if current.ImportPath != tt.importPath {
 				t.Errorf("Expected ImportPath '%s', got '%s'", tt.importPath, current.ImportPath)
 			}

@@ -19,7 +19,7 @@ Subcommands:
 
 Flags:
     --dir string                      (default: ".")           Project root directory containing go.mod
-    --man-dir string                                           Directory to generate man pages in optional
+    --man-dir string                  (default: "")            Directory to generate man pages in optional
     --parser-name string              (default: "commentv1")   Name of the parser to use
     --cli-parser string               (default: "gnu")         Name of the runtime CLI parser backend to use
     --path []string                   (default: nil)           Paths to search for subcommands (relative to dir)
@@ -29,6 +29,7 @@ Flags:
     --replace-template []string                                Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
     --project-provenance, --project   (default: true)          Include target Git metadata in provenance
     --timestamp                       (default: true)          Include timestamp in provenance
+    --emit-go-generate                (default: true)          Emit nested //go:generate directive in generated main.go
     --prov-version string             (default: "")            Overwrite provenance version
     --prov-commit string              (default: "")            Overwrite provenance commit
     --prov-date string                (default: "")            Overwrite provenance date

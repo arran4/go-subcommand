@@ -116,6 +116,9 @@ type Command struct {
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
 	ResolvedCLIParser string
+	// SuppressGoGenerate omits the nested regeneration directive from generated
+	// main.go. Its zero value retains the compatible default of emitting it.
+	SuppressGoGenerate bool
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
@@ -648,7 +651,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.IsPositional && !p.HasGenerator() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() {
 			return true
 		}
 	}

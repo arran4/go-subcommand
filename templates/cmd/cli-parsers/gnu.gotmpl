@@ -2,7 +2,7 @@
 	var remainingArgs []string
 	{{- $hasTrackedFlags := false }}
 	{{- range .Parameters }}
-		{{- if or .Required (and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) (or .IsWriter .IsReader) .HasDefaultValue) }}
+		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -35,7 +35,7 @@
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+			{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -153,7 +153,7 @@
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if and (not .IsPositional) (not .HasGenerator) (not .InheritedFrom) }}
+				{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}

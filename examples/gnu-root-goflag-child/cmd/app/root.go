@@ -75,6 +75,8 @@ type RootCmd struct {
 	Date          string
 	gnuFlag       bool
 	longFlag      string
+	dir           string
+	sameDir       string
 	args          []string
 	CommandAction func(c *RootCmd) error
 }
@@ -108,15 +110,19 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 	c.FlagSet.Usage = c.Usage
 
-	c.BoolVar(&c.gnuFlag, "g", false, "TODO: Add usage text")
+	c.BoolVar(&c.gnuFlag, "g", false, "Enable GNU flag")
 
-	c.StringVar(&c.longFlag, "long", "test", "TODO: Add usage text")
+	c.StringVar(&c.longFlag, "long", "test", "Long GNU value")
+
+	c.StringVar(&c.dir, "dir", "", "Parent directory")
+
+	c.StringVar(&c.sameDir, "same-dir", "", "Parent shared directory")
 
 	c.Var((*StringSlice)(&c.args), "args", "(positional: true)")
 
 	c.CommandAction = func(c *RootCmd) error {
 
-		err := myapp.Root(c.gnuFlag, c.longFlag, c.args)
+		err := myapp.Root(c.gnuFlag, c.longFlag, c.dir, c.sameDir, c.args)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -228,6 +234,28 @@ func (c *RootCmd) Execute(args []string) (err error) {
 					}
 				}
 				c.longFlag = value
+
+			case "dir":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.dir = value
+
+			case "sameDir", "same-dir":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.sameDir = value
 
 			case "args":
 				if !hasValue {

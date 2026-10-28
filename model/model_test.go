@@ -127,9 +127,13 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 		})
 	}
 
-	p := FunctionParameter{Name: "childDir", InheritedFrom: "dir", Type: "string", Default: "tmp"}
+	p := FunctionParameter{Name: "childDir", Inherited: true, InheritedFrom: "dir", Type: "string", Default: "tmp"}
 	if got := p.ValueFieldName(); got != "dir" {
 		t.Errorf("ValueFieldName() = %q, want dir", got)
+	}
+	sameName := FunctionParameter{Name: "sameDir", Inherited: true, Type: "string"}
+	if got := sameName.ValueFieldName(); got != "sameDir" {
+		t.Errorf("same-name ValueFieldName() = %q, want sameDir", got)
 	}
 	if got := p.DefaultString(); got != `(default: "tmp")` {
 		t.Errorf("DefaultString() = %q", got)
@@ -137,6 +141,20 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	p.Required = true
 	if got := p.DefaultString(); got != "(required)" {
 		t.Errorf("DefaultString() = %q", got)
+	}
+}
+
+func TestRequiredFlagPresentIgnoresInheritedParameters(t *testing.T) {
+	params := []*FunctionParameter{
+		{Name: "inherited", Required: true, Inherited: true},
+	}
+	if requiredFlagPresent(params) {
+		t.Fatal("inherited required parameter must not be treated as a local required flag")
+	}
+
+	params = append(params, &FunctionParameter{Name: "local", Required: true})
+	if !requiredFlagPresent(params) {
+		t.Fatal("local required parameter must be treated as a required flag")
 	}
 }
 

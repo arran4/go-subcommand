@@ -1,10 +1,16 @@
 package go_subcommand
 
 import (
+	"bytes"
 	_ "embed"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -28,6 +34,25 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue478_nested_commands.go
+var issue478NestedCommandsSource string
+
+//go:embed testdata/issue475_root.go
+var issue475RootSource string
+
+//go:embed testdata/issue475_linux.go
+var issue475LinuxSource string
+
+//go:embed testdata/issue475_windows.go
+var issue475WindowsSource string
+
+
+//go:embed testdata/issue456_imports.go
+var issue456ImportsSource string
+
+//go:embed testdata/output_inventory.go
+var outputInventorySource string
+
 func TestGenerate_Recursive(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":     &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
@@ -37,7 +62,7 @@ func TestGenerate_Recursive(t *testing.T) {
 
 	// Test recursive=true (default)
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -47,12 +72,42 @@ func TestGenerate_Recursive(t *testing.T) {
 
 	// Test recursive=false
 	writer = NewCollectingFileWriter()
-	err = GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false, "", "", "")
+	err = GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: false}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 	if _, ok := writer.Files["cmd/app/sub.go"]; ok {
 		t.Errorf("Expected sub.go NOT to be generated with recursive=false")
+	}
+}
+
+func TestGenerateWithFSSuppressGoGenerate(t *testing.T) {
+	input := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/test\n\ngo 1.22\n")},
+		"app.go": &fstest.MapFile{Data: []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+	}
+
+	generate := func(options ...any) string {
+		t.Helper()
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", options...); err != nil {
+			t.Fatalf("GenerateWithFS: %v", err)
+		}
+		return string(writer.Files["cmd/app/main.go"])
+	}
+
+	defaultOutput := generate()
+	if !strings.Contains(defaultOutput, "//go:generate") {
+		t.Fatalf("default generated main.go did not contain its regeneration directive:\n%s", defaultOutput)
+	}
+
+	suppressedOutput := generate(GenerateOptions{SuppressGoGenerate: true})
+	if strings.Contains(suppressedOutput, "//go:generate") {
+		t.Fatalf("suppressed generated main.go still contained its regeneration directive:\n%s", suppressedOutput)
+	}
+
+	if repeatedOutput := generate(GenerateOptions{SuppressGoGenerate: true}); suppressedOutput != repeatedOutput {
+		t.Fatal("suppressed generation was not deterministic")
 	}
 }
 
@@ -66,7 +121,7 @@ func TestGenerate_Paths(t *testing.T) {
 
 	// Test with specific path
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{
 		SearchPaths: []string{"pkg1"},
 		Recursive:   true,
 	}, false, false, nil, false, false, "", "", "")
@@ -82,15 +137,119 @@ func TestGenerate_Paths(t *testing.T) {
 	}
 }
 
+func TestGenerate_TargetBuildConstraints(t *testing.T) {
+	for _, target := range []struct {
+		name      string
+		goos      string
+		wantCall  string
+		avoidCall string
+	}{
+		{name: "linux", goos: "linux", wantCall: "PlatformLinux()", avoidCall: "PlatformWindows()"},
+		{name: "windows", goos: "windows", wantCall: "PlatformWindows()", avoidCall: "PlatformLinux()"},
+	} {
+		t.Run(target.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/platform\n\ngo 1.22\n")
+			writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue475RootSource)
+			writeRuntimeFixture(t, filepath.Join(dir, "platform_linux.go"), issue475LinuxSource)
+			writeRuntimeFixture(t, filepath.Join(dir, "platform_windows.go"), issue475WindowsSource)
+
+			parseOptions := &parsers.ParseOptions{Recursive: true, GOOS: target.goos, GOARCH: "amd64"}
+			if err := GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, "", "commentv1", parseOptions, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			generatedPath := filepath.Join(dir, "cmd", "platform", "platform.go")
+			generated, err := os.ReadFile(generatedPath)
+			if err != nil {
+				t.Fatalf("read generated command: %v", err)
+			}
+			if !strings.Contains(string(generated), target.wantCall) || strings.Contains(string(generated), target.avoidCall) {
+				t.Fatalf("target %s generated the wrong action:\n%s", target.name, generated)
+			}
+
+			before := append([]byte(nil), generated...)
+			if err := GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, "", "commentv1", parseOptions, false, false, nil, false, false, "", "", ""); err != nil {
+				t.Fatalf("repeat GenerateWithFS: %v", err)
+			}
+			after, err := os.ReadFile(generatedPath)
+			if err != nil {
+				t.Fatalf("read repeated generated command: %v", err)
+			}
+			if string(before) != string(after) {
+				t.Fatalf("target %s generation was not deterministic", target.name)
+			}
+
+			build := exec.Command("go", "build", "./...")
+			build.Dir = dir
+			build.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH=amd64")
+			if output, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("cross-build target %s: %v\n%s", target.name, err, output)
+			}
+		})
+	}
+}
+
+func TestGenerate_GoVersionCompatibility(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		goVersion  string
+		wantAny    bool
+		wantSlices bool
+		wantErr    string
+	}{
+		{name: "minimum supported", goVersion: "1.16", wantAny: false, wantSlices: false},
+		{name: "pre any", goVersion: "1.17", wantAny: false, wantSlices: false},
+		{name: "any", goVersion: "1.18", wantAny: true, wantSlices: false},
+		{name: "slices", goVersion: "1.21", wantAny: true, wantSlices: true},
+		{name: "unsupported", goVersion: "1.15", wantErr: "generated applications require Go 1.16"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			input := fstest.MapFS{
+				"go.mod": &fstest.MapFile{Data: []byte("module example.com/app\n\ngo " + tt.goVersion + "\n")},
+				"app.go": &fstest.MapFile{Data: []byte("package app\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+			}
+			writer := NewCollectingFileWriter()
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("GenerateWithFS error = %v, want %q", err, tt.wantErr)
+				}
+				if len(writer.Files) != 0 {
+					t.Fatalf("unsupported target wrote files: %v", writer.Files)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GenerateWithFS: %v", err)
+			}
+			root := string(mustGeneratedFile(t, writer, "cmd/app/root.go"))
+			if strings.Contains(root, "data any") != tt.wantAny {
+				t.Fatalf("Go %s any output mismatch:\n%s", tt.goVersion, root)
+			}
+			if strings.Contains(root, "slices.Contains") != tt.wantSlices {
+				t.Fatalf("Go %s slices output mismatch:\n%s", tt.goVersion, root)
+			}
+			if !tt.wantSlices && strings.Contains(root, "\"slices\"") {
+				t.Fatalf("Go %s unexpectedly imports slices:\n%s", tt.goVersion, root)
+			}
+		})
+	}
+}
+
 func TestGenerate_RuntimeRequirements(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/e2e\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
+	generatedChild, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "parent_child.go"))
+	if err != nil {
+		t.Fatalf("read generated child command: %v", err)
+	}
+	assertIssue268GeneratedChild(t, string(generatedChild))
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "runtime_test.go"), issueRuntimeTestSource)
 
 	cmd := exec.Command("go", "test", "./...")
@@ -106,12 +265,40 @@ func TestGenerate_RuntimeRequirements(t *testing.T) {
 	}
 }
 
+func assertIssue268GeneratedChild(t *testing.T, source string) {
+	t.Helper()
+	start := strings.Index(source, "type ParentChild struct {")
+	if start == -1 {
+		t.Fatalf("generated child struct missing:\n%s", source)
+	}
+	end := strings.Index(source[start:], "\n}\n")
+	if end == -1 {
+		t.Fatalf("generated child struct is not terminated:\n%s", source[start:])
+	}
+	structSource := source[start : start+end+3]
+	for _, expected := range []string{"*Parent", "Child(c.dir, c.sameDir,"} {
+		if !strings.Contains(source, expected) {
+			t.Errorf("generated child missing %q:\n%s", expected, source)
+		}
+	}
+	for _, unexpected := range []string{"\n\td string", "\n\tsameDir string"} {
+		if strings.Contains(structSource, unexpected) {
+			t.Errorf("generated child has inherited local field %q:\n%s", unexpected, structSource)
+		}
+	}
+	for _, unexpected := range []string{"case \"dir\":", "case \"same-dir\":", "&v.d, \"dir\"", "&v.sameDir, \"same-dir\""} {
+		if strings.Contains(source, unexpected) {
+			t.Errorf("generated child registers inherited flag %q:\n%s", unexpected, source)
+		}
+	}
+}
+
 func TestGenerate_AliasedIOCompiles(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasio\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasIOSource)
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -142,7 +329,7 @@ func TestGenerate_AliasedRootIOCompiles(t *testing.T) {
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/aliasroot\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app", "app.go"), aliasRootIOSource)
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -189,7 +376,7 @@ func TestGenerate_ReplaceTemplates(t *testing.T) {
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, "", "", "", fsys)
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, []string{"usage=custom_usage.gotmpl"}, false, false, "", "", "", fsys)
 	if err != nil {
 		t.Fatalf("GenerateWithFS with replaceTemplates failed: %v", err)
 	}
@@ -287,7 +474,7 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", "gnu", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("GenerateWithFS failed: %v", err)
 	}
@@ -312,20 +499,165 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 }
 
+func TestGenerate_ImportIdentifierPlanCompilesCollidingRootAndSubcommand(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/importplan\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issue456ImportsSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "flag", "flag.go"), `package flag
+
+type Value string
+
+const Count = 1
+
+func Parse(value string) (Value, error) { return Value(value), nil }
+`)
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "first", "shared", "shared.go"), "package shared\n\nfunc Parse(value string) (string, error) { return value, nil }\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "second", "shared", "shared.go"), "package shared\n\nfunc Parse(value string) (string, error) { return value, nil }\nfunc Generate() (string, error) { return \"generated\", nil }\n")
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	rootSource, err := os.ReadFile(filepath.Join(dir, "cmd", "plan", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated root: %v", err)
+	}
+	for _, want := range []string{`pkg_os "example.com/importplan"`, "pkg_os.Root", `pkg_flag "example.com/importplan/deps/flag"`, "pkg_flag.Count"} {
+		if !strings.Contains(string(rootSource), want) {
+			t.Errorf("generated root missing %q:\n%s", want, rootSource)
+		}
+	}
+	if strings.Contains(string(rootSource), "flag.Count") && !strings.Contains(string(rootSource), "pkg_flag.Count") {
+		t.Fatalf("root action did not use the planned alias:\n%s", rootSource)
+	}
+
+	serveSource, err := os.ReadFile(filepath.Join(dir, "cmd", "plan", "serve.go"))
+	if err != nil {
+		t.Fatalf("read generated subcommand: %v", err)
+	}
+	for _, want := range []string{
+		`pkg_flag "example.com/importplan/deps/flag"`, "pkg_flag.Value", "pkg_flag.Parse(value)",
+		`"example.com/importplan/deps/first/shared"`, "shared.Parse(value)",
+		`shared_2 "example.com/importplan/deps/second/shared"`, "shared_2.Parse(value)", "shared_2.Generate()", "pkg_os.Serve",
+	} {
+		if !strings.Contains(string(serveSource), want) {
+			t.Errorf("generated subcommand missing %q:\n%s", want, serveSource)
+		}
+	}
+
+	command := exec.Command("go", "test", "-run=^$", "./...")
+	command.Dir = dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("generated module with colliding imports did not compile: %v\n%s", err, output)
+	}
+}
+
+func TestDeduplicateAndSortImportsPlansDeterministicUniqueIdentifiers(t *testing.T) {
+	plan := deduplicateAndSortImports([]templateImport{
+		{Path: "example.com/a/shared"},
+		{Path: "example.com/b/shared"},
+		{Path: "example.com/external/flag", Alias: "flag"},
+		{Path: "flag"},
+		{Path: "os"},
+	})
+	identifiers := importIdentifiers(plan)
+	for importPath, want := range map[string]string{
+		"flag":                      "flag",
+		"os":                        "os",
+		"example.com/a/shared":      "shared",
+		"example.com/b/shared":      "shared_2",
+		"example.com/external/flag": "pkg_flag",
+	} {
+		if got := identifiers[importPath]; got != want {
+			t.Errorf("identifier for %s = %q, want %q", importPath, got, want)
+		}
+	}
+	if repeated := importIdentifiers(deduplicateAndSortImports([]templateImport{
+		{Path: "os"}, {Path: "example.com/b/shared"}, {Path: "flag"}, {Path: "example.com/external/flag", Alias: "flag"}, {Path: "example.com/a/shared"},
+	})); !reflect.DeepEqual(identifiers, repeated) {
+		t.Fatalf("plan changed with input order:\nfirst: %#v\nsecond: %#v", identifiers, repeated)
+	}
+}
+
+func TestGenerate_ImplicitNestedCommandPathsProduceOneExecutable(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/gogenmux\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "commands.go"), issue478NestedCommandsSource)
+
+	generate := func() {
+		t.Helper()
+		if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+			t.Fatalf("Generate failed: %v", err)
+		}
+	}
+	generate()
+	if _, err := os.Stat(filepath.Join(dir, "cmd", "gogenmux")); err != nil {
+		t.Fatalf("single generated executable tree is missing: %v", err)
+	}
+	for _, unexpected := range []string{"generate", "inspect", "validate", "show"} {
+		if _, err := os.Stat(filepath.Join(dir, "cmd", unexpected)); !os.IsNotExist(err) {
+			t.Fatalf("generated a separate %q executable tree", unexpected)
+		}
+	}
+
+	compile := exec.Command("go", "test", "-run=^$", "./...")
+	compile.Dir = dir
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("generated nested module did not compile: %v\n%s", err, output)
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		command := exec.Command("go", append([]string{"run", "./cmd/gogenmux"}, args...)...)
+		command.Dir = dir
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("run %v: %v\n%s", args, err, output)
+		}
+		return string(output)
+	}
+	for _, scenario := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"generate", "--name", "Ada"}, want: "generate:Ada"},
+		{args: []string{"inspect", "README.md"}, want: "inspect:README.md"},
+		{args: []string{"validate", "--strict"}, want: "validate:true"},
+		{args: []string{"config", "show", "--format", "json"}, want: "show:json"},
+		{args: []string{"help"}, want: "gogenmux <subcommand>"},
+	} {
+		if output := run(scenario.args...); !strings.Contains(output, scenario.want) {
+			t.Errorf("run %v output = %q, want %q", scenario.args, output, scenario.want)
+		}
+	}
+
+	first, err := os.ReadFile(filepath.Join(dir, "cmd", "gogenmux", "root.go"))
+	if err != nil {
+		t.Fatalf("read first generated root: %v", err)
+	}
+	generate()
+	second, err := os.ReadFile(filepath.Join(dir, "cmd", "gogenmux", "root.go"))
+	if err != nil {
+		t.Fatalf("read repeated generated root: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("repeat implicit nested generation changed root.go")
+	}
+}
+
 func TestGenerate_Clean(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/cleantest\n\ngo 1.22\n")
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), issueRuntimeSource)
 	writeRuntimeFixture(t, filepath.Join(dir, "parserpkg", "parser.go"), issueRuntimeParserSource)
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
 	customFile := filepath.Join(dir, "cmd", "app", "custom.go")
 	writeRuntimeFixture(t, customFile, "package app\n// Custom user file\n")
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, true, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate with clean failed: %v", err)
 	}
 
@@ -480,7 +812,7 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 				"main.go": &fstest.MapFile{Data: []byte("package main\n\n// Root is a subcommand `app`\n" + tt.comment + "func Root() {}\n")},
 			}
 			writer := NewCollectingFileWriter()
-			err := GenerateWithFS(input, writer, ".", "", "commentv1", tt.cliParser, nil, false, false, nil, false, false, "", "", "", tt.ops...)
+			err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", append(tt.ops, GenerateOptions{CLIParser: tt.cliParser})...)
 			if err != nil {
 				t.Fatalf("GenerateWithFS unexpectedly failed with implemented go-flag: %v", err)
 			}
@@ -517,7 +849,7 @@ func App(
 }
 `)
 
-	if err := Generate(dir, "", "commentv1", "gnu", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -635,7 +967,7 @@ func generateWithOverlay(
 		fsys[k] = v
 	}
 	writer := NewCollectingFileWriter()
-	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", cliParser, nil, false, false, replacements, false, false, "", "", "", fsys)
+	err := GenerateWithFS(fsys, writer, ".", "", "commentv1", nil, false, false, replacements, false, false, "", "", "", fsys, GenerateOptions{CLIParser: cliParser})
 	if err != nil {
 		t.Fatalf("GenerateWithFS failed: %v", err)
 	}
@@ -701,7 +1033,7 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 
 	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), appCode)
 
-	if err := Generate(dir, "", "commentv1", "go-flag", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+	if err := GenerateCLI(dir, "", "commentv1", "go-flag", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
@@ -764,6 +1096,177 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
 }
 
+func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
+	input := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/outputinventory\n\ngo 1.22\n")},
+		"app.go": &fstest.MapFile{Data: []byte(outputInventorySource)},
+	}
+	generate := func(writer *CollectingFileWriter) {
+		t.Helper()
+		err := GenerateWithFS(input, writer, ".", "man", "commentv1", nil,
+			false, false, nil, false, false, "", "", "")
+		if err != nil {
+			t.Fatalf("GenerateWithFS failed: %v", err)
+		}
+	}
+
+	first := NewCollectingFileWriter()
+	generate(first)
+	want := []string{
+		"cmd/agents.md",
+		"cmd/app/child.go",
+		"cmd/app/child_test.go",
+		"cmd/app/flag_helpers.go",
+		"cmd/app/main.go",
+		"cmd/app/root.go",
+		"cmd/app/root_test.go",
+		"cmd/app/templates/app_usage.txt",
+		"cmd/app/templates/child_usage.txt",
+		"cmd/app/templates/templates.go",
+		"cmd/errors.go",
+		"man/app-child.1",
+	}
+	for _, name := range want {
+		content, ok := first.Files[name]
+		if !ok {
+			t.Errorf("missing generated artifact %q; got %v", name, first.Files)
+			continue
+		}
+		if strings.HasSuffix(name, ".go") {
+			if _, err := parser.ParseFile(token.NewFileSet(), name, content, parser.AllErrors); err != nil {
+				t.Errorf("generated Go source %q does not parse: %v", name, err)
+			}
+			if strings.Contains(string(content), `"github.com/arran4/go-subcommand"`) {
+				t.Errorf("generated consumer source %q has a gosubc runtime import", name)
+			}
+		}
+	}
+
+	second := NewCollectingFileWriter()
+	generate(second)
+	if len(first.Files) != len(second.Files) {
+		t.Fatalf("artifact count changed on repeat generation: %d then %d", len(first.Files), len(second.Files))
+	}
+	for name, firstContent := range first.Files {
+		secondContent, ok := second.Files[name]
+		if !ok || string(firstContent) != string(secondContent) {
+			t.Errorf("generated artifact %q changed on repeat generation", name)
+		}
+	}
+}
+
+func TestGenerate_LegacyAPI_Compiles(t *testing.T) {
+	// Verify signature exists and matches compilation
+	accept := func(_ func(
+		dir string,
+		manDir string,
+		parserName string,
+		paths []string,
+		recursive bool,
+		force bool,
+		clean bool,
+		replaceTemplates []string,
+		projectProvenance bool,
+		timestamp bool,
+		provVersion string,
+		provCommit string,
+		provDate string,
+	) error) {
+	}
+
+	accept(Generate)
+}
+
+func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
+	// Verify signature exists and matches compilation
+	accept := func(_ func(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error) {
+	}
+
+	accept(GenerateWithFS)
+}
+
+func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
+	// 1. Verify signature exists and matches compilation
+	accept := func(_ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error) {
+	}
+	accept(GenerateCLI)
+
+	// 2. Verify actual forwarding of --cli-parser to the internal system
+	// Using the reserved identifier "plus-minus" ensures we get the exact rejection error
+	// directly from resolveCLIParser to prove the string made it through GenerateCLI
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
+
+	err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", "")
+	if err == nil {
+		t.Fatal("Expected GenerateCLI with 'plus-minus' to fail, but it succeeded")
+	}
+	if !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	}
+}
+
+func TestGenerateCLICommandControlsGoGenerateDirective(t *testing.T) {
+	generate := func(t *testing.T, emitGoGenerate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/directive\n\ngo 1.22\n")
+		writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")
+		if err := GenerateCLICommand(dir, "", "commentv1", "gnu", nil, false, true, false, nil, false, false, emitGoGenerate, "", "", ""); err != nil {
+			t.Fatalf("GenerateCLICommand: %v", err)
+		}
+		output, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "main.go"))
+		if err != nil {
+			t.Fatalf("read generated main.go: %v", err)
+		}
+		return string(output)
+	}
+
+	if output := generate(t, true); !strings.Contains(output, "//go:generate") {
+		t.Fatalf("--emit-go-generate=true did not emit the directive:\n%s", output)
+	}
+	if output := generate(t, false); strings.Contains(output, "//go:generate") {
+		t.Fatalf("--emit-go-generate=false did not suppress the directive:\n%s", output)
+	}
+}
+
+func TestGosubcGenerateEmitGoGenerateFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("self-hosted CLI integration test")
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	generate := func(t *testing.T, emitGoGenerate bool) string {
+		t.Helper()
+		dir := t.TempDir()
+		writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/directivecli\n\ngo 1.22\n")
+		writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")
+
+		command := exec.Command("go", "run", "./cmd/gosubc", "gen", "--dir", dir, "--project-provenance=false", "--timestamp=false", "--emit-go-generate="+strconv.FormatBool(emitGoGenerate))
+		command.Dir = workingDir
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("gosubc gen --emit-go-generate=%t: %v\n%s", emitGoGenerate, err, output)
+		}
+
+		output, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "main.go"))
+		if err != nil {
+			t.Fatalf("read generated main.go: %v", err)
+		}
+		return string(output)
+	}
+
+	if output := generate(t, true); !strings.Contains(output, "//go:generate") {
+		t.Fatalf("CLI --emit-go-generate=true did not emit the directive:\n%s", output)
+	}
+	if output := generate(t, false); strings.Contains(output, "//go:generate") {
+		t.Fatalf("CLI --emit-go-generate=false did not suppress the directive:\n%s", output)
+	}
+}
+
 func TestGenerate_ManWhitespace(t *testing.T) {
 	fsys := fstest.MapFS{
 		"go.mod":      &fstest.MapFile{Data: []byte("module example.com/app\n\ngo 1.25.0\n")},
@@ -774,7 +1277,7 @@ func TestGenerate_ManWhitespace(t *testing.T) {
 	generate := func() []byte {
 		t.Helper()
 		writer := NewCollectingFileWriter()
-		if err := GenerateWithFS(fsys, writer, ".", "man", "commentv1", "gnu", nil, false, false, nil, false, false, "", "", ""); err != nil {
+		if err := GenerateWithFS(fsys, writer, ".", "man", "commentv1", nil, false, false, nil, false, false, "", "", ""); err != nil {
 			t.Fatalf("GenerateWithFS failed: %v", err)
 		}
 		content, ok := writer.Files["man/app-cmd1.1"]

@@ -19,9 +19,9 @@ var (
 
 // Provenance
 var (
-	GeneratorVersion = "v0.0.0-20260927120904-080dbb0f6bf7+dirty"
-	GeneratedAt      = "2026-09-27T12:16:35Z"
-	ProjectCommit    = "080dbb0f6bf74efce584eb0e7a61a3d8a475a86d"
+	GeneratorVersion = "(devel)"
+	GeneratedAt      = "2026-10-02T07:38:28Z"
+	ProjectCommit    = "1cdffa4ca3000b26ecd4f0950bf6304bd1c5359e"
 )
 
 func main() {

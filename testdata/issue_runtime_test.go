@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"example.com/e2e"
+)
 
 func TestRuntimeRequirements(t *testing.T) {
 	root, err := NewRoot("app", "", "", "")
@@ -23,15 +29,18 @@ func TestRuntimeRequirements(t *testing.T) {
 	}
 
 	err = root.Execute([]string{
-		"--config", "config.yml", "parent", "--dir", "workspace", "child",
+		"--config", "config.yml", "parent", "--dir", "renamed-value", "--same-dir", "same-name-value", "child",
 		"-zxwq=123", "-Vfirst", "-V=second", "--ptr=0",
 		"--parsed", "value", "--local-parsed", "value",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := child.dir, "workspace"; got != want {
-		t.Fatalf("inherited parent value = %q, want %q", got, want)
+	if got, want := child.dir, "renamed-value"; got != want {
+		t.Fatalf("renamed inherited parent value = %q, want %q", got, want)
+	}
+	if got, want := child.sameDir, "same-name-value"; got != want {
+		t.Fatalf("same-name inherited parent value = %q, want %q", got, want)
 	}
 	if !child.z || !child.x || !child.w || child.q != "123" {
 		t.Fatalf("GNU short flags not parsed: z=%t x=%t w=%t q=%q", child.z, child.x, child.w, child.q)
@@ -45,8 +54,8 @@ func TestRuntimeRequirements(t *testing.T) {
 	if child.parsed != "imported:value" || child.localParsed != "local:value" || child.generated != "generated" {
 		t.Fatalf("parser/generator values = %q, %q, %q", child.parsed, child.localParsed, child.generated)
 	}
-	if len(events) != 2 || events[0] != "root" || events[1] != "child" {
-		t.Fatalf("action order = %#v", events)
+	if len(events) != 1 || events[0] != "child" {
+		t.Fatalf("recognized child should run without the root action: %#v", events)
 	}
 	second := parent.NewParentChild()
 	second.CommandAction = func(*ParentChild) error { return nil }
@@ -63,5 +72,61 @@ func TestRuntimeRequirements(t *testing.T) {
 	}
 	if err := missing.Execute(nil); err == nil {
 		t.Fatal("missing required root flag did not fail")
+	}
+
+	rootFailure, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = rootFailure.Execute([]string{"--config", "config.yml"})
+	assertSingleActionContext(t, err, "app failed: root action failed")
+
+	childFailure := rootFailure.NewParent().NewParentChild()
+	err = childFailure.Execute(nil)
+	assertSingleActionContext(t, err, "child failed: child action failed")
+
+	rootOnly, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootCalls := 0
+	rootOnly.CommandAction = func(*RootCmd) error {
+		rootCalls++
+		return nil
+	}
+	for _, args := range [][]string{
+		{"--config", "config.yml", "version"},
+		{"--config", "config.yml", "help"},
+		{"--config", "config.yml", "usage"},
+	} {
+		if err := rootOnly.Execute(args); err != nil {
+			t.Fatalf("Execute(%q): %v", args, err)
+		}
+	}
+	if rootCalls != 0 {
+		t.Fatalf("built-in commands called root action %d times", rootCalls)
+	}
+	if err := rootOnly.Execute([]string{"--config", "config.yml", "--", "parent"}); err != nil {
+		t.Fatal(err)
+	}
+	if rootCalls != 1 {
+		t.Fatalf("-- should preserve root positional semantics; root calls = %d", rootCalls)
+	}
+}
+
+func assertSingleActionContext(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected action error")
+	}
+	if got := err.Error(); got != want {
+		t.Fatalf("action error = %q, want %q", got, want)
+	}
+	if strings.Count(err.Error(), "failed:") != 1 {
+		t.Fatalf("action error has duplicate context: %q", err)
+	}
+	var actionErr *app.ActionError
+	if !errors.As(err, &actionErr) {
+		t.Fatalf("action error does not preserve *app.ActionError: %v", err)
 	}
 }
