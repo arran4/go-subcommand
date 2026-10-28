@@ -804,11 +804,6 @@ func (c *Command) DefaultRouteParts() []string {
 	if c == nil || c.DefaultRoute == "" {
 		return nil
 	}
-// DefaultRouteParts splits DefaultRoute into whitespace-delimited tokens.
-func (c *Command) DefaultRouteParts() []string {
-	if c == nil || c.DefaultRoute == "" {
-		return nil
-	}
 	return strings.Fields(c.DefaultRoute)
 }
 
@@ -886,7 +881,6 @@ func (sc *SubCommand) HasDistinctRecursiveSubcommands() bool {
 		}
 	}
 	return false
-}
 }
 
 func (sc *SubCommand) ParentCmdName() string {
