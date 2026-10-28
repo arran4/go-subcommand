@@ -253,6 +253,18 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
+### Root Actions and Subcommand Dispatch
+
+When an application defines both a root action and subcommands, a recognized
+subcommand (including the built-in `version`, `help`, and `usage` commands) is
+dispatched without running the root action. Root flags are still parsed and
+validated before dispatch. `--` preserves root positional-argument semantics,
+so a token after it is not treated as a subcommand.
+
+An error returned by a durable command action is annotated once with the
+command name (for example, `app failed: ...`). The generated wrapper uses `%w`,
+so callers can still use `errors.Is` and `errors.As` with the underlying error.
+
 ### Parent Flags (Inheritance)
 
 Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.
