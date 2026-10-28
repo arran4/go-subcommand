@@ -18,6 +18,9 @@ import (
 //go:embed cmd/templates/usage.txt.gotmpl testdata/*.txtar
 var templatesFS embed.FS
 
+//go:embed testdata/usage_io_streams.json
+var usageIOStreamsFixture []byte
+
 func TestUsageTemplate(t *testing.T) {
 	// Parse the template
 	tmplContent, err := templatesFS.ReadFile("cmd/templates/usage.txt.gotmpl")
@@ -31,6 +34,7 @@ func TestUsageTemplate(t *testing.T) {
 		"upper":    strings.ToUpper,
 		"replace":  strings.ReplaceAll,
 		"add":      func(a, b int) int { return a + b },
+		"list":     func(args ...interface{}) []interface{} { return args },
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 	}
 
@@ -123,6 +127,59 @@ func TestUsageTemplate(t *testing.T) {
 				t.Errorf("Output mismatch for %s:\nExpected:\n%q\nGot:\n%q", entry.Name(), string(expectedOutput), buf.String())
 			}
 		})
+	}
+}
+
+func TestUsageTemplateIOStreams(t *testing.T) {
+	tmplContent, err := templatesFS.ReadFile("cmd/templates/usage.txt.gotmpl")
+	if err != nil {
+		t.Fatalf("read usage template: %v", err)
+	}
+	tmpl, err := template.New("usage").Funcs(template.FuncMap{
+		"lower":    strings.ToLower,
+		"title":    func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":    strings.ToUpper,
+		"replace":  strings.ReplaceAll,
+		"add":      func(a, b int) int { return a + b },
+		"list":     func(args ...interface{}) []interface{} { return args },
+		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
+	}).Parse(string(tmplContent))
+	if err != nil {
+		t.Fatalf("parse usage template: %v", err)
+	}
+
+	var input struct {
+		model.SubCommand
+		Recursive bool
+	}
+	if err := json.Unmarshal(usageIOStreamsFixture, &input); err != nil {
+		t.Fatalf("parse IO streams fixture: %v", err)
+	}
+	data := struct {
+		*model.SubCommand
+		Recursive bool
+	}{SubCommand: &input.SubCommand, Recursive: input.Recursive}
+	populateParentsUsage(data.SubCommand, nil)
+
+	var output bytes.Buffer
+	if err := tmpl.Execute(&output, data); err != nil {
+		t.Fatalf("execute usage template: %v", err)
+	}
+	for _, want := range []string{
+		"--reader io.Reader",
+		"(default: stdin via '-')",
+		"Input reader; use '-' for stdin",
+		"--read-closer io.ReadCloser",
+		"Closable input; use '-' for stdin",
+		"--writer io.Writer",
+		"(default: stdout via '-')",
+		"Output writer; use '-' for stdout",
+		"--write-closer io.WriteCloser",
+		"Closable output; use '-' for stdout",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("generated usage missing %q:\n%s", want, output.String())
+		}
 	}
 }
 

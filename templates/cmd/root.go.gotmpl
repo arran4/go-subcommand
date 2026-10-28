@@ -166,8 +166,9 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
-      if e, ok := err.(*cmd.ErrExitCode); ok {
-        return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
       }
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
@@ -189,7 +190,41 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["help"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
+				{{- if .SubCommands }}
 				{{- if minGoVersion "1.21" .GoVersion }}
+				deep := slices.Contains(args, "-deep")
+				{{- else }}
+				deep := false
+				{{- end }}
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						{{- if not (minGoVersion "1.21" .GoVersion) }}
+						deep = true
+						{{- end }}
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				{{- else if minGoVersion "1.21" .GoVersion }}
 				if slices.Contains(args, "-deep") {
 					c.UsageRecursive()
 					return nil
@@ -211,7 +246,41 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["usage"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
+				{{- if .SubCommands }}
 				{{- if minGoVersion "1.21" .GoVersion }}
+				deep := slices.Contains(args, "-deep")
+				{{- else }}
+				deep := false
+				{{- end }}
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						{{- if not (minGoVersion "1.21" .GoVersion) }}
+						deep = true
+						{{- end }}
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return fmt.Errorf("unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				{{- else if minGoVersion "1.21" .GoVersion }}
 				if slices.Contains(args, "-deep") {
 					c.UsageRecursive()
 					return nil
@@ -246,9 +315,13 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
+	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
 	{{- if or .IsWriter .IsReader }}
 	{{- $hasFile = true }}
+	{{- end }}
+	{{- if or .IsPositional .IsVarArg }}
+	{{- $needsRemainingArgs = true }}
 	{{- end }}
 	{{- end }}
 	{{- if $hasFile }}
@@ -261,17 +334,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}()
 	{{- end }}
-	{{- range .Parameters }}
-	{{- if .HasGenerator }}
-	{
-		v, err := {{.GeneratorCall}}
-		if err != nil {
-			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
-		}
-		c.{{.Name}} = v
-	}
-	{{- end }}
-	{{- end }}
 	{{- if eq .ResolvedCLIParser "gnu" }}
 	{{- template "cli_parser_gnu" . }}
 	{{- else if eq .ResolvedCLIParser "go-flag" }}
@@ -279,14 +341,45 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 
 	{{- if .HasRequiredFlags }}
-	{{- range .Parameters }}
-	{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
-	if !seenFlags["{{.Name}}"] {
-		return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+	{{- if .DefaultRoute }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		isHelpRequest = true
 	}
 	{{- end }}
 	{{- end }}
+	if !isHelpRequest {
+		{{- range .Parameters }}
+		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
+		if !seenFlags["{{.Name}}"] {
+			return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+		}
+		{{- end }}
+		{{- end }}
+	}
 	{{- end }}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		{{- if and .FunctionName .SubCommands (not $needsRemainingArgs) (ne .ResolvedCLIParser "go-flag") }}
+		c.Usage()
+		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		{{- end }}
+	}
 
 	{{- if .FunctionName }}
 
@@ -300,23 +393,50 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	{{- end }}
 	{{- end }}
+	{{- range .Parameters }}
+	{{- if .HasGenerator }}
+	{
+		v, err := {{.GeneratorCall}}
+		if err != nil {
+			return fmt.Errorf("failed to generate {{.Name}}: %w", err)
+		}
+		c.{{.Name}} = v
+	}
+	{{- end }}
+	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
+			return err
 		}
 	}
 	{{- end }}
-
-	if !dashDashSeen && len(remainingArgs) > 0 {
-		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
-			return cmd().Execute(remainingArgs[1:])
-		}
-	}
 
 	{{- if .FunctionName}}
 	return nil
 
 	{{- else}}
+	{{- if .DefaultRoute }}
+	{{- $routeParts := .DefaultRouteParts }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		{{- if gt (len $routeParts) 1 }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+		{{- else }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute(nil)
+		{{- end }}
+	}
+	{{- else }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		if sub, ok := c.Commands["{{index $routeParts 0 | lower}}"]; ok {
+			{{- if gt (len $routeParts) 1 }}
+			return sub().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+			{{- else }}
+			return sub().Execute(nil)
+			{{- end }}
+		}
+	}
+	{{- end }}
+	{{- end }}
 	c.Usage()
 	if len(remainingArgs) > 0 {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])

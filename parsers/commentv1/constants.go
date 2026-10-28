@@ -22,6 +22,23 @@ const (
 	// Example:
 	//   aliases: mycmd, cmd
 	DirectiveAliasesPrefix = "aliases:"
+
+	// DirectiveDefaultRoute is the prefix for defining a default route for bare invocation.
+	// Example:
+	//   default route: help simple
+	//   default route: tools docs simple
+	DirectiveDefaultRoute = "default route:"
+
+	// DirectiveDefaultCommand is the prefix for defining a default command for bare invocation.
+	// Example:
+	//   default command: tools docs simple
+	DirectiveDefaultCommand = "default command:"
+
+	// DirectiveDefault is the prefix for defining a default route or setting.
+	// Example:
+	//   default: help simple
+	//   default: true
+	DirectiveDefault = "default:"
 )
 
 // Prefixes used to identify parameter definitions in comments.
