@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"unicode/utf8"
 
 	"github.com/arran4/go-subcommand/model"
 	"golang.org/x/text/cases"
@@ -27,40 +28,133 @@ func escapeUsageText(s string) string {
 	return usageTemplateDelimsReplacer.Replace(s)
 }
 
-type runtimeUsageSubcommand struct {
-	Label       string
-	Description string
+func displayWidth(s string) int {
+	width := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		width++
+	}
+	return width
 }
 
-func runtimeUsageFuncs() template.FuncMap {
+func padRight(s string, width int) string {
+	w := displayWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
+func wrapText(text string, indent int, width int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if width <= indent {
+		width = indent + 10
+	}
+	avail := width - indent
+	indentStr := "\n" + strings.Repeat(" ", indent)
+
+	var out strings.Builder
+	lines := strings.Split(text, "\n")
+
+	for i, line := range lines {
+		words := strings.Fields(line)
+		if len(words) == 0 {
+			if i > 0 {
+				out.WriteString("\n")
+			}
+			continue
+		}
+		if i > 0 {
+			out.WriteString(indentStr)
+		}
+
+		currentLen := 0
+		for j, word := range words {
+			wordLen := displayWidth(word)
+			if j > 0 && currentLen+1+wordLen > avail {
+				out.WriteString(indentStr)
+				currentLen = 0
+			} else if j > 0 {
+				out.WriteString(" ")
+				currentLen++
+			}
+			out.WriteString(word)
+			currentLen += wordLen
+		}
+	}
+	return out.String()
+}
+
+func formatUsageRow(prefix, descStr string, width int) string {
+	if strings.TrimSpace(descStr) == "" {
+		return strings.TrimRight(prefix, " ")
+	}
+	indent := 4 + displayWidth(prefix)
+	return prefix + wrapText(descStr, indent, width)
+}
+
+func formatHelpRow(labelWidth int, label, descStr string, width int) string {
+	if strings.TrimSpace(descStr) == "" {
+		return label
+	}
+	prefix := padRight(label, labelWidth) + " "
+	return formatUsageRow(prefix, descStr, width)
+}
+
+func formatFlagRow(maxFlag, maxDef int, flagStr, defStr, descStr string, width int) string {
+	var prefix string
+	if maxDef > 0 {
+		prefix = padRight(flagStr, maxFlag) + " " + padRight(defStr, maxDef) + " "
+	} else if defStr != "" {
+		prefix = padRight(flagStr, maxFlag) + " " + defStr + " "
+	} else {
+		prefix = padRight(flagStr, maxFlag) + " "
+	}
+	return formatUsageRow(prefix, descStr, width)
+}
+
+func wrapFlag(maxFlag, maxDef, width int, flagStr, defStr, descStr string) string {
+	if strings.TrimSpace(descStr) == "" {
+		return ""
+	}
+	indent := 4 + maxFlag + 1
+	if maxDef > 0 {
+		indent += maxDef + 1
+	}
+	return wrapText(descStr, indent, width)
+}
+
+func runtimeUsageFuncsWithWidth(width int) template.FuncMap {
 	return template.FuncMap{
-		"subcommand": func(label, description string) runtimeUsageSubcommand {
-			return runtimeUsageSubcommand{
-				Label:       label,
-				Description: description,
-			}
+		"formatHelpRow": func(labelWidth int, label, descStr string) string {
+			return formatHelpRow(labelWidth, label, descStr, width)
 		},
-		"subcommands": func(items ...runtimeUsageSubcommand) []runtimeUsageSubcommand {
-			return items
-		},
-		"subcommandWidth": func(items []runtimeUsageSubcommand) int {
-			width := 0
-			for _, item := range items {
-				if len(item.Label) > width {
-					width = len(item.Label)
-				}
-			}
-			return width
+		"formatFlagRow": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
+			return formatFlagRow(maxFlag, maxDef, flagStr, defStr, descStr, width)
 		},
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
-			return descStr
+			return wrapFlag(maxFlag, maxDef, width, flagStr, defStr, descStr)
 		},
 	}
 }
 
-func renderRuntimeUsageTemplate(t *testing.T, generatedTemplate string, recursive bool) string {
+func renderRuntimeUsageTemplateAtWidth(t *testing.T, generatedTemplate string, recursive bool, width int) string {
 	t.Helper()
-	tmpl, err := template.New("generated").Funcs(runtimeUsageFuncs()).Parse(generatedTemplate)
+	tmpl, err := template.New("generated").Funcs(runtimeUsageFuncsWithWidth(width)).Parse(generatedTemplate)
 	if err != nil {
 		t.Fatalf("Generated content is not a valid runtime template: %v\nContent:\n%s", err, generatedTemplate)
 	}
@@ -75,9 +169,26 @@ func renderRuntimeUsageTemplate(t *testing.T, generatedTemplate string, recursiv
 		Exploit:   "EXPLOITED_VALUE",
 	})
 	if err != nil {
-		t.Fatalf("Failed to execute generated runtime usage template (recursive=%v): %v\nContent:\n%s", recursive, err, generatedTemplate)
+		t.Fatalf("Failed to execute generated runtime usage template (recursive=%v, width=%d): %v\nContent:\n%s", recursive, width, err, generatedTemplate)
 	}
 	return out.String()
+}
+
+func renderRuntimeUsageTemplate(t *testing.T, generatedTemplate string, recursive bool) string {
+	t.Helper()
+	return renderRuntimeUsageTemplateAtWidth(t, generatedTemplate, recursive, 80)
+}
+
+func stage1UsageFuncs() template.FuncMap {
+	return template.FuncMap{
+		"lower":           strings.ToLower,
+		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":           strings.ToUpper,
+		"replace":         strings.ReplaceAll,
+		"escapeUsageText": escapeUsageText,
+		"add":             func(a, b int) int { return a + b },
+		"list":            func(args ...interface{}) []interface{} { return args },
+	}
 }
 
 func TestUsageTemplate(t *testing.T) {
@@ -87,17 +198,7 @@ func TestUsageTemplate(t *testing.T) {
 		t.Fatalf("failed to read usage.txt.gotmpl: %v", err)
 	}
 
-	funcs := template.FuncMap{
-		"lower":           strings.ToLower,
-		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":           strings.ToUpper,
-		"replace":         strings.ReplaceAll,
-		"escapeUsageText": escapeUsageText,
-		"add":             func(a, b int) int { return a + b },
-		"wrapFlag":        func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
-	}
-
-	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))
+	tmpl, err := template.New("usage").Funcs(stage1UsageFuncs()).Parse(string(tmplContent))
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
@@ -206,17 +307,7 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 		t.Fatalf("failed to read usage.txt.gotmpl: %v", err)
 	}
 
-	funcs := template.FuncMap{
-		"lower":           strings.ToLower,
-		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":           strings.ToUpper,
-		"replace":         strings.ReplaceAll,
-		"escapeUsageText": escapeUsageText,
-		"add":             func(a, b int) int { return a + b },
-		"wrapFlag":        func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
-	}
-
-	tmpl, err := template.New("usage").Funcs(funcs).Parse(string(tmplContent))
+	tmpl, err := template.New("usage").Funcs(stage1UsageFuncs()).Parse(string(tmplContent))
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
@@ -257,12 +348,19 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 		stage1 := generated.String()
 
 		for _, requiredExpr := range []string{
-			"{{- $commands := subcommands -}}",
-			"{{- $width := subcommandWidth $commands -}}",
-			`{{printf "%-*s" $width .Label}} {{.Description}}`,
+			`{{formatHelpRow 38 "service up" "Start service"}}`,
+			`{{formatHelpRow 38 "service silent-group" ""}}`,
+			`{{formatHelpRow 38 "service silent-group deep-leaf-command" "Nested leaf action"}}`,
+			`{{formatHelpRow 12 "up" "Start service"}}`,
+			`{{formatHelpRow 12 "silent-group" ""}}`,
 		} {
 			if !strings.Contains(stage1, requiredExpr) {
-				t.Errorf("stage 1 output missing runtime formatting expression %q:\n%s", requiredExpr, stage1)
+				t.Errorf("stage 1 output missing inline runtime formatting call %q:\n%s", requiredExpr, stage1)
+			}
+		}
+		for _, forbidden := range []string{"subcommands", "subcommandWidth", "range $commands", "%-40s", "%-10s"} {
+			if strings.Contains(stage1, forbidden) {
+				t.Errorf("stage 1 output must not contain %q:\n%s", forbidden, stage1)
 			}
 		}
 
@@ -273,10 +371,12 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 			"Manage services",
 			"",
 			"Subcommands:",
+			"",
 			"    up           Start service",
 			"    silent-group",
 			"    help         Print this help message",
 			"    usage        Print this usage message",
+			"",
 			"",
 		}, "\n")
 		if shallow != wantShallow {
@@ -290,11 +390,13 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 			"Manage services",
 			"",
 			"Subcommands:",
+			"",
 			"    service up                             Start service",
 			"    service silent-group",
 			"    service silent-group deep-leaf-command Nested leaf action",
 			"    help                                   Print this help message",
 			"    usage                                  Print this usage message",
+			"",
 			"",
 		}, "\n")
 		if recursive != wantRecursive {
@@ -305,6 +407,137 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 			if strings.HasSuffix(line, " ") {
 				t.Errorf("line has trailing space: %q", line)
 			}
+		}
+	})
+
+	t.Run("hanging_indent_wrapping_across_terminal_widths_and_edge_cases", func(t *testing.T) {
+		root := &model.Command{MainCmdName: "app"}
+		skill := &model.SubCommand{
+			Command:               root,
+			SubCommandName:        "skill",
+			SubCommandDescription: "Manage skills",
+			Parameters: []*model.FunctionParameter{
+				{
+					Name:        "config",
+					Type:        "string",
+					Default:     "config.json",
+					Description: "Configuration file path to load before executing skill actions.\n\nSecond paragraph explaining override precedence.",
+					DeclaredIn:  "skill",
+				},
+				{
+					Name:        "url",
+					Type:        "string",
+					Description: "Registry endpoint https://registry.example.com/very/long/path/that/exceeds/narrow/columns for fetching.",
+					DeclaredIn:  "skill",
+				},
+				{
+					Name:        "quiet",
+					Type:        "bool",
+					Default:     "false",
+					Description: "",
+					DeclaredIn:  "skill",
+				},
+			},
+			SubCommands: []*model.SubCommand{
+				{
+					Command:               root,
+					SubCommandName:        "install",
+					SubCommandDescription: "Installs an AI agent skill and configures it for the selected environment.",
+				},
+				{
+					Command:               root,
+					SubCommandName:        "café",
+					SubCommandDescription: "Unicode subcommand description that wraps cleanly at narrow terminal widths.",
+				},
+			},
+		}
+		populateParentsUsage(skill, nil)
+
+		var generated bytes.Buffer
+		if err := tmpl.Execute(&generated, skill); err != nil {
+			t.Fatalf("stage 1 execute failed: %v", err)
+		}
+		stage1 := generated.String()
+
+		for _, required := range []string{
+			`{{formatHelpRow 13 "skill install"`,
+			`{{formatHelpRow 7 "install"`,
+			`{{formatHelpRow 7 "café"`,
+			`{{formatFlagRow 17 26 "--config string" "(default: \"config.json\")"`,
+			`{{formatFlagRow 17 26 "--url string" ""`,
+			`{{formatFlagRow 17 26 "--quiet" "(default: false)" ""}}`,
+		} {
+			if !strings.Contains(stage1, required) {
+				t.Errorf("stage 1 output missing %q:\n%s", required, stage1)
+			}
+		}
+
+		// Render recursive at narrow width 44:
+		// indent for recursive commands is 4 + 13 + 1 = 18 spaces.
+		narrowRecursive := renderRuntimeUsageTemplateAtWidth(t, stage1, true, 44)
+		wantInstallWrapped := strings.Join([]string{
+			"    skill install Installs an AI agent skill",
+			"                  and configures it for the",
+			"                  selected environment.",
+		}, "\n")
+		if !strings.Contains(narrowRecursive, wantInstallWrapped) {
+			t.Errorf("narrow recursive output did not wrap command with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantInstallWrapped, narrowRecursive)
+		}
+
+		// Render shallow at width 38:
+		// indent for shallow commands is 4 + 7 + 1 = 12 spaces.
+		narrowShallow := renderRuntimeUsageTemplateAtWidth(t, stage1, false, 38)
+		wantCafeWrapped := strings.Join([]string{
+			"    café    Unicode subcommand",
+			"            description that wraps",
+			"            cleanly at narrow terminal",
+			"            widths.",
+		}, "\n")
+		if !strings.Contains(narrowShallow, wantCafeWrapped) {
+			t.Errorf("narrow shallow output did not align or wrap Unicode command:\nwant substring:\n%s\ngot:\n%s", wantCafeWrapped, narrowShallow)
+		}
+
+		// Render at width 68 to verify flag wrapping, paragraph breaks, long words, and empty description flags:
+		// flag indent is 4 + 17 + 1 + 26 + 1 = 49 spaces.
+		flagWrapped := renderRuntimeUsageTemplateAtWidth(t, stage1, false, 68)
+		wantConfigFlag := strings.Join([]string{
+			`    --config string   (default: "config.json")   Configuration file`,
+			`                                                 path to load before`,
+			`                                                 executing skill`,
+			`                                                 actions.`,
+			``,
+			`                                                 Second paragraph`,
+			`                                                 explaining override`,
+			`                                                 precedence.`,
+		}, "\n")
+		if !strings.Contains(flagWrapped, wantConfigFlag) {
+			t.Errorf("flag wrapping with paragraph break mismatch:\nwant substring:\n%s\ngot:\n%s", wantConfigFlag, flagWrapped)
+		}
+
+		// Verify long single word on --url flag is not truncated and empty-description --quiet has no trailing spaces.
+		if !strings.Contains(flagWrapped, "https://registry.example.com/very/long/path/that/exceeds/narrow/columns") {
+			t.Errorf("long word in flag description was truncated:\n%s", flagWrapped)
+		}
+		if !strings.Contains(flagWrapped, "\n    --quiet           (default: false)\n") {
+			t.Errorf("empty-description flag should omit trailing spaces:\n%q", flagWrapped)
+		}
+
+		for _, line := range strings.Split(flagWrapped, "\n") {
+			if strings.HasSuffix(line, " ") {
+				t.Errorf("rendered line has trailing space: %q", line)
+			}
+		}
+
+		// Legacy wrapFlag adapter contract: returns only the wrapped description with identical continuation indentation.
+		legacyWrapped := wrapFlag(17, 26, 68, "--config string", `(default: "config.json")`, "Configuration file path to load before executing skill actions.")
+		wantLegacyWrapped := strings.Join([]string{
+			"Configuration file",
+			"                                                 path to load before",
+			"                                                 executing skill",
+			"                                                 actions.",
+		}, "\n")
+		if legacyWrapped != wantLegacyWrapped {
+			t.Errorf("legacy wrapFlag adapter mismatch:\nwant:\n%q\ngot:\n%q", wantLegacyWrapped, legacyWrapped)
 		}
 	})
 
@@ -327,7 +560,6 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 				},
 			},
 		}
-		// Direct children of root have Parent == nil so SubCommandSequence == SubCommandName.
 		populateParentsUsage(rootUsage, nil)
 		for _, child := range rootUsage.SubCommands {
 			child.Parent = nil
@@ -385,7 +617,7 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 		}
 
 		for _, recursive := range []bool{false, true} {
-			rendered := renderRuntimeUsageTemplate(t, generated.String(), recursive)
+			rendered := renderRuntimeUsageTemplateAtWidth(t, generated.String(), recursive, 100)
 			if strings.Contains(rendered, "INJECTED_VALUE") || strings.Contains(rendered, "EXPLOITED_VALUE") {
 				t.Fatalf("template action was injected in rendered output (recursive=%v):\n%s", recursive, rendered)
 			}

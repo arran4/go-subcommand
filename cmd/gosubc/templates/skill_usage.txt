@@ -2,29 +2,16 @@
 Usage: gosubc skill <subcommand>
 
 Subcommands:
-{{- $commands := subcommands -}}
 {{if .Recursive}}
-{{- $commands = subcommands
-    (subcommand "skill inspect" "inspects an AI agent skill.")
-    (subcommand "skill install" "installs an AI agent skill.")
-    (subcommand "skill list" "lists installed AI agent skills.")
-    (subcommand "skill remove" "removes an AI agent skill.")
-    (subcommand "skill update" "updates an AI agent skill.")
--}}
+    {{formatHelpRow 13 "skill inspect" "inspects an AI agent skill."}}
+    {{formatHelpRow 13 "skill install" "installs an AI agent skill."}}
+    {{formatHelpRow 13 "skill list" "lists installed AI agent skills."}}
+    {{formatHelpRow 13 "skill remove" "removes an AI agent skill."}}
+    {{formatHelpRow 13 "skill update" "updates an AI agent skill."}}
 {{else}}
-{{- $commands = subcommands
-    (subcommand "inspect" "inspects an AI agent skill.")
-    (subcommand "install" "installs an AI agent skill.")
-    (subcommand "list" "lists installed AI agent skills.")
-    (subcommand "remove" "removes an AI agent skill.")
-    (subcommand "update" "updates an AI agent skill.")
--}}
+    {{formatHelpRow 7 "inspect" "inspects an AI agent skill."}}
+    {{formatHelpRow 7 "install" "installs an AI agent skill."}}
+    {{formatHelpRow 7 "list" "lists installed AI agent skills."}}
+    {{formatHelpRow 7 "remove" "removes an AI agent skill."}}
+    {{formatHelpRow 7 "update" "updates an AI agent skill."}}
 {{end}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}

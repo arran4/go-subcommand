@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 	"text/template"
+	"unicode/utf8"
 
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
@@ -28,31 +29,115 @@ var dashdashSource string
 //go:embed testdata/issue481.go
 var issue481Source string
 
-type runtimeTestUsageSubcommand struct {
-	Label       string
-	Description string
+func runtimeDisplayWidth(s string) int {
+	width := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		width++
+	}
+	return width
 }
 
-func executeGeneratedUsageTemplate(t *testing.T, tmplText string, recursive bool) string {
+func runtimePadRight(s string, width int) string {
+	w := runtimeDisplayWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
+func runtimeWrapText(text string, indent int, width int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if width <= indent {
+		width = indent + 10
+	}
+	avail := width - indent
+	indentStr := "\n" + strings.Repeat(" ", indent)
+
+	var out strings.Builder
+	lines := strings.Split(text, "\n")
+
+	for i, line := range lines {
+		words := strings.Fields(line)
+		if len(words) == 0 {
+			if i > 0 {
+				out.WriteString("\n")
+			}
+			continue
+		}
+		if i > 0 {
+			out.WriteString(indentStr)
+		}
+
+		currentLen := 0
+		for j, word := range words {
+			wordLen := runtimeDisplayWidth(word)
+			if j > 0 && currentLen+1+wordLen > avail {
+				out.WriteString(indentStr)
+				currentLen = 0
+			} else if j > 0 {
+				out.WriteString(" ")
+				currentLen++
+			}
+			out.WriteString(word)
+			currentLen += wordLen
+		}
+	}
+	return out.String()
+}
+
+func runtimeFormatUsageRow(prefix, descStr string, width int) string {
+	if strings.TrimSpace(descStr) == "" {
+		return strings.TrimRight(prefix, " ")
+	}
+	indent := 4 + runtimeDisplayWidth(prefix)
+	return prefix + runtimeWrapText(descStr, indent, width)
+}
+
+func executeGeneratedUsageTemplateAtWidth(t *testing.T, tmplText string, recursive bool, width int) string {
 	t.Helper()
 	funcs := template.FuncMap{
-		"subcommand": func(label, description string) runtimeTestUsageSubcommand {
-			return runtimeTestUsageSubcommand{Label: label, Description: description}
-		},
-		"subcommands": func(items ...runtimeTestUsageSubcommand) []runtimeTestUsageSubcommand {
-			return items
-		},
-		"subcommandWidth": func(items []runtimeTestUsageSubcommand) int {
-			width := 0
-			for _, item := range items {
-				if len(item.Label) > width {
-					width = len(item.Label)
-				}
+		"formatHelpRow": func(labelWidth int, label, descStr string) string {
+			if strings.TrimSpace(descStr) == "" {
+				return label
 			}
-			return width
+			prefix := runtimePadRight(label, labelWidth) + " "
+			return runtimeFormatUsageRow(prefix, descStr, width)
+		},
+		"formatFlagRow": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
+			var prefix string
+			if maxDef > 0 {
+				prefix = runtimePadRight(flagStr, maxFlag) + " " + runtimePadRight(defStr, maxDef) + " "
+			} else if defStr != "" {
+				prefix = runtimePadRight(flagStr, maxFlag) + " " + defStr + " "
+			} else {
+				prefix = runtimePadRight(flagStr, maxFlag) + " "
+			}
+			return runtimeFormatUsageRow(prefix, descStr, width)
 		},
 		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
-			return descStr
+			if strings.TrimSpace(descStr) == "" {
+				return ""
+			}
+			indent := 4 + maxFlag + 1
+			if maxDef > 0 {
+				indent += maxDef + 1
+			}
+			return runtimeWrapText(descStr, indent, width)
 		},
 	}
 	parsed, err := template.New("usage").Funcs(funcs).Parse(tmplText)
@@ -70,9 +155,14 @@ func executeGeneratedUsageTemplate(t *testing.T, tmplText string, recursive bool
 		Exploit:   "EXPLOITED_VALUE",
 	})
 	if err != nil {
-		t.Fatalf("failed to execute generated usage template (recursive=%v): %v\n%s", recursive, err, tmplText)
+		t.Fatalf("failed to execute generated usage template (recursive=%v, width=%d): %v\n%s", recursive, width, err, tmplText)
 	}
 	return buf.String()
+}
+
+func executeGeneratedUsageTemplate(t *testing.T, tmplText string, recursive bool) string {
+	t.Helper()
+	return executeGeneratedUsageTemplateAtWidth(t, tmplText, recursive, 120)
 }
 
 // setupProject returns an in-memory FS
@@ -1345,25 +1435,33 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		}
 	}
 
-	// Verify templates.go exposes runtime subcommand helpers without go-subcommand runtime dependency.
+	// Verify templates.go exposes runtime row helpers without go-subcommand runtime dependency or subcommand collections.
 	templatesGo := string(mustGeneratedFile(t, first, "cmd/app/templates/templates.go"))
-	assertContains(t, templatesGo, `"subcommand":      newUsageSubcommand`, "templates.go should register subcommand helper")
-	assertContains(t, templatesGo, `"subcommands":     newUsageSubcommands`, "templates.go should register subcommands helper")
-	assertContains(t, templatesGo, `"subcommandWidth": usageSubcommandWidth`, "templates.go should register subcommandWidth helper")
+	assertContains(t, templatesGo, `"formatHelpRow":`, "templates.go should register formatHelpRow helper")
+	assertContains(t, templatesGo, `"formatFlagRow":`, "templates.go should register formatFlagRow helper")
+	assertContains(t, templatesGo, `"wrapFlag":`, "templates.go should retain wrapFlag compatibility helper")
+	assertNotContains(t, templatesGo, "usageSubcommand", "templates.go must not define usageSubcommand collection types")
+	assertNotContains(t, templatesGo, "newUsageSubcommand", "templates.go must not define newUsageSubcommand")
 	assertNotContains(t, templatesGo, `"github.com/arran4/go-subcommand/`, "generated templates.go must not import go-subcommand")
 
-	// 1. Verify generated *_usage.txt files contain runtime formatting expressions.
+	// 1. Verify generated *_usage.txt files are text-first templates with inline formatHelpRow and formatFlagRow calls.
 	appUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/app_usage.txt"))
 	serviceUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/service_usage.txt"))
+	serveUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/serve_usage.txt"))
 	for name, tmplText := range map[string]string{
 		"app_usage.txt":     appUsage,
 		"service_usage.txt": serviceUsage,
+		"serve_usage.txt":   serveUsage,
 	} {
-		assertContains(t, tmplText, "{{- $commands := subcommands -}}", name+" should initialize runtime commands slice")
-		assertContains(t, tmplText, "{{- $width := subcommandWidth $commands -}}", name+" should compute width at runtime")
-		assertContains(t, tmplText, `{{printf "%-*s" $width .Label}} {{.Description}}`, name+" should align rows via runtime printf")
+		assertContains(t, tmplText, "{{formatHelpRow ", name+" should format command rows via formatHelpRow")
+		assertNotContains(t, tmplText, "subcommands", name+" must not build runtime subcommand collections")
+		assertNotContains(t, tmplText, "subcommandWidth", name+" must not use subcommandWidth")
 		assertNotContains(t, tmplText, "%-40s", name+" must not contain hardcoded %-40s")
+		assertNotContains(t, tmplText, "%-10s", name+" must not contain hardcoded %-10s")
 	}
+	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--port int" "(default: 8080)"`, "serve_usage.txt should format flags via formatFlagRow")
+	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--endpoint string" ""`, "serve_usage.txt should format default-less flags via formatFlagRow")
+	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--quiet" "(default: false)" ""}}`, "serve_usage.txt should format description-less flags via formatFlagRow")
 
 	// 2, 3, 4. Execute generated templates in shallow and recursive modes for long/short names,
 	// nested commands, and commands without descriptions.
@@ -1374,10 +1472,12 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		"Manage services.",
 		"",
 		"Subcommands:",
+		"",
 		"    silent-group",
-		"    status       Show service status.",
+		"    status       Show service status and health details across all configured environments.",
 		"    help         Print this help message",
 		"    usage        Print this usage message",
+		"",
 		"",
 	}, "\n")
 	if serviceShallow != wantServiceShallow {
@@ -1391,25 +1491,50 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		"Manage services.",
 		"",
 		"Subcommands:",
+		"",
 		"    service silent-group",
 		"    service silent-group deep-leaf-command Deep nested leaf action.",
-		"    service status                         Show service status.",
+		"    service status                         Show service status and health details across all configured environments.",
 		"    help                                   Print this help message",
 		"    usage                                  Print this usage message",
+		"",
 		"",
 	}, "\n")
 	if serviceRecursive != wantServiceRecursive {
 		t.Errorf("service recursive usage mismatch:\nwant:\n%q\ngot:\n%q", wantServiceRecursive, serviceRecursive)
 	}
 
+	// Verify narrow terminal wrapping for both command help and flag help.
+	serviceShallowNarrow := executeGeneratedUsageTemplateAtWidth(t, serviceUsage, false, 44)
+	assertContains(t, serviceShallowNarrow, strings.Join([]string{
+		"    status       Show service status and",
+		"                 health details across all",
+		"                 configured environments.",
+	}, "\n"), "service shallow narrow output should wrap with hanging indent")
+
+	serveNarrow := executeGeneratedUsageTemplateAtWidth(t, serveUsage, false, 64)
+	assertContains(t, serveNarrow, strings.Join([]string{
+		"    --port int          (default: 8080)    Port to listen on",
+		"                                           when starting the",
+		"                                           HTTP listener and",
+		"                                           accepting client",
+		"                                           connections",
+	}, "\n"), "serve flag help should wrap with hanging indent at narrow width")
+	assertContains(t, serveNarrow, "https://service.example.com/very/long/endpoint/path/without/spaces", "serve flag help should preserve long word without truncation")
+	assertContains(t, serveNarrow, "\n    --quiet             (default: false)\n", "serve flag without description should have no trailing spaces")
+
 	for _, line := range strings.Split(serviceRecursive, "\n") {
 		if strings.HasSuffix(line, " ") {
 			t.Errorf("service recursive line has trailing space: %q", line)
 		}
 	}
+	for _, line := range strings.Split(serveNarrow, "\n") {
+		if strings.HasSuffix(line, " ") {
+			t.Errorf("serve narrow line has trailing space: %q", line)
+		}
+	}
 
 	// 5 & 7. Verify PR #493 unique usage-resource naming and byte-identical output when shallow and recursive entries match.
-	serveUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/serve_usage.txt"))
 	scenarioServeUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/scenario_serve_usage.txt"))
 	serveShallow := executeGeneratedUsageTemplate(t, serveUsage, false)
 	serveRecursive := executeGeneratedUsageTemplate(t, serveUsage, true)

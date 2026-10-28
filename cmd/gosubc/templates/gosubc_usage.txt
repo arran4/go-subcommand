@@ -2,46 +2,33 @@
 Usage: gosubc <subcommand>
 
 Subcommands:
-{{- $commands := subcommands -}}
 {{if .Recursive}}
-{{- $commands = subcommands
-    (subcommand "format" "formats the subcommand definitions")
-    (subcommand "format-source-comments" "formats source comments to match gofmt style")
-    (subcommand "generate" "generates the subcommand code")
-    (subcommand "goreleaser" "generates goreleaser configuration and workflows")
-    (subcommand "list" "lists the subcommands")
-    (subcommand "scan" "lists all available subcommands and their flags")
-    (subcommand "skill" "")
-    (subcommand "skill inspect" "inspects an AI agent skill.")
-    (subcommand "skill install" "installs an AI agent skill.")
-    (subcommand "skill list" "lists installed AI agent skills.")
-    (subcommand "skill remove" "removes an AI agent skill.")
-    (subcommand "skill update" "updates an AI agent skill.")
-    (subcommand "syntax" "prints the available forms of function comments")
-    (subcommand "template" "Manage generation templates")
-    (subcommand "template export" "Exports the built-in templates")
-    (subcommand "template layout" "Displays the generation template layout")
-    (subcommand "validate" "validates the subcommand code")
--}}
+    {{formatHelpRow 22 "format" "formats the subcommand definitions"}}
+    {{formatHelpRow 22 "format-source-comments" "formats source comments to match gofmt style"}}
+    {{formatHelpRow 22 "generate" "generates the subcommand code"}}
+    {{formatHelpRow 22 "goreleaser" "generates goreleaser configuration and workflows"}}
+    {{formatHelpRow 22 "list" "lists the subcommands"}}
+    {{formatHelpRow 22 "scan" "lists all available subcommands and their flags"}}
+    {{formatHelpRow 22 "skill" ""}}
+    {{formatHelpRow 22 "skill inspect" "inspects an AI agent skill."}}
+    {{formatHelpRow 22 "skill install" "installs an AI agent skill."}}
+    {{formatHelpRow 22 "skill list" "lists installed AI agent skills."}}
+    {{formatHelpRow 22 "skill remove" "removes an AI agent skill."}}
+    {{formatHelpRow 22 "skill update" "updates an AI agent skill."}}
+    {{formatHelpRow 22 "syntax" "prints the available forms of function comments"}}
+    {{formatHelpRow 22 "template" "Manage generation templates"}}
+    {{formatHelpRow 22 "template export" "Exports the built-in templates"}}
+    {{formatHelpRow 22 "template layout" "Displays the generation template layout"}}
+    {{formatHelpRow 22 "validate" "validates the subcommand code"}}
 {{else}}
-{{- $commands = subcommands
-    (subcommand "format" "formats the subcommand definitions")
-    (subcommand "format-source-comments" "formats source comments to match gofmt style")
-    (subcommand "generate" "generates the subcommand code")
-    (subcommand "goreleaser" "generates goreleaser configuration and workflows")
-    (subcommand "list" "lists the subcommands")
-    (subcommand "scan" "lists all available subcommands and their flags")
-    (subcommand "skill" "")
-    (subcommand "syntax" "prints the available forms of function comments")
-    (subcommand "template" "Manage generation templates")
-    (subcommand "validate" "validates the subcommand code")
--}}
+    {{formatHelpRow 22 "format" "formats the subcommand definitions"}}
+    {{formatHelpRow 22 "format-source-comments" "formats source comments to match gofmt style"}}
+    {{formatHelpRow 22 "generate" "generates the subcommand code"}}
+    {{formatHelpRow 22 "goreleaser" "generates goreleaser configuration and workflows"}}
+    {{formatHelpRow 22 "list" "lists the subcommands"}}
+    {{formatHelpRow 22 "scan" "lists all available subcommands and their flags"}}
+    {{formatHelpRow 22 "skill" ""}}
+    {{formatHelpRow 22 "syntax" "prints the available forms of function comments"}}
+    {{formatHelpRow 22 "template" "Manage generation templates"}}
+    {{formatHelpRow 22 "validate" "validates the subcommand code"}}
 {{end}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}

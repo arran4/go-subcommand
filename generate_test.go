@@ -951,15 +951,20 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 		t.Fatalf("failed to build generated CLI: %v\n%s", err, out)
 	}
 
-	runCLI := func(args ...string) string {
+	runCLIAtWidth := func(columns string, args ...string) string {
 		t.Helper()
 		cmd := exec.Command(binPath, args...)
 		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "COLUMNS="+columns)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("CLI %v failed: %v\n%s", args, err, out)
+			t.Fatalf("CLI %v (COLUMNS=%s) failed: %v\n%s", args, columns, err, out)
 		}
 		return string(out)
+	}
+	runCLI := func(args ...string) string {
+		t.Helper()
+		return runCLIAtWidth("140", args...)
 	}
 
 	rootShallow := runCLI("help")
@@ -971,7 +976,7 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 		"    serve                       Run the primary server.",
 		"    service                     Manage services.",
 		"    up                          Start everything.",
-		"    very-long-top-level-command Execute the long top-level command.",
+		"    very-long-top-level-command Execute the long top-level command and wrap continuation lines under the description column.",
 		"    help                        Print this help message",
 		"    usage                       Print this usage message",
 	} {
@@ -980,10 +985,23 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 		}
 	}
 
+	rootShallowNarrow := runCLIAtWidth("52", "help")
+	wantRootNarrowWrapped := strings.Join([]string{
+		"    very-long-top-level-command Execute the long",
+		"                                top-level command",
+		"                                and wrap",
+		"                                continuation lines",
+		"                                under the",
+		"                                description column.",
+	}, "\n")
+	if !strings.Contains(rootShallowNarrow, wantRootNarrowWrapped) {
+		t.Errorf("root narrow help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantRootNarrowWrapped, rootShallowNarrow)
+	}
+
 	serviceShallow := runCLI("service", "--help")
 	for _, want := range []string{
 		"    silent-group",
-		"    status       Show service status.",
+		"    status       Show service status and health details across all configured environments.",
 		"    help         Print this help message",
 		"    usage        Print this usage message",
 	} {
@@ -996,7 +1014,7 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 	for _, want := range []string{
 		"    service silent-group",
 		"    service silent-group deep-leaf-command Deep nested leaf action.",
-		"    service status                         Show service status.",
+		"    service status                         Show service status and health details across all configured environments.",
 		"    help                                   Print this help message",
 		"    usage                                  Print this usage message",
 	} {
@@ -1005,9 +1023,34 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 		}
 	}
 
-	serveShallow := runCLI("serve", "help")
-	serveDeep := runCLI("serve", "help", "-deep")
+	serviceDeepNarrow := runCLIAtWidth("62", "service", "help", "-deep")
+	wantServiceDeepNarrow := strings.Join([]string{
+		"    service status                         Show service status",
+		"                                           and health details",
+		"                                           across all",
+		"                                           configured",
+		"                                           environments.",
+	}, "\n")
+	if !strings.Contains(serviceDeepNarrow, wantServiceDeepNarrow) {
+		t.Errorf("service deep narrow help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantServiceDeepNarrow, serviceDeepNarrow)
+	}
+
+	serveShallow := runCLIAtWidth("64", "serve", "help")
+	serveDeep := runCLIAtWidth("64", "serve", "help", "-deep")
 	if serveShallow != serveDeep {
 		t.Errorf("expected identical shallow and deep help for leaf command serve:\nshallow:\n%q\ndeep:\n%q", serveShallow, serveDeep)
+	}
+	wantServeFlagNarrow := strings.Join([]string{
+		"    --port int          (default: 8080)    Port to listen on",
+		"                                           when starting the",
+		"                                           HTTP listener and",
+		"                                           accepting client",
+		"                                           connections",
+	}, "\n")
+	if !strings.Contains(serveShallow, wantServeFlagNarrow) {
+		t.Errorf("serve narrow flag help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantServeFlagNarrow, serveShallow)
+	}
+	if !strings.Contains(serveShallow, "\n    --quiet             (default: false)\n") {
+		t.Errorf("serve flag without description should have no trailing spaces:\n%q", serveShallow)
 	}
 }

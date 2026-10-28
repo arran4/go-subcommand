@@ -4,21 +4,11 @@ Usage: gosubc format-source-comments [flags...]
 formats source comments to match gofmt style
 
 Subcommands:
-{{- $commands := subcommands
-    (subcommand "help" "Print this help message")
-    (subcommand "usage" "Print this usage message")
--}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 Flags:
-    --dir string      (default: ".")    The project root directory containing go.mod
-    --path []string   (default: nil)    Paths to search for subcommands (relative to dir)
-    --recursive       (default: true)   Search recursively
+    {{formatFlagRow 17 17 "--dir string" "(default: \".\")" "The project root directory containing go.mod"}}
+    {{formatFlagRow 17 17 "--path []string" "(default: nil)" "Paths to search for subcommands (relative to dir)"}}
+    {{formatFlagRow 17 17 "--recursive" "(default: true)" "Search recursively"}}

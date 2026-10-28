@@ -7,22 +7,12 @@ Scan lists all available subcommands and their flags from the parsed codebase.
 It is useful for verifying the command structure and configuration.
 
 Subcommands:
-{{- $commands := subcommands
-    (subcommand "help" "Print this help message")
-    (subcommand "usage" "Print this usage message")
--}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 Flags:
-    --dir string           (default: ".")           The project root directory
-    --parser-name string   (default: "commentv1")   Name of the parser to use
-    --path []string        (default: nil)           Paths to search for subcommands (relative to dir)
-    --recursive            (default: true)          Search recursively
+    {{formatFlagRow 22 24 "--dir string" "(default: \".\")" "The project root directory"}}
+    {{formatFlagRow 22 24 "--parser-name string" "(default: \"commentv1\")" "Name of the parser to use"}}
+    {{formatFlagRow 22 24 "--path []string" "(default: nil)" "Paths to search for subcommands (relative to dir)"}}
+    {{formatFlagRow 22 24 "--recursive" "(default: true)" "Search recursively"}}

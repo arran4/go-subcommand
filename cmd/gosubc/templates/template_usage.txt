@@ -4,27 +4,14 @@ Usage: gosubc template <subcommand>
 Manage generation templates
 
 Subcommands:
-{{- $commands := subcommands -}}
 {{if .Recursive}}
-{{- $commands = subcommands
-    (subcommand "template export" "Exports the built-in templates")
-    (subcommand "template layout" "Displays the generation template layout")
-    (subcommand "help" "Print this help message")
-    (subcommand "usage" "Print this usage message")
--}}
+    {{formatHelpRow 15 "template export" "Exports the built-in templates"}}
+    {{formatHelpRow 15 "template layout" "Displays the generation template layout"}}
+    {{formatHelpRow 15 "help" "Print this help message"}}
+    {{formatHelpRow 15 "usage" "Print this usage message"}}
 {{else}}
-{{- $commands = subcommands
-    (subcommand "export" "Exports the built-in templates")
-    (subcommand "layout" "Displays the generation template layout")
-    (subcommand "help" "Print this help message")
-    (subcommand "usage" "Print this usage message")
--}}
+    {{formatHelpRow 6 "export" "Exports the built-in templates"}}
+    {{formatHelpRow 6 "layout" "Displays the generation template layout"}}
+    {{formatHelpRow 6 "help" "Print this help message"}}
+    {{formatHelpRow 6 "usage" "Print this usage message"}}
 {{end}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}

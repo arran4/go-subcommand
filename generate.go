@@ -681,7 +681,6 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"replace":         strings.ReplaceAll,
 		"escapeUsageText": escapeUsageText,
 		"add":             func(a, b int) int { return a + b },
-		"wrapFlag":        func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
 		"until": func(n int) []int {
 			res := make([]int, n)
 			for i := 0; i < n; i++ {

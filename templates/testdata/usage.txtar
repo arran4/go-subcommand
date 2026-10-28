@@ -67,28 +67,15 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
-{{- $commands := subcommands -}}
 {{if .Recursive}}
-{{- $commands = subcommands
-    (subcommand "foo bar" "Bar command")
-    (subcommand "foo baz" "Baz command")
--}}
+    {{formatHelpRow 7 "foo bar" "Bar command"}}
+    {{formatHelpRow 7 "foo baz" "Baz command"}}
 {{else}}
-{{- $commands = subcommands
-    (subcommand "bar" "Bar command")
-    (subcommand "baz" "Baz command")
--}}
+    {{formatHelpRow 3 "bar" "Bar command"}}
+    {{formatHelpRow 3 "baz" "Baz command"}}
 {{end}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}
 
 
 Flags:
-    -v       (default: false)   Enable verbose
-    -c int   (default: 0)       Count items
+    {{formatFlagRow 8 18 "-v" "(default: false)" "Enable verbose"}}
+    {{formatFlagRow 8 18 "-c int" "(default: 0)" "Count items"}}

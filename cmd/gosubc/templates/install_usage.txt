@@ -6,23 +6,13 @@ installs an AI agent skill.
 Installs an AI agent skill.
 
 Subcommands:
-{{- $commands := subcommands
-    (subcommand "help" "Print this help message")
-    (subcommand "usage" "Print this usage message")
--}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 Flags:
-    --scope string    (default: "user")   The installation scope ('user' or 'project')
-    --agent string    (default: "")       Explicitly target a specific agent (e.g. 'codex', 'claude')
+    {{formatFlagRow 17 19 "--scope string" "(default: \"user\")" "The installation scope ('user' or 'project')"}}
+    {{formatFlagRow 17 19 "--agent string" "(default: \"\")" "Explicitly target a specific agent (e.g. 'codex', 'claude')"}}
 
 Positional Arguments:
     <source>   The source to install the skill from (e.g. owner/repo, or path)

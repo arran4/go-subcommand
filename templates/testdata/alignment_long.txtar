@@ -47,29 +47,16 @@ Usage: myapp align [flags...] <subcommand>
 Check alignment
 
 Subcommands:
-{{- $commands := subcommands -}}
 {{if .Recursive}}
-{{- $commands = subcommands
-    (subcommand "align short-cmd" "Short description")
-    (subcommand "align very-long-subcommand-name-here" "Description for long subcommand")
--}}
+    {{formatHelpRow 36 "align short-cmd" "Short description"}}
+    {{formatHelpRow 36 "align very-long-subcommand-name-here" "Description for long subcommand"}}
 {{else}}
-{{- $commands = subcommands
-    (subcommand "short-cmd" "Short description")
-    (subcommand "very-long-subcommand-name-here" "Description for long subcommand")
--}}
+    {{formatHelpRow 30 "short-cmd" "Short description"}}
+    {{formatHelpRow 30 "very-long-subcommand-name-here" "Description for long subcommand"}}
 {{end}}
-{{- $width := subcommandWidth $commands -}}
-{{- range $commands}}
-{{- if .Description}}
-    {{printf "%-*s" $width .Label}} {{.Description}}
-{{- else}}
-    {{.Label}}
-{{- end}}
-{{- end}}
 
 
 Flags:
-    -s              (default: false)   Short flag
-    --long string                      This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
-    --another int   (default: 42)      Another flag
+    {{formatFlagRow 15 18 "-s" "(default: false)" "Short flag"}}
+    {{formatFlagRow 15 18 "--long string" "" "This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long."}}
+    {{formatFlagRow 15 18 "--another int" "(default: 42)" "Another flag"}}

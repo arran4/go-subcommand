@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // ReservedKeywords is a list of Go keywords and other reserved words that cannot be used as package names or identifiers
@@ -628,6 +629,58 @@ func (sc *SubCommand) HasSubcommands() bool {
 	return len(sc.SubCommands) > 0
 }
 
+func displayWidth(s string) int {
+	width := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		width++
+	}
+	return width
+}
+
+// UsageSubcommandWidth returns the width required by the labels visible in a
+// usage listing. Recursive listings use complete command sequences; shallow
+// listings use direct child names. Built-in help rows participate when they
+// are displayed so their descriptions align with generated commands.
+func (sc *SubCommand) UsageSubcommandWidth(recursive bool) int {
+	max := 0
+	consider := func(label string) {
+		if l := displayWidth(label); l > max {
+			max = l
+		}
+	}
+	var visit func([]*SubCommand)
+	visit = func(commands []*SubCommand) {
+		for _, child := range commands {
+			if recursive {
+				consider(child.SubCommandSequence())
+			} else {
+				consider(child.SubCommandName)
+			}
+			if recursive {
+				visit(child.SubCommands)
+			}
+		}
+	}
+	visit(sc.SubCommands)
+	if sc.HasAction() {
+		consider("help")
+		consider("usage")
+	}
+	return max
+}
+
 func (sc *SubCommand) ProgName() string {
 	return sc.MainCmdName + " " + sc.SubCommandSequence()
 }
@@ -638,7 +691,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 		if p.HasGenerator() {
 			continue
 		}
-		l := len(p.FlagString())
+		l := displayWidth(p.FlagString())
 		if l > max {
 			max = l
 		}
@@ -905,7 +958,7 @@ func (sc *SubCommand) MaxDefaultLength() int {
 		if p.IsPositional || p.HasGenerator() {
 			continue
 		}
-		l := len(p.DefaultString())
+		l := displayWidth(p.DefaultString())
 		if l > max {
 			max = l
 		}

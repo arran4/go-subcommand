@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"unicode/utf8"
 )
 
 // CLITemplatesFS contains all CLI usage templates.
@@ -28,7 +29,39 @@ func getTerminalWidth() int {
 	return 80 // fallback
 }
 
+func displayWidth(s string) int {
+	width := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		width++
+	}
+	return width
+}
+
+func padRight(s string, width int) string {
+	w := displayWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
 func wrapText(text string, indent int, width int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
 	if width <= indent {
 		width = indent + 10 // minimum sensible width
 	}
@@ -39,18 +72,21 @@ func wrapText(text string, indent int, width int) string {
 	lines := strings.Split(text, "\n")
 
 	for i, line := range lines {
+		words := strings.Fields(line)
+		if len(words) == 0 {
+			if i > 0 {
+				out.WriteString("\n")
+			}
+			continue
+		}
 		if i > 0 {
 			out.WriteString(indentStr)
 		}
 
-		words := strings.Fields(line)
-		if len(words) == 0 {
-			continue
-		}
-
 		currentLen := 0
 		for j, word := range words {
-			if j > 0 && currentLen+1+len(word) > avail {
+			wordLen := displayWidth(word)
+			if j > 0 && currentLen+1+wordLen > avail {
 				out.WriteString(indentStr)
 				currentLen = 0
 			} else if j > 0 {
@@ -58,61 +94,62 @@ func wrapText(text string, indent int, width int) string {
 				currentLen++
 			}
 			out.WriteString(word)
-			currentLen += len(word)
+			currentLen += wordLen
 		}
 	}
 	return out.String()
 }
 
-type usageSubcommand struct {
-	Label       string
-	Description string
-}
-
-func newUsageSubcommand(label, description string) usageSubcommand {
-	return usageSubcommand{
-		Label:       label,
-		Description: description,
+func formatUsageRow(prefix, descStr string, width int) string {
+	if strings.TrimSpace(descStr) == "" {
+		return strings.TrimRight(prefix, " ")
 	}
+	indent := 4 + displayWidth(prefix)
+	return prefix + wrapText(descStr, indent, width)
 }
 
-func newUsageSubcommands(items ...usageSubcommand) []usageSubcommand {
-	return items
-}
-
-func usageSubcommandWidth(items []usageSubcommand) int {
-	width := 0
-	for _, item := range items {
-		if len(item.Label) > width {
-			width = len(item.Label)
-		}
+func formatHelpRow(labelWidth int, label, descStr string, width int) string {
+	if strings.TrimSpace(descStr) == "" {
+		return label
 	}
-	return width
+	prefix := padRight(label, labelWidth) + " "
+	return formatUsageRow(prefix, descStr, width)
+}
+
+func formatFlagRow(maxFlag, maxDef int, flagStr, defStr, descStr string, width int) string {
+	var prefix string
+	if maxDef > 0 {
+		prefix = padRight(flagStr, maxFlag) + " " + padRight(defStr, maxDef) + " "
+	} else if defStr != "" {
+		prefix = padRight(flagStr, maxFlag) + " " + defStr + " "
+	} else {
+		prefix = padRight(flagStr, maxFlag) + " "
+	}
+	return formatUsageRow(prefix, descStr, width)
 }
 
 func wrapFlag(maxFlag, maxDef, width int, flagStr, defStr, descStr string) string {
-	indent := 4 + maxFlag + 1 + maxDef + 1 // 4 spaces for initial indent + columns + spacing
-	wrappedDesc := wrapText(descStr, indent, width)
-	return wrappedDesc
+	if strings.TrimSpace(descStr) == "" {
+		return ""
+	}
+	indent := 4 + maxFlag + 1
+	if maxDef > 0 {
+		indent += maxDef + 1
+	}
+	return wrapText(descStr, indent, width)
 }
 
 func GetTemplates() *template.Template {
 	templatesOnce.Do(func() {
-		width := getTerminalWidth()
-
 		funcs := template.FuncMap{
-			"subcommand":      newUsageSubcommand,
-			"subcommands":     newUsageSubcommands,
-			"subcommandWidth": usageSubcommandWidth,
+			"formatHelpRow": func(labelWidth int, label, descStr string) string {
+				return formatHelpRow(labelWidth, label, descStr, getTerminalWidth())
+			},
+			"formatFlagRow": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
+				return formatFlagRow(maxFlag, maxDef, flagStr, defStr, descStr, getTerminalWidth())
+			},
 			"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
-				indent := 4 + maxFlag + 1
-				if maxDef > 0 {
-					indent += maxDef + 1
-				}
-				if descStr == "" {
-					return ""
-				}
-				return wrapText(descStr, indent, width)
+				return wrapFlag(maxFlag, maxDef, getTerminalWidth(), flagStr, defStr, descStr)
 			},
 		}
 
