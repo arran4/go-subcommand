@@ -615,7 +615,26 @@ func (sc *SubCommand) SubCommandSequence() string {
 	if sc.Parent == nil {
 		return sc.SubCommandName
 	}
-	return sc.Parent.SubCommandSequence() + " " + sc.SubCommandName
+	parentSeq := sc.Parent.SubCommandSequence()
+	if parentSeq == "" {
+		return sc.SubCommandName
+	}
+	return parentSeq + " " + sc.SubCommandName
+}
+
+// HasDistinctRecursiveSubcommands reports whether recursive help renders a
+// different subcommand listing (either additional descendants or different
+// command-sequence labels) than shallow help.
+func (sc *SubCommand) HasDistinctRecursiveSubcommands() bool {
+	if sc == nil {
+		return false
+	}
+	for _, child := range sc.SubCommands {
+		if len(child.SubCommands) > 0 || child.SubCommandSequence() != child.SubCommandName {
+			return true
+		}
+	}
+	return false
 }
 
 func (sc *SubCommand) ParentCmdName() string {
@@ -911,7 +930,11 @@ func (sc *SubCommand) FullUsageString() string {
 	// Add root command
 	if sc.Command != nil {
 		parts = append(parts, sc.MainCmdName)
-		appendFlagsUsage(&parts, sc.Command.Parameters)
+		rootParams := sc.Command.Parameters
+		if sc.SubCommandName == "" && len(rootParams) == 0 {
+			rootParams = sc.Parameters
+		}
+		appendFlagsUsage(&parts, rootParams)
 	}
 
 	// Traverse from root to current
@@ -935,13 +958,7 @@ func (sc *SubCommand) FullUsageString() string {
 	// We only show positionals for the command we are running.
 	for _, p := range sc.Parameters {
 		if p.IsPositional {
-			if p.IsVarArg {
-				parts = append(parts, fmt.Sprintf("[%s...]", p.Name))
-			} else if p.HasDefaultValue {
-				parts = append(parts, fmt.Sprintf("[%s]", p.Name))
-			} else {
-				parts = append(parts, fmt.Sprintf("<%s>", p.Name))
-			}
+			parts = append(parts, p.PositionalString())
 		}
 	}
 
@@ -950,6 +967,29 @@ func (sc *SubCommand) FullUsageString() string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func (p *FunctionParameter) PositionalString() string {
+	if p.IsVarArg {
+		return fmt.Sprintf("[%s...]", p.Name)
+	}
+	if p.HasDefaultValue {
+		return fmt.Sprintf("[%s]", p.Name)
+	}
+	return fmt.Sprintf("<%s>", p.Name)
+}
+
+func (sc *SubCommand) MaxPositionalLength() int {
+	max := 0
+	for _, p := range sc.Parameters {
+		if !p.IsPositional {
+			continue
+		}
+		if l := displayWidth(p.PositionalString()); l > max {
+			max = l
+		}
+	}
+	return max
 }
 
 func (sc *SubCommand) MaxDefaultLength() int {

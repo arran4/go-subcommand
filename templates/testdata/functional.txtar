@@ -72,14 +72,74 @@ Subcommands:
     {{formatHelpRow 7 "foo baz" "Baz command"}}
     {{formatHelpRow 7 "help" "Print this help message"}}
     {{formatHelpRow 7 "usage" "Print this usage message"}}
-{{else}}
+{{- else}}
     {{formatHelpRow 5 "bar" "Bar command"}}
     {{formatHelpRow 5 "baz" "Baz command"}}
     {{formatHelpRow 5 "help" "Print this help message"}}
     {{formatHelpRow 5 "usage" "Print this usage message"}}
-{{end}}
+{{- end}}
 
 
 Flags:
     {{formatFlagRow 8 18 "-v" "(default: false)" "Enable verbose"}}
     {{formatFlagRow 8 18 "-c int" "(default: 0)" "Count items"}}
+-- rendered-40-shallow.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    bar   Bar command
+    baz   Baz command
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -v (default: false)
+        Enable verbose
+    -c int (default: 0)
+        Count items
+-- rendered-40-recursive.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    foo bar Bar command
+    foo baz Baz command
+    help    Print this help message
+    usage   Print this usage message
+
+
+Flags:
+    -v (default: false)
+        Enable verbose
+    -c int (default: 0)
+        Count items
+-- rendered-80-shallow.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    bar   Bar command
+    baz   Baz command
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -v       (default: false)   Enable verbose
+    -c int   (default: 0)       Count items
+-- rendered-80-recursive.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    foo bar Bar command
+    foo baz Baz command
+    help    Print this help message
+    usage   Print this usage message
+
+
+Flags:
+    -v       (default: false)   Enable verbose
+    -c int   (default: 0)       Count items

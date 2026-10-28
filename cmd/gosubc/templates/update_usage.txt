@@ -17,4 +17,4 @@ Flags:
     {{formatFlagRow 16 19 "--force" "(default: false)" "Force update even if local modifications exist"}}
 
 Positional Arguments:
-    [name]     The name of the skill to update
+    {{formatHelpRow 6 "[name]" "The name of the skill to update"}}

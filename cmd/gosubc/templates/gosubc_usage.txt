@@ -20,7 +20,7 @@ Subcommands:
     {{formatHelpRow 22 "template export" "Exports the built-in templates"}}
     {{formatHelpRow 22 "template layout" "Displays the generation template layout"}}
     {{formatHelpRow 22 "validate" "validates the subcommand code"}}
-{{else}}
+{{- else}}
     {{formatHelpRow 22 "format" "formats the subcommand definitions"}}
     {{formatHelpRow 22 "format-source-comments" "formats source comments to match gofmt style"}}
     {{formatHelpRow 22 "generate" "generates the subcommand code"}}
@@ -31,4 +31,4 @@ Subcommands:
     {{formatHelpRow 22 "syntax" "prints the available forms of function comments"}}
     {{formatHelpRow 22 "template" "Manage generation templates"}}
     {{formatHelpRow 22 "validate" "validates the subcommand code"}}
-{{end}}
+{{- end}}

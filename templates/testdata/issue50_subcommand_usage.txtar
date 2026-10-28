@@ -29,3 +29,27 @@ Subcommands:
 
 Flags:
     {{formatFlagRow 4 0 "-f" "" "Force execution"}}
+-- rendered-40-shallow.txt --
+Usage: myapp sub1 [flags...]
+
+Sub1 command description
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -f   Force execution
+-- rendered-80-shallow.txt --
+Usage: myapp sub1 [flags...]
+
+Sub1 command description
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -f   Force execution

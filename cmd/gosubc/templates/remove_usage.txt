@@ -15,4 +15,4 @@ Flags:
     {{formatFlagRow 16 19 "--agent string" "(default: \"\")" "Explicitly target a specific agent (e.g. 'codex', 'claude')"}}
 
 Positional Arguments:
-    <name>     The name of the skill to remove
+    {{formatHelpRow 6 "<name>" "The name of the skill to remove"}}

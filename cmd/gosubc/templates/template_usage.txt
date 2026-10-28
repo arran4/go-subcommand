@@ -9,9 +9,9 @@ Subcommands:
     {{formatHelpRow 15 "template layout" "Displays the generation template layout"}}
     {{formatHelpRow 15 "help" "Print this help message"}}
     {{formatHelpRow 15 "usage" "Print this usage message"}}
-{{else}}
+{{- else}}
     {{formatHelpRow 6 "export" "Exports the built-in templates"}}
     {{formatHelpRow 6 "layout" "Displays the generation template layout"}}
     {{formatHelpRow 6 "help" "Print this help message"}}
     {{formatHelpRow 6 "usage" "Print this usage message"}}
-{{end}}
+{{- end}}

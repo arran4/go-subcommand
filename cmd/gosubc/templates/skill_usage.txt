@@ -8,10 +8,10 @@ Subcommands:
     {{formatHelpRow 13 "skill list" "lists installed AI agent skills."}}
     {{formatHelpRow 13 "skill remove" "removes an AI agent skill."}}
     {{formatHelpRow 13 "skill update" "updates an AI agent skill."}}
-{{else}}
+{{- else}}
     {{formatHelpRow 7 "inspect" "inspects an AI agent skill."}}
     {{formatHelpRow 7 "install" "installs an AI agent skill."}}
     {{formatHelpRow 7 "list" "lists installed AI agent skills."}}
     {{formatHelpRow 7 "remove" "removes an AI agent skill."}}
     {{formatHelpRow 7 "update" "updates an AI agent skill."}}
-{{end}}
+{{- end}}

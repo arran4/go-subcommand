@@ -57,15 +57,31 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", width-w)
 }
 
+const (
+	leadingIndent            = 4
+	minDescriptionWidth      = 16
+	compactDescriptionIndent = 8
+)
+
+func compactIndentForWidth(width int) int {
+	if width <= compactDescriptionIndent {
+		if width <= leadingIndent {
+			return 0
+		}
+		return width / 4
+	}
+	return compactDescriptionIndent
+}
+
 func wrapText(text string, indent int, width int) string {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ""
 	}
-	if width <= indent {
-		width = indent + 10 // minimum sensible width
-	}
 	avail := width - indent
+	if avail < 1 {
+		avail = 1
+	}
 	indentStr := "\n" + strings.Repeat(" ", indent)
 
 	var out strings.Builder
@@ -100,41 +116,81 @@ func wrapText(text string, indent int, width int) string {
 	return out.String()
 }
 
-func formatUsageRow(prefix, descStr string, width int) string {
-	if strings.TrimSpace(descStr) == "" {
-		return strings.TrimRight(prefix, " ")
+func formatCompactPrefix(compactParts []string, width int) string {
+	joined := strings.Join(compactParts, " ")
+	if leadingIndent+displayWidth(joined) <= width {
+		return joined
 	}
-	indent := 4 + displayWidth(prefix)
-	return prefix + wrapText(descStr, indent, width)
+	cIndent := compactIndentForWidth(width)
+	cIndentStr := "\n" + strings.Repeat(" ", cIndent)
+	var out strings.Builder
+	for i, part := range compactParts {
+		lineIndent := leadingIndent
+		if i > 0 {
+			out.WriteString(cIndentStr)
+			lineIndent = cIndent
+		}
+		if lineIndent+displayWidth(part) > width {
+			out.WriteString(wrapText(part, cIndent, width))
+		} else {
+			out.WriteString(part)
+		}
+	}
+	return out.String()
+}
+
+func formatUsageRow(alignedPrefix string, compactParts []string, descStr string, width int) string {
+	descStr = strings.TrimSpace(descStr)
+	if descStr == "" {
+		trimmedAligned := strings.TrimRight(alignedPrefix, " ")
+		if leadingIndent+displayWidth(trimmedAligned) <= width {
+			return trimmedAligned
+		}
+		return formatCompactPrefix(compactParts, width)
+	}
+
+	indent := leadingIndent + displayWidth(alignedPrefix)
+	if width-indent >= minDescriptionWidth {
+		return alignedPrefix + wrapText(descStr, indent, width)
+	}
+
+	cIndent := compactIndentForWidth(width)
+	prefixLine := formatCompactPrefix(compactParts, width)
+	return prefixLine + "\n" + strings.Repeat(" ", cIndent) + wrapText(descStr, cIndent, width)
 }
 
 func formatHelpRow(labelWidth int, label, descStr string, width int) string {
-	if strings.TrimSpace(descStr) == "" {
-		return label
-	}
-	prefix := padRight(label, labelWidth) + " "
-	return formatUsageRow(prefix, descStr, width)
+	alignedPrefix := padRight(label, labelWidth) + " "
+	return formatUsageRow(alignedPrefix, []string{label}, descStr, width)
 }
 
 func formatFlagRow(maxFlag, maxDef int, flagStr, defStr, descStr string, width int) string {
-	var prefix string
+	var alignedPrefix string
 	if maxDef > 0 {
-		prefix = padRight(flagStr, maxFlag) + " " + padRight(defStr, maxDef) + " "
+		alignedPrefix = padRight(flagStr, maxFlag) + " " + padRight(defStr, maxDef) + " "
 	} else if defStr != "" {
-		prefix = padRight(flagStr, maxFlag) + " " + defStr + " "
+		alignedPrefix = padRight(flagStr, maxFlag) + " " + defStr + " "
 	} else {
-		prefix = padRight(flagStr, maxFlag) + " "
+		alignedPrefix = padRight(flagStr, maxFlag) + " "
 	}
-	return formatUsageRow(prefix, descStr, width)
+	compactParts := []string{flagStr}
+	if defStr != "" {
+		compactParts = []string{flagStr, defStr}
+	}
+	return formatUsageRow(alignedPrefix, compactParts, descStr, width)
 }
 
 func wrapFlag(maxFlag, maxDef, width int, flagStr, defStr, descStr string) string {
 	if strings.TrimSpace(descStr) == "" {
 		return ""
 	}
-	indent := 4 + maxFlag + 1
+	indent := leadingIndent + maxFlag + 1
 	if maxDef > 0 {
 		indent += maxDef + 1
+	}
+	if width-indent < minDescriptionWidth {
+		cIndent := compactIndentForWidth(width)
+		return "\n" + strings.Repeat(" ", cIndent) + wrapText(descStr, cIndent, width)
 	}
 	return wrapText(descStr, indent, width)
 }

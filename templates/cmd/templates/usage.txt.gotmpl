@@ -20,15 +20,25 @@ Usage: {{escapeUsageText .FullUsageString}}
 {{- if or .SubCommands .SubCommandFunctionName}}
 
 Subcommands:
-{{- if .SubCommands}}
-{{ "{{" }}if .Recursive{{ "}}" }}
+{{- if .HasDistinctRecursiveSubcommands}}
 {{- $recursiveWidth := .UsageSubcommandWidth true}}
+{{- $shallowWidth := .UsageSubcommandWidth false}}
+{{ "{{" }}if .Recursive{{ "}}" }}
 {{- template "subcommands_recursive" (list .SubCommands $recursiveWidth) }}
 {{- if .SubCommandFunctionName }}
     {{ "{{" }}formatHelpRow {{$recursiveWidth}} "help" "Print this help message"{{ "}}" }}
     {{ "{{" }}formatHelpRow {{$recursiveWidth}} "usage" "Print this usage message"{{ "}}" }}
 {{- end}}
-{{ "{{" }}else{{ "}}" }}
+{{ "{{-" }} else{{ "}}" }}
+{{- range .SubCommands}}
+    {{ "{{" }}formatHelpRow {{$shallowWidth}} {{printf "%q" .SubCommandName}} {{printf "%q" .SubCommandDescription}}{{ "}}" }}
+{{- end}}
+{{- if .SubCommandFunctionName }}
+    {{ "{{" }}formatHelpRow {{$shallowWidth}} "help" "Print this help message"{{ "}}" }}
+    {{ "{{" }}formatHelpRow {{$shallowWidth}} "usage" "Print this usage message"{{ "}}" }}
+{{- end}}
+{{ "{{-" }} end{{ "}}" }}
+{{- else}}
 {{- $shallowWidth := .UsageSubcommandWidth false}}
 {{- range .SubCommands}}
     {{ "{{" }}formatHelpRow {{$shallowWidth}} {{printf "%q" .SubCommandName}} {{printf "%q" .SubCommandDescription}}{{ "}}" }}
@@ -37,11 +47,6 @@ Subcommands:
     {{ "{{" }}formatHelpRow {{$shallowWidth}} "help" "Print this help message"{{ "}}" }}
     {{ "{{" }}formatHelpRow {{$shallowWidth}} "usage" "Print this usage message"{{ "}}" }}
 {{- end}}
-{{ "{{" }}end{{ "}}" }}
-{{- else if .SubCommandFunctionName }}
-{{- $shallowWidth := .UsageSubcommandWidth false}}
-    {{ "{{" }}formatHelpRow {{$shallowWidth}} "help" "Print this help message"{{ "}}" }}
-    {{ "{{" }}formatHelpRow {{$shallowWidth}} "usage" "Print this usage message"{{ "}}" }}
 {{- end}}
 {{- end}}
 {{- if .ParameterGroups}}
@@ -64,19 +69,13 @@ Flags:
 {{- end}}
 {{- end}}
 {{- end}}
-{{- $hasPositional := false}}{{- range .Parameters}}{{- if .IsPositional}}{{- $hasPositional = true}}{{- end}}{{- end}}
-{{- if $hasPositional}}
+{{- $maxPositional := .MaxPositionalLength}}
+{{- if gt $maxPositional 0}}
 
 Positional Arguments:
 {{- range .Parameters}}
 {{- if .IsPositional}}
-    {{- if .IsVarArg}}
-    {{ printf "[%s...]" .Name | printf "%-10s" | escapeUsageText}} {{escapeUsageText .Description}}
-    {{- else if .HasDefaultValue}}
-    {{ printf "[%s]" .Name | printf "%-10s" | escapeUsageText}} {{escapeUsageText .Description}}
-    {{- else}}
-    {{ printf "<%s>" .Name | printf "%-10s" | escapeUsageText}} {{escapeUsageText .Description}}
-    {{- end}}
+    {{ "{{" }}formatHelpRow {{$maxPositional}} {{printf "%q" .PositionalString}} {{printf "%q" .Description}}{{ "}}" }}
 {{- end}}
 {{- end}}
 {{- end}}

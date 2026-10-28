@@ -5,12 +5,12 @@ import (
 	_ "embed"
 	"go/parser"
 	"go/token"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
-	"text/template"
-	"unicode/utf8"
 
+	gosubctemplates "github.com/arran4/go-subcommand/cmd/gosubc/templates"
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
 	"github.com/arran4/go-subcommand/parsers/commentv1"
@@ -31,118 +31,14 @@ var dashdashSource string
 //go:embed testdata/issue481.go
 var issue481Source string
 
-func runtimeDisplayWidth(s string) int {
-	width := 0
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			i += 2
-			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == ';') {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		i += size
-		width++
-	}
-	return width
-}
-
-func runtimePadRight(s string, width int) string {
-	w := runtimeDisplayWidth(s)
-	if w >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-w)
-}
-
-func runtimeWrapText(text string, indent int, width int) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
-	if width <= indent {
-		width = indent + 10
-	}
-	avail := width - indent
-	indentStr := "\n" + strings.Repeat(" ", indent)
-
-	var out strings.Builder
-	lines := strings.Split(text, "\n")
-
-	for i, line := range lines {
-		words := strings.Fields(line)
-		if len(words) == 0 {
-			if i > 0 {
-				out.WriteString("\n")
-			}
-			continue
-		}
-		if i > 0 {
-			out.WriteString(indentStr)
-		}
-
-		currentLen := 0
-		for j, word := range words {
-			wordLen := runtimeDisplayWidth(word)
-			if j > 0 && currentLen+1+wordLen > avail {
-				out.WriteString(indentStr)
-				currentLen = 0
-			} else if j > 0 {
-				out.WriteString(" ")
-				currentLen++
-			}
-			out.WriteString(word)
-			currentLen += wordLen
-		}
-	}
-	return out.String()
-}
-
-func runtimeFormatUsageRow(prefix, descStr string, width int) string {
-	if strings.TrimSpace(descStr) == "" {
-		return strings.TrimRight(prefix, " ")
-	}
-	indent := 4 + runtimeDisplayWidth(prefix)
-	return prefix + runtimeWrapText(descStr, indent, width)
-}
-
 func executeGeneratedUsageTemplateAtWidth(t *testing.T, tmplText string, recursive bool, width int) string {
 	t.Helper()
-	funcs := template.FuncMap{
-		"formatHelpRow": func(labelWidth int, label, descStr string) string {
-			if strings.TrimSpace(descStr) == "" {
-				return label
-			}
-			prefix := runtimePadRight(label, labelWidth) + " "
-			return runtimeFormatUsageRow(prefix, descStr, width)
-		},
-		"formatFlagRow": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
-			var prefix string
-			if maxDef > 0 {
-				prefix = runtimePadRight(flagStr, maxFlag) + " " + runtimePadRight(defStr, maxDef) + " "
-			} else if defStr != "" {
-				prefix = runtimePadRight(flagStr, maxFlag) + " " + defStr + " "
-			} else {
-				prefix = runtimePadRight(flagStr, maxFlag) + " "
-			}
-			return runtimeFormatUsageRow(prefix, descStr, width)
-		},
-		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
-			if strings.TrimSpace(descStr) == "" {
-				return ""
-			}
-			indent := 4 + maxFlag + 1
-			if maxDef > 0 {
-				indent += maxDef + 1
-			}
-			return runtimeWrapText(descStr, indent, width)
-		},
+	t.Setenv("COLUMNS", strconv.Itoa(width))
+	cloned, err := gosubctemplates.GetTemplates().Clone()
+	if err != nil {
+		t.Fatalf("failed to clone runtime templates: %v", err)
 	}
-	parsed, err := template.New("usage").Funcs(funcs).Parse(tmplText)
+	parsed, err := cloned.New("generated_usage.txt").Parse(tmplText)
 	if err != nil {
 		t.Fatalf("failed to parse generated usage template: %v\n%s", err, tmplText)
 	}
@@ -1503,7 +1399,6 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		"    help         Print this help message",
 		"    usage        Print this usage message",
 		"",
-		"",
 	}, "\n")
 	if serviceShallow != wantServiceShallow {
 		t.Errorf("service shallow usage mismatch:\nwant:\n%q\ngot:\n%q", wantServiceShallow, serviceShallow)
@@ -1522,7 +1417,6 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		"    service status                         Show service status and health details across all configured environments.",
 		"    help                                   Print this help message",
 		"    usage                                  Print this usage message",
-		"",
 		"",
 	}, "\n")
 	if serviceRecursive != wantServiceRecursive {

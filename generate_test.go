@@ -1053,4 +1053,34 @@ func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
 	if !strings.Contains(serveShallow, "\n    --quiet             (default: false)\n") {
 		t.Errorf("serve flag without description should have no trailing spaces:\n%q", serveShallow)
 	}
+
+	serveUsageTemplate, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "templates", "serve_usage.txt"))
+	if err != nil {
+		t.Fatalf("failed to read generated serve_usage.txt: %v", err)
+	}
+	if strings.Contains(string(serveUsageTemplate), ".Recursive") {
+		t.Errorf("leaf command serve_usage.txt must not contain redundant .Recursive branch:\n%s", serveUsageTemplate)
+	}
+
+	serveCompact40 := runCLIAtWidth("40", "serve", "help")
+	wantServeCompact40 := strings.Join([]string{
+		"    --port int (default: 8080)",
+		"        Port to listen on when starting",
+		"        the HTTP listener and accepting",
+		"        client connections",
+	}, "\n")
+	if !strings.Contains(serveCompact40, wantServeCompact40) {
+		t.Errorf("serve COLUMNS=40 flag help did not switch to compact fallback:\nwant substring:\n%s\ngot:\n%s", wantServeCompact40, serveCompact40)
+	}
+	if !strings.Contains(serveCompact40, "https://service.example.com/very/long/endpoint/path/without/spaces") {
+		t.Errorf("serve COLUMNS=40 truncated unbreakable URL token:\n%s", serveCompact40)
+	}
+	for _, line := range strings.Split(serveCompact40, "\n") {
+		if strings.Contains(line, "https://service.example.com/") {
+			continue
+		}
+		if len([]rune(line)) > 40 {
+			t.Errorf("serve COLUMNS=40 line exceeded 40 columns (len=%d): %q", len([]rune(line)), line)
+		}
+	}
 }

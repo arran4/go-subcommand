@@ -35,4 +35,31 @@ Flags:
     {{formatFlagRow 15 18 "-f" "(default: false)" "Force action"}}
 
 Positional Arguments:
-    <file>     Target file
+    {{formatHelpRow 6 "<file>" "Target file"}}
+-- rendered-40-shallow.txt --
+Usage: myapp leaf [flags...] <file>
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -f (default: false)
+        Force action
+
+Positional Arguments:
+    <file> Target file
+-- rendered-80-shallow.txt --
+Usage: myapp leaf [flags...] <file>
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    -f              (default: false)   Force action
+
+Positional Arguments:
+    <file> Target file
