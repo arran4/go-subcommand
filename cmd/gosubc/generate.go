@@ -31,6 +31,7 @@ type Generate struct {
 	replaceTemplates  []string
 	projectProvenance bool
 	timestamp         bool
+	emitGoGenerate    bool
 	provVersion       string
 	provCommit        string
 	provDate          string
@@ -206,6 +207,17 @@ func (c *Generate) Execute(args []string) (err error) {
 					c.timestamp = true
 				}
 
+			case "emitGoGenerate", "emit-go-generate":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+					}
+					c.emitGoGenerate = b
+				} else {
+					c.emitGoGenerate = true
+				}
+
 			case "provVersion", "prov-version":
 				if !hasValue {
 					if i+1 < len(args) {
@@ -270,7 +282,7 @@ func (c *Generate) Execute(args []string) (err error) {
 
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("generate failed: %w", err)
+			return err
 		}
 	} else {
 		c.Usage()
@@ -310,6 +322,8 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.BoolVar(&v.timestamp, "timestamp", true, "Include timestamp in provenance")
 
+	set.BoolVar(&v.emitGoGenerate, "emit-go-generate", true, "Emit nested //go:generate directive in generated main.go")
+
 	set.StringVar(&v.provVersion, "prov-version", "", "Overwrite provenance version")
 
 	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
@@ -319,7 +333,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.GenerateCLI(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.GenerateCLICommand(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
@@ -329,8 +343,9 @@ func (c *RootCmd) NewGenerate() *Generate {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			if e, ok := err.(*cmd.ErrExitCode); ok {
-				return e
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return exitCode
 			}
 			return fmt.Errorf("generate failed: %w", err)
 		}
