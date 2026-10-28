@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -693,6 +694,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
 		"base":                filepath.Base,
+		"goString":            strconv.Quote,
 		"isDefaultExpression": isDefaultExpression,
 	})
 
