@@ -68,8 +68,9 @@ func TestNameAllocator(t *testing.T) {
 	t.Run("ReserveNames", func(t *testing.T) {
 		na := NewNameAllocator()
 		reserved := []string{
-			"Cmd", "RootCmd", "UserError",
+			"Cmd", "Root", "RootCmd", "UserError",
 			"NewRoot", "NewUserError", "executeUsage",
+			"Main", "FlagHelpers",
 			"main", "init",
 		}
 		for _, r := range reserved {

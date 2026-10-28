@@ -39,6 +39,7 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "test")
 	args = append(args, "--project-provenance")
 	args = append(args, "--timestamp")
+	args = append(args, "--emit-go-generate")
 	args = append(args, "--prov-version")
 	args = append(args, "test")
 	args = append(args, "--prov-commit")
@@ -81,6 +82,9 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.timestamp != true {
 		t.Errorf("Expected timestamp to be true, got '%v'", cmd.timestamp)
+	}
+	if cmd.emitGoGenerate != true {
+		t.Errorf("Expected emitGoGenerate to be true, got '%v'", cmd.emitGoGenerate)
 	}
 	if cmd.provVersion != "test" {
 		t.Errorf("Expected provVersion to be 'test', got '%v'", cmd.provVersion)
