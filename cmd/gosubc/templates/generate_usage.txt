@@ -33,4 +33,4 @@ Flags:
     --prov-version string             (default: "")            Overwrite provenance version
     --prov-commit string              (default: "")            Overwrite provenance commit
     --prov-date string                (default: "")            Overwrite provenance date
-    --config, --one string            (default: "")            Optional version JSON generation configuration.
+    --config string                   (default: "")            Optional version-one JSON generation configuration.

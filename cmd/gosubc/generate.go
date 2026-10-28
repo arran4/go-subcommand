@@ -252,7 +252,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 				c.provDate = value
 
-			case "configPath", "config", "one":
+			case "configPath", "config":
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -342,8 +342,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
 
-	set.StringVar(&v.configPath, "config", "", "Optional version JSON generation configuration.")
-	set.StringVar(&v.configPath, "one", "", "Optional version JSON generation configuration.")
+	set.StringVar(&v.configPath, "config", "", "Optional version-one JSON generation configuration.")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {

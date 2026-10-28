@@ -871,7 +871,7 @@ var (
 	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?|[^),]+))`)
 	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
 	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
-	reFlag            = regexp.MustCompile(`-[\w-]+`)
+	reFlag            = regexp.MustCompile(`(^|[\s,;:(])(--?[a-zA-Z0-9][\w-]*)`)
 	reCliParser       = regexp.MustCompile(`(?i)^CLI-Parser:\s*([A-Za-z0-9][A-Za-z0-9-]*)\s*$`)
 	reDefaultRouteDirective = regexp.MustCompile(`(?i)^(?:default\s+route|default\s+command):\s*(.+)$`)
 	reDefaultDirective      = regexp.MustCompile(`(?i)^default:\s*(.+)$`)
@@ -1417,11 +1417,12 @@ func parseParamDetails(text string) ParsedParam {
 		text = reVarArgRange.ReplaceAllString(text, "")
 	}
 
-	flagMatches := reFlag.FindAllString(text, -1)
+	flagMatches := reFlag.FindAllStringSubmatch(text, -1)
 
 	seenFlags := make(map[string]bool)
-	for _, f := range flagMatches {
-		stripped := strings.TrimLeft(f, "-")
+	for _, match := range flagMatches {
+		flag := match[2]
+		stripped := strings.TrimLeft(flag, "-")
 		if !seenFlags[stripped] {
 			p.Flags = append(p.Flags, stripped)
 			seenFlags[stripped] = true
@@ -1435,7 +1436,7 @@ func parseParamDetails(text string) ParsedParam {
 		return p.Flags[i] < p.Flags[j]
 	})
 
-	clean := reFlag.ReplaceAllString(text, "")
+	clean := reFlag.ReplaceAllString(text, "$1")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)
