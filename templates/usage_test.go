@@ -345,14 +345,25 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 		stage1 := generated.String()
 
 		for _, requiredExpr := range []string{
-			`{{formatHelpRow 38 "service up" "Start service"}}`,
-			`{{formatHelpRow 38 "service silent-group" ""}}`,
-			`{{formatHelpRow 38 "service silent-group deep-leaf-command" "Nested leaf action"}}`,
-			`{{formatHelpRow 12 "up" "Start service"}}`,
-			`{{formatHelpRow 12 "silent-group" ""}}`,
+			`{{ $maxSize := 12 }}{{ if .Recursive }}{{ $maxSize = 38 }}{{ end }}`,
+			`{{ $label := "up" }}{{ if .Recursive }}{{ $label = "service up" }}{{ end }}{{formatHelpRow $maxSize $label "Start service"}}`,
+			`{{ $label := "silent-group" }}{{ if .Recursive }}{{ $label = "service silent-group" }}{{ end }}{{formatHelpRow $maxSize $label ""}}`,
+			`{{formatHelpRow $maxSize "service silent-group deep-leaf-command" "Nested leaf action"}}`,
+			`{{formatHelpRow $maxSize "help" "Print this help message"}}`,
+			`{{formatHelpRow $maxSize "usage" "Print this usage message"}}`,
 		} {
 			if !strings.Contains(stage1, requiredExpr) {
 				t.Errorf("stage 1 output missing inline runtime formatting call %q:\n%s", requiredExpr, stage1)
+			}
+		}
+		// Verify deduplication: direct children and built-in help rows appear exactly once in the template
+		for _, uniqueSubstr := range []string{
+			`"Start service"`,
+			`"Print this help message"`,
+			`"Print this usage message"`,
+		} {
+			if count := strings.Count(stage1, uniqueSubstr); count != 1 {
+				t.Errorf("expected %q to appear exactly once in stage 1 template (deduplicated), got %d:\n%s", uniqueSubstr, count, stage1)
 			}
 		}
 		for _, forbidden := range []string{"subcommands", "subcommandWidth", "range $commands", "%-40s", "%-10s"} {
@@ -456,15 +467,23 @@ func TestUsageTemplateRuntimeFormattingAndEscaping(t *testing.T) {
 		stage1 := generated.String()
 
 		for _, required := range []string{
-			`{{formatHelpRow 13 "skill install"`,
-			`{{formatHelpRow 7 "install"`,
-			`{{formatHelpRow 7 "café"`,
+			`{{ $maxSize := 7 }}{{ if .Recursive }}{{ $maxSize = 13 }}{{ end }}`,
+			`{{ $label := "install" }}{{ if .Recursive }}{{ $label = "skill install" }}{{ end }}{{formatHelpRow $maxSize $label "Installs an AI agent skill and configures it for the selected environment."}}`,
+			`{{ $label := "café" }}{{ if .Recursive }}{{ $label = "skill café" }}{{ end }}{{formatHelpRow $maxSize $label "Unicode subcommand description that wraps cleanly at narrow terminal widths."}}`,
 			`{{formatFlagRow 28 26 "-c, --cfg, --config string" "(default: \"config.json\")"`,
 			`{{formatFlagRow 28 26 "--url string" ""`,
 			`{{formatFlagRow 28 26 "--quiet" "(default: false)" ""}}`,
 		} {
 			if !strings.Contains(stage1, required) {
 				t.Errorf("stage 1 output missing %q:\n%s", required, stage1)
+			}
+		}
+		for _, uniqueSubstr := range []string{
+			`"Installs an AI agent skill and configures it for the selected environment."`,
+			`"Unicode subcommand description that wraps cleanly at narrow terminal widths."`,
+		} {
+			if count := strings.Count(stage1, uniqueSubstr); count != 1 {
+				t.Errorf("expected %q to appear exactly once in stage 1 template (deduplicated), got %d:\n%s", uniqueSubstr, count, stage1)
 			}
 		}
 

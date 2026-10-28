@@ -47,13 +47,9 @@ Usage: myapp align [flags...] <subcommand>
 Check alignment
 
 Subcommands:
-{{if .Recursive}}
-    {{formatHelpRow 36 "align short-cmd" "Short description"}}
-    {{formatHelpRow 36 "align very-long-subcommand-name-here" "Description for long subcommand"}}
-{{- else}}
-    {{formatHelpRow 30 "short-cmd" "Short description"}}
-    {{formatHelpRow 30 "very-long-subcommand-name-here" "Description for long subcommand"}}
-{{- end}}
+{{ $maxSize := 30 }}{{ if .Recursive }}{{ $maxSize = 36 }}{{ end }}
+    {{ $label := "short-cmd" }}{{ if .Recursive }}{{ $label = "align short-cmd" }}{{ end }}{{formatHelpRow $maxSize $label "Short description"}}
+    {{ $label := "very-long-subcommand-name-here" }}{{ if .Recursive }}{{ $label = "align very-long-subcommand-name-here" }}{{ end }}{{formatHelpRow $maxSize $label "Description for long subcommand"}}
 
 
 Flags:

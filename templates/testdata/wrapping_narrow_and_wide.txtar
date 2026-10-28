@@ -73,20 +73,15 @@ Usage: myapp deploy [flags...] <environment> [clusters...] <subcommand>
 Deploy application bundles to target environments.
 
 Subcommands:
-{{if .Recursive}}
-    {{formatHelpRow 67 "deploy env" "Manage deployment environments and promotion pipelines."}}
-    {{formatHelpRow 67 "deploy env promote" "Promote a verified release from one environment to the next stage."}}
-    {{formatHelpRow 67 "deploy silent" ""}}
-    {{formatHelpRow 67 "deploy extremely-long-subcommand-identifier-exceeding-forty-columns" "Command whose label alone exceeds narrow forty-column terminals."}}
-    {{formatHelpRow 67 "help" "Print this help message"}}
-    {{formatHelpRow 67 "usage" "Print this usage message"}}
-{{- else}}
-    {{formatHelpRow 60 "env" "Manage deployment environments and promotion pipelines."}}
-    {{formatHelpRow 60 "silent" ""}}
-    {{formatHelpRow 60 "extremely-long-subcommand-identifier-exceeding-forty-columns" "Command whose label alone exceeds narrow forty-column terminals."}}
-    {{formatHelpRow 60 "help" "Print this help message"}}
-    {{formatHelpRow 60 "usage" "Print this usage message"}}
+{{ $maxSize := 60 }}{{ if .Recursive }}{{ $maxSize = 67 }}{{ end }}
+    {{ $label := "env" }}{{ if .Recursive }}{{ $label = "deploy env" }}{{ end }}{{formatHelpRow $maxSize $label "Manage deployment environments and promotion pipelines."}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "deploy env promote" "Promote a verified release from one environment to the next stage."}}
 {{- end}}
+    {{ $label := "silent" }}{{ if .Recursive }}{{ $label = "deploy silent" }}{{ end }}{{formatHelpRow $maxSize $label ""}}
+    {{ $label := "extremely-long-subcommand-identifier-exceeding-forty-columns" }}{{ if .Recursive }}{{ $label = "deploy extremely-long-subcommand-identifier-exceeding-forty-columns" }}{{ end }}{{formatHelpRow $maxSize $label "Command whose label alone exceeds narrow forty-column terminals."}}
+    {{formatHelpRow $maxSize "help" "Print this help message"}}
+    {{formatHelpRow $maxSize "usage" "Print this usage message"}}
 
 
 Flags:

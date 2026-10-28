@@ -4,14 +4,8 @@ Usage: gosubc template <subcommand>
 Manage generation templates
 
 Subcommands:
-{{if .Recursive}}
-    {{formatHelpRow 15 "template export" "Exports the built-in templates"}}
-    {{formatHelpRow 15 "template layout" "Displays the generation template layout"}}
-    {{formatHelpRow 15 "help" "Print this help message"}}
-    {{formatHelpRow 15 "usage" "Print this usage message"}}
-{{- else}}
-    {{formatHelpRow 6 "export" "Exports the built-in templates"}}
-    {{formatHelpRow 6 "layout" "Displays the generation template layout"}}
-    {{formatHelpRow 6 "help" "Print this help message"}}
-    {{formatHelpRow 6 "usage" "Print this usage message"}}
-{{- end}}
+{{ $maxSize := 6 }}{{ if .Recursive }}{{ $maxSize = 15 }}{{ end }}
+    {{ $label := "export" }}{{ if .Recursive }}{{ $label = "template export" }}{{ end }}{{formatHelpRow $maxSize $label "Exports the built-in templates"}}
+    {{ $label := "layout" }}{{ if .Recursive }}{{ $label = "template layout" }}{{ end }}{{formatHelpRow $maxSize $label "Displays the generation template layout"}}
+    {{formatHelpRow $maxSize "help" "Print this help message"}}
+    {{formatHelpRow $maxSize "usage" "Print this usage message"}}

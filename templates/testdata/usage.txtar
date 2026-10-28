@@ -67,13 +67,9 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
-{{if .Recursive}}
-    {{formatHelpRow 7 "foo bar" "Bar command"}}
-    {{formatHelpRow 7 "foo baz" "Baz command"}}
-{{- else}}
-    {{formatHelpRow 3 "bar" "Bar command"}}
-    {{formatHelpRow 3 "baz" "Baz command"}}
-{{- end}}
+{{ $maxSize := 3 }}{{ if .Recursive }}{{ $maxSize = 7 }}{{ end }}
+    {{ $label := "bar" }}{{ if .Recursive }}{{ $label = "foo bar" }}{{ end }}{{formatHelpRow $maxSize $label "Bar command"}}
+    {{ $label := "baz" }}{{ if .Recursive }}{{ $label = "foo baz" }}{{ end }}{{formatHelpRow $maxSize $label "Baz command"}}
 
 
 Flags:

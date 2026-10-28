@@ -1065,7 +1065,7 @@ func GrandChild() {}
 	} else {
 		// Check content includes toggle and grandchild
 		usageText := string(content)
-		if !strings.Contains(usageText, "{{if .Recursive}}") {
+		if !strings.Contains(usageText, ".Recursive") {
 			t.Errorf("Usage text does not contain Recursive toggle:\n%s", usageText)
 		}
 		if !strings.Contains(usageText, "child grandchild") {

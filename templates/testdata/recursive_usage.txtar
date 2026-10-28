@@ -31,18 +31,14 @@ Usage: myapp root <subcommand>
 Root command
 
 Subcommands:
-{{if .Recursive}}
-    {{formatHelpRow 22 "root child1" "First child"}}
-    {{formatHelpRow 22 "root child1 grandchild" "Grandchild"}}
-    {{formatHelpRow 22 "root child2" "Second child"}}
-    {{formatHelpRow 22 "help" "Print this help message"}}
-    {{formatHelpRow 22 "usage" "Print this usage message"}}
-{{- else}}
-    {{formatHelpRow 6 "child1" "First child"}}
-    {{formatHelpRow 6 "child2" "Second child"}}
-    {{formatHelpRow 6 "help" "Print this help message"}}
-    {{formatHelpRow 6 "usage" "Print this usage message"}}
+{{ $maxSize := 6 }}{{ if .Recursive }}{{ $maxSize = 22 }}{{ end }}
+    {{ $label := "child1" }}{{ if .Recursive }}{{ $label = "root child1" }}{{ end }}{{formatHelpRow $maxSize $label "First child"}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "root child1 grandchild" "Grandchild"}}
 {{- end}}
+    {{ $label := "child2" }}{{ if .Recursive }}{{ $label = "root child2" }}{{ end }}{{formatHelpRow $maxSize $label "Second child"}}
+    {{formatHelpRow $maxSize "help" "Print this help message"}}
+    {{formatHelpRow $maxSize "usage" "Print this usage message"}}
 -- rendered-40-shallow.txt --
 Usage: myapp root <subcommand>
 
