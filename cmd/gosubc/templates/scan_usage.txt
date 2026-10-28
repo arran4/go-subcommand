@@ -7,8 +7,18 @@ Scan lists all available subcommands and their flags from the parsed codebase.
 It is useful for verifying the command structure and configuration.
 
 Subcommands:
-    help  Print this help message
-    usage Print this usage message
+{{- $commands := subcommands
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}
 
 
 Flags:

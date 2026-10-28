@@ -2,16 +2,29 @@
 Usage: gosubc skill <subcommand>
 
 Subcommands:
+{{- $commands := subcommands -}}
 {{if .Recursive}}
-    skill inspect inspects an AI agent skill.
-    skill install installs an AI agent skill.
-    skill list    lists installed AI agent skills.
-    skill remove  removes an AI agent skill.
-    skill update  updates an AI agent skill.
+{{- $commands = subcommands
+    (subcommand "skill inspect" "inspects an AI agent skill.")
+    (subcommand "skill install" "installs an AI agent skill.")
+    (subcommand "skill list" "lists installed AI agent skills.")
+    (subcommand "skill remove" "removes an AI agent skill.")
+    (subcommand "skill update" "updates an AI agent skill.")
+-}}
 {{else}}
-    inspect inspects an AI agent skill.
-    install installs an AI agent skill.
-    list    lists installed AI agent skills.
-    remove  removes an AI agent skill.
-    update  updates an AI agent skill.
+{{- $commands = subcommands
+    (subcommand "inspect" "inspects an AI agent skill.")
+    (subcommand "install" "installs an AI agent skill.")
+    (subcommand "list" "lists installed AI agent skills.")
+    (subcommand "remove" "removes an AI agent skill.")
+    (subcommand "update" "updates an AI agent skill.")
+-}}
 {{end}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}

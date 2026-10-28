@@ -933,3 +933,81 @@ func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
 		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
 	}
 }
+
+func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/issue481\n\ngo 1.22\n")
+	src := strings.Replace(issue481Source, "package main", "package issue481", 1)
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), src)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "app-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/app")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build generated CLI: %v\n%s", err, out)
+	}
+
+	runCLI := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("CLI %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	rootShallow := runCLI("help")
+	for _, want := range []string{
+		"Short root description with {{.Injected}} literal braces.",
+		`Extended help with {{printf "%s" .Exploit}} and unmatched }} or {{.`,
+		"    render                      Render {{.Injected}} template output }} safely {{.",
+		"    scenario",
+		"    serve                       Run the primary server.",
+		"    service                     Manage services.",
+		"    up                          Start everything.",
+		"    very-long-top-level-command Execute the long top-level command.",
+		"    help                        Print this help message",
+		"    usage                       Print this usage message",
+	} {
+		if !strings.Contains(rootShallow, want) {
+			t.Errorf("root help missing %q:\n%s", want, rootShallow)
+		}
+	}
+
+	serviceShallow := runCLI("service", "--help")
+	for _, want := range []string{
+		"    silent-group",
+		"    status       Show service status.",
+		"    help         Print this help message",
+		"    usage        Print this usage message",
+	} {
+		if !strings.Contains(serviceShallow, want) {
+			t.Errorf("service --help missing %q:\n%s", want, serviceShallow)
+		}
+	}
+
+	serviceDeep := runCLI("service", "help", "-deep")
+	for _, want := range []string{
+		"    service silent-group",
+		"    service silent-group deep-leaf-command Deep nested leaf action.",
+		"    service status                         Show service status.",
+		"    help                                   Print this help message",
+		"    usage                                  Print this usage message",
+	} {
+		if !strings.Contains(serviceDeep, want) {
+			t.Errorf("service help -deep missing %q:\n%s", want, serviceDeep)
+		}
+	}
+
+	serveShallow := runCLI("serve", "help")
+	serveDeep := runCLI("serve", "help", "-deep")
+	if serveShallow != serveDeep {
+		t.Errorf("expected identical shallow and deep help for leaf command serve:\nshallow:\n%q\ndeep:\n%q", serveShallow, serveDeep)
+	}
+}

@@ -67,13 +67,26 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
+{{- $commands := subcommands -}}
 {{if .Recursive}}
-    foo bar Bar command
-    foo baz Baz command
+{{- $commands = subcommands
+    (subcommand "foo bar" "Bar command")
+    (subcommand "foo baz" "Baz command")
+-}}
 {{else}}
-    bar Bar command
-    baz Baz command
+{{- $commands = subcommands
+    (subcommand "bar" "Bar command")
+    (subcommand "baz" "Baz command")
+-}}
 {{end}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}
 
 
 Flags:

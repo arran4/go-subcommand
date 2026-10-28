@@ -2,33 +2,46 @@
 Usage: gosubc <subcommand>
 
 Subcommands:
+{{- $commands := subcommands -}}
 {{if .Recursive}}
-    format                 formats the subcommand definitions
-    format-source-comments formats source comments to match gofmt style
-    generate               generates the subcommand code
-    goreleaser             generates goreleaser configuration and workflows
-    list                   lists the subcommands
-    scan                   lists all available subcommands and their flags
-    skill
-    skill inspect          inspects an AI agent skill.
-    skill install          installs an AI agent skill.
-    skill list             lists installed AI agent skills.
-    skill remove           removes an AI agent skill.
-    skill update           updates an AI agent skill.
-    syntax                 prints the available forms of function comments
-    template               Manage generation templates
-    template export        Exports the built-in templates
-    template layout        Displays the generation template layout
-    validate               validates the subcommand code
+{{- $commands = subcommands
+    (subcommand "format" "formats the subcommand definitions")
+    (subcommand "format-source-comments" "formats source comments to match gofmt style")
+    (subcommand "generate" "generates the subcommand code")
+    (subcommand "goreleaser" "generates goreleaser configuration and workflows")
+    (subcommand "list" "lists the subcommands")
+    (subcommand "scan" "lists all available subcommands and their flags")
+    (subcommand "skill" "")
+    (subcommand "skill inspect" "inspects an AI agent skill.")
+    (subcommand "skill install" "installs an AI agent skill.")
+    (subcommand "skill list" "lists installed AI agent skills.")
+    (subcommand "skill remove" "removes an AI agent skill.")
+    (subcommand "skill update" "updates an AI agent skill.")
+    (subcommand "syntax" "prints the available forms of function comments")
+    (subcommand "template" "Manage generation templates")
+    (subcommand "template export" "Exports the built-in templates")
+    (subcommand "template layout" "Displays the generation template layout")
+    (subcommand "validate" "validates the subcommand code")
+-}}
 {{else}}
-    format                 formats the subcommand definitions
-    format-source-comments formats source comments to match gofmt style
-    generate               generates the subcommand code
-    goreleaser             generates goreleaser configuration and workflows
-    list                   lists the subcommands
-    scan                   lists all available subcommands and their flags
-    skill
-    syntax                 prints the available forms of function comments
-    template               Manage generation templates
-    validate               validates the subcommand code
+{{- $commands = subcommands
+    (subcommand "format" "formats the subcommand definitions")
+    (subcommand "format-source-comments" "formats source comments to match gofmt style")
+    (subcommand "generate" "generates the subcommand code")
+    (subcommand "goreleaser" "generates goreleaser configuration and workflows")
+    (subcommand "list" "lists the subcommands")
+    (subcommand "scan" "lists all available subcommands and their flags")
+    (subcommand "skill" "")
+    (subcommand "syntax" "prints the available forms of function comments")
+    (subcommand "template" "Manage generation templates")
+    (subcommand "validate" "validates the subcommand code")
+-}}
 {{end}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}

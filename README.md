@@ -259,9 +259,10 @@ Each generated command owns a distinct usage resource. Commands with the same
 leaf name in different paths (for example, `app serve` and
 `app scenario serve`) retain separate help text and usage syntax.
 
-Subcommand descriptions are aligned from the commands actually displayed.
-Recursive help uses full command paths, while shallow help uses direct child
-names; neither mode relies on a fixed padding width.
+Subcommand descriptions are aligned at runtime by the generated usage templates
+from the command labels actually displayed. Recursive help selects full command
+paths while shallow help selects direct child names, and both modes share the
+same runtime width calculation and formatting without a fixed padding width.
 
 ### Root Actions and Subcommand Dispatch
 

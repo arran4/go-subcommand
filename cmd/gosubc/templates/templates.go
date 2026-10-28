@@ -64,6 +64,32 @@ func wrapText(text string, indent int, width int) string {
 	return out.String()
 }
 
+type usageSubcommand struct {
+	Label       string
+	Description string
+}
+
+func newUsageSubcommand(label, description string) usageSubcommand {
+	return usageSubcommand{
+		Label:       label,
+		Description: description,
+	}
+}
+
+func newUsageSubcommands(items ...usageSubcommand) []usageSubcommand {
+	return items
+}
+
+func usageSubcommandWidth(items []usageSubcommand) int {
+	width := 0
+	for _, item := range items {
+		if len(item.Label) > width {
+			width = len(item.Label)
+		}
+	}
+	return width
+}
+
 func wrapFlag(maxFlag, maxDef, width int, flagStr, defStr, descStr string) string {
 	indent := 4 + maxFlag + 1 + maxDef + 1 // 4 spaces for initial indent + columns + spacing
 	wrappedDesc := wrapText(descStr, indent, width)
@@ -75,6 +101,9 @@ func GetTemplates() *template.Template {
 		width := getTerminalWidth()
 
 		funcs := template.FuncMap{
+			"subcommand":      newUsageSubcommand,
+			"subcommands":     newUsageSubcommands,
+			"subcommandWidth": usageSubcommandWidth,
 			"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
 				indent := 4 + maxFlag + 1
 				if maxDef > 0 {

@@ -4,8 +4,18 @@ Usage: gosubc validate [flags...]
 validates the subcommand code
 
 Subcommands:
-    help  Print this help message
-    usage Print this usage message
+{{- $commands := subcommands
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}
 
 
 Flags:

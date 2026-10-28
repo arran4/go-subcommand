@@ -1,10 +1,12 @@
 package go_subcommand
 
 import (
+	"bytes"
 	_ "embed"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"text/template"
 
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
@@ -22,6 +24,56 @@ var issue18Source string
 
 //go:embed testdata/dashdash.go
 var dashdashSource string
+
+//go:embed testdata/issue481.go
+var issue481Source string
+
+type runtimeTestUsageSubcommand struct {
+	Label       string
+	Description string
+}
+
+func executeGeneratedUsageTemplate(t *testing.T, tmplText string, recursive bool) string {
+	t.Helper()
+	funcs := template.FuncMap{
+		"subcommand": func(label, description string) runtimeTestUsageSubcommand {
+			return runtimeTestUsageSubcommand{Label: label, Description: description}
+		},
+		"subcommands": func(items ...runtimeTestUsageSubcommand) []runtimeTestUsageSubcommand {
+			return items
+		},
+		"subcommandWidth": func(items []runtimeTestUsageSubcommand) int {
+			width := 0
+			for _, item := range items {
+				if len(item.Label) > width {
+					width = len(item.Label)
+				}
+			}
+			return width
+		},
+		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string {
+			return descStr
+		},
+	}
+	parsed, err := template.New("usage").Funcs(funcs).Parse(tmplText)
+	if err != nil {
+		t.Fatalf("failed to parse generated usage template: %v\n%s", err, tmplText)
+	}
+	var buf bytes.Buffer
+	err = parsed.Execute(&buf, struct {
+		Recursive bool
+		Injected  string
+		Exploit   string
+	}{
+		Recursive: recursive,
+		Injected:  "INJECTED_VALUE",
+		Exploit:   "EXPLOITED_VALUE",
+	})
+	if err != nil {
+		t.Fatalf("failed to execute generated usage template (recursive=%v): %v\n%s", recursive, err, tmplText)
+	}
+	return buf.String()
+}
 
 // setupProject returns an in-memory FS
 func setupProject(t *testing.T, sourceCode string) fstest.MapFS {
@@ -904,6 +956,7 @@ func GrandChild() {}
 	}
 
 	usageText := string(content)
+	renderedNestedUsage := executeGeneratedUsageTemplate(t, usageText, false)
 
 	// Issue 11 & 42: Help and usage should work (be visible)
 	// UPDATE per user request: Functionless parent subcommands (like 'nested' here) are equiv to usage/help
@@ -911,17 +964,17 @@ func GrandChild() {}
 	present := []string{}
 	unexpected := []string{"help", "usage"}
 	for _, unexp := range unexpected {
-		if strings.Contains(usageText, unexp+" ") {
+		if strings.Contains(renderedNestedUsage, unexp+" ") {
 			present = append(present, unexp)
 		}
 	}
 	if len(present) > 0 {
-		t.Errorf("Issue 11/42: Expected nested usage text to NOT contain %v (functionless parent), but they were present.\nContent:\n%s", present, usageText)
+		t.Errorf("Issue 11/42: Expected nested usage text to NOT contain %v (functionless parent), but they were present.\nContent:\n%s", present, renderedNestedUsage)
 	}
 
 	// Issue 41/52: Version should NOT be at nested level
-	if strings.Contains(usageText, "version      Print version information") {
-		t.Errorf("Issue 41/52: Nested usage text contains 'version' command which should only be at top level.\nContent:\n%s", usageText)
+	if strings.Contains(renderedNestedUsage, "version      Print version information") {
+		t.Errorf("Issue 41/52: Nested usage text contains 'version' command which should only be at top level.\nContent:\n%s", renderedNestedUsage)
 	}
 
 	// Check child command usage (explicitly functional)
@@ -931,12 +984,13 @@ func GrandChild() {}
 		t.Fatalf("Child usage file not found: %s", childUsagePath)
 	}
 	childUsageText := string(childContent)
+	renderedChildUsage := executeGeneratedUsageTemplate(t, childUsageText, false)
 
 	// Issue 11 & 42: Help and usage SHOULD be present for normal commands
 	missing := []string{}
 	expected := []string{"help", "usage"}
 	for _, exp := range expected {
-		if !strings.Contains(childUsageText, exp+" ") {
+		if !strings.Contains(renderedChildUsage, exp+" ") {
 			missing = append(missing, exp)
 		}
 	}
@@ -945,7 +999,7 @@ func GrandChild() {}
 		for k := range writer.Files {
 			keys = append(keys, k)
 		}
-		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, childUsageText, keys)
+		t.Errorf("Issue 11/42: Expected child usage text to contain %v (normal command), but they were missing.\nContent:\n%s\nFiles:\n%v", missing, renderedChildUsage, keys)
 	}
 }
 
@@ -1272,5 +1326,120 @@ func Parent2Child() {}
 		if !strings.Contains(content, "type Parent2Child struct") {
 			t.Errorf("%s should contain Parent2Child struct", p2cPath)
 		}
+	}
+}
+
+func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
+	input := setupProject(t, issue481Source)
+	first := runGenerateInMemory(t, input)
+	second := runGenerateInMemory(t, input)
+
+	// 6. Verify that generation is deterministic across repeated runs.
+	if len(first.Files) != len(second.Files) {
+		t.Fatalf("generated file count changed across runs: %d vs %d", len(first.Files), len(second.Files))
+	}
+	for path, content := range first.Files {
+		got, ok := second.Files[path]
+		if !ok || !bytes.Equal(got, content) {
+			t.Fatalf("generation is not deterministic for %s", path)
+		}
+	}
+
+	// Verify templates.go exposes runtime subcommand helpers without go-subcommand runtime dependency.
+	templatesGo := string(mustGeneratedFile(t, first, "cmd/app/templates/templates.go"))
+	assertContains(t, templatesGo, `"subcommand":      newUsageSubcommand`, "templates.go should register subcommand helper")
+	assertContains(t, templatesGo, `"subcommands":     newUsageSubcommands`, "templates.go should register subcommands helper")
+	assertContains(t, templatesGo, `"subcommandWidth": usageSubcommandWidth`, "templates.go should register subcommandWidth helper")
+	assertNotContains(t, templatesGo, `"github.com/arran4/go-subcommand/`, "generated templates.go must not import go-subcommand")
+
+	// 1. Verify generated *_usage.txt files contain runtime formatting expressions.
+	appUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/app_usage.txt"))
+	serviceUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/service_usage.txt"))
+	for name, tmplText := range map[string]string{
+		"app_usage.txt":     appUsage,
+		"service_usage.txt": serviceUsage,
+	} {
+		assertContains(t, tmplText, "{{- $commands := subcommands -}}", name+" should initialize runtime commands slice")
+		assertContains(t, tmplText, "{{- $width := subcommandWidth $commands -}}", name+" should compute width at runtime")
+		assertContains(t, tmplText, `{{printf "%-*s" $width .Label}} {{.Description}}`, name+" should align rows via runtime printf")
+		assertNotContains(t, tmplText, "%-40s", name+" must not contain hardcoded %-40s")
+	}
+
+	// 2, 3, 4. Execute generated templates in shallow and recursive modes for long/short names,
+	// nested commands, and commands without descriptions.
+	serviceShallow := executeGeneratedUsageTemplate(t, serviceUsage, false)
+	wantServiceShallow := strings.Join([]string{
+		"Usage: app service <subcommand>",
+		"",
+		"Manage services.",
+		"",
+		"Subcommands:",
+		"    silent-group",
+		"    status       Show service status.",
+		"    help         Print this help message",
+		"    usage        Print this usage message",
+		"",
+	}, "\n")
+	if serviceShallow != wantServiceShallow {
+		t.Errorf("service shallow usage mismatch:\nwant:\n%q\ngot:\n%q", wantServiceShallow, serviceShallow)
+	}
+
+	serviceRecursive := executeGeneratedUsageTemplate(t, serviceUsage, true)
+	wantServiceRecursive := strings.Join([]string{
+		"Usage: app service <subcommand>",
+		"",
+		"Manage services.",
+		"",
+		"Subcommands:",
+		"    service silent-group",
+		"    service silent-group deep-leaf-command Deep nested leaf action.",
+		"    service status                         Show service status.",
+		"    help                                   Print this help message",
+		"    usage                                  Print this usage message",
+		"",
+	}, "\n")
+	if serviceRecursive != wantServiceRecursive {
+		t.Errorf("service recursive usage mismatch:\nwant:\n%q\ngot:\n%q", wantServiceRecursive, serviceRecursive)
+	}
+
+	for _, line := range strings.Split(serviceRecursive, "\n") {
+		if strings.HasSuffix(line, " ") {
+			t.Errorf("service recursive line has trailing space: %q", line)
+		}
+	}
+
+	// 5 & 7. Verify PR #493 unique usage-resource naming and byte-identical output when shallow and recursive entries match.
+	serveUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/serve_usage.txt"))
+	scenarioServeUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/scenario_serve_usage.txt"))
+	serveShallow := executeGeneratedUsageTemplate(t, serveUsage, false)
+	serveRecursive := executeGeneratedUsageTemplate(t, serveUsage, true)
+	if serveShallow != serveRecursive {
+		t.Errorf("serve shallow and recursive outputs should be byte-identical:\nshallow:\n%q\nrecursive:\n%q", serveShallow, serveRecursive)
+	}
+	assertContains(t, serveShallow, "Usage: app serve [flags...]", "serve usage should retain its direct command path")
+	assertContains(t, serveShallow, "    help  Print this help message\n    usage Print this usage message", "serve usage should align built-in help rows")
+
+	scenarioShallow := executeGeneratedUsageTemplate(t, scenarioServeUsage, false)
+	scenarioRecursive := executeGeneratedUsageTemplate(t, scenarioServeUsage, true)
+	if scenarioShallow != scenarioRecursive {
+		t.Errorf("scenario serve shallow and recursive outputs should be byte-identical:\nshallow:\n%q\nrecursive:\n%q", scenarioShallow, scenarioRecursive)
+	}
+	assertContains(t, scenarioShallow, "Usage: app scenario serve <name>", "scenario serve usage should retain its nested command path")
+	assertContains(t, scenarioShallow, "Scenario {{.Injected}} name", "scenario serve positional description should render literal braces")
+
+	// 8. Ensure literal descriptions containing {{ or }} cannot inject template actions.
+	renderUsage := string(mustGeneratedFile(t, first, "cmd/app/templates/render_usage.txt"))
+	for _, recursive := range []bool{false, true} {
+		renderedApp := executeGeneratedUsageTemplate(t, appUsage, recursive)
+		renderedRender := executeGeneratedUsageTemplate(t, renderUsage, recursive)
+		for _, out := range []string{renderedApp, renderedRender} {
+			if strings.Contains(out, "INJECTED_VALUE") || strings.Contains(out, "EXPLOITED_VALUE") {
+				t.Fatalf("literal description injected template action (recursive=%v):\n%s", recursive, out)
+			}
+		}
+		assertContains(t, renderedApp, "Short root description with {{.Injected}} literal braces.", "root description should preserve literal braces")
+		assertContains(t, renderedApp, `Extended help with {{printf "%s" .Exploit}} and unmatched }} or {{.`, "root extended help should preserve literal braces")
+		assertContains(t, renderedApp, "Render {{.Injected}} template output }} safely {{.", "subcommand row description should preserve literal braces")
+		assertContains(t, renderedRender, "Output format like {{.Name}}", "flag description should preserve literal braces")
 	}
 }

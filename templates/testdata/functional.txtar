@@ -67,17 +67,30 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
+{{- $commands := subcommands -}}
 {{if .Recursive}}
-    foo bar Bar command
-    foo baz Baz command
-    help    Print this help message
-    usage   Print this usage message
+{{- $commands = subcommands
+    (subcommand "foo bar" "Bar command")
+    (subcommand "foo baz" "Baz command")
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
 {{else}}
-    bar   Bar command
-    baz   Baz command
-    help  Print this help message
-    usage Print this usage message
+{{- $commands = subcommands
+    (subcommand "bar" "Bar command")
+    (subcommand "baz" "Baz command")
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
 {{end}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}
 
 
 Flags:

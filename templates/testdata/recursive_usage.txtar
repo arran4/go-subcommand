@@ -31,15 +31,28 @@ Usage: myapp root <subcommand>
 Root command
 
 Subcommands:
+{{- $commands := subcommands -}}
 {{if .Recursive}}
-    root child1            First child
-    root child1 grandchild Grandchild
-    root child2            Second child
-    help                   Print this help message
-    usage                  Print this usage message
+{{- $commands = subcommands
+    (subcommand "root child1" "First child")
+    (subcommand "root child1 grandchild" "Grandchild")
+    (subcommand "root child2" "Second child")
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
 {{else}}
-    child1 First child
-    child2 Second child
-    help   Print this help message
-    usage  Print this usage message
+{{- $commands = subcommands
+    (subcommand "child1" "First child")
+    (subcommand "child2" "Second child")
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
 {{end}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}

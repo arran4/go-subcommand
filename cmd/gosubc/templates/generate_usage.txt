@@ -13,8 +13,18 @@ You can provide multiple replacements in the following formats:
 Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
 
 Subcommands:
-    help  Print this help message
-    usage Print this usage message
+{{- $commands := subcommands
+    (subcommand "help" "Print this help message")
+    (subcommand "usage" "Print this usage message")
+-}}
+{{- $width := subcommandWidth $commands -}}
+{{- range $commands}}
+{{- if .Description}}
+    {{printf "%-*s" $width .Label}} {{.Description}}
+{{- else}}
+    {{.Label}}
+{{- end}}
+{{- end}}
 
 
 Flags:
