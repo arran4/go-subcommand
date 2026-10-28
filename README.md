@@ -373,6 +373,28 @@ Generates release configuration.
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
 
+### Target-aware source discovery
+
+`commentv1` selects source files with Go build-constraint semantics. In
+particular it excludes `_test.go` files and honours platform filename suffixes,
+`//go:build`, legacy `// +build`, and explicit build tags. A generator invoked
+through `GenerateWithFS` can select the intended output target with
+`parsers.ParseOptions`:
+
+```go
+parseOptions := &parsers.ParseOptions{
+	Recursive: true,
+	GOOS:      "windows",
+	GOARCH:    "amd64",
+	BuildTags: []string{"enterprise"},
+}
+```
+
+The generated command tree is valid for that selected target, not a universal
+mixture of mutually exclusive platform implementations. Compile or package the
+result using the same target values. Empty target fields retain the generator
+host defaults.
+
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 
