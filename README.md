@@ -155,6 +155,8 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
+
 ### Supported Types
 
 The following Go types are supported for function parameters:
@@ -253,6 +255,114 @@ func CreateUser(...) { ... }
 func ListUsers(...) { ... }
 ```
 
+Each generated command owns a distinct usage resource. Commands with the same
+leaf name in different paths (for example, `app serve` and
+`app scenario serve`) retain separate help text and usage syntax.
+
+### Root Actions and Subcommand Dispatch
+
+When an application defines both a root action and subcommands, a recognized
+subcommand (including the built-in `version`, `help`, and `usage` commands) is
+dispatched without running the root action. Root flags are still parsed and
+validated before dispatch. `--` preserves root positional-argument semantics,
+so a token after it is not treated as a subcommand.
+
+An error returned by a durable command action is annotated once with the
+command name (for example, `app failed: ...`). The generated wrapper uses `%w`,
+so callers can still use `errors.Is` and `errors.As` with the underlying error.
+
+### Implicit and explicit command trees
+
+The command path inside backticks determines the generated executable and its
+nested command hierarchy. All of the examples below produce **one**
+`cmd/gogenmux` executable, not a separate executable per function.
+
+**Example A — implicit root and implicit intermediate command.**
+Only the leaf commands are annotated; `gogenmux` and `config` are created
+automatically as dispatch-only parents:
+
+```go
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Inspect is a subcommand `gogenmux inspect` -- Inspect the model.
+func Inspect() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+The generated command tree is:
+
+```text
+gogenmux                  [implicit root: no action function]
+├── generate              [Generate()]
+├── inspect               [Inspect()]
+└── config                [implicit parent: no action function]
+    └── show              [Show()]
+```
+
+**Example B — explicit root with a default action and explicit intermediate command.**
+An annotated application-root function is not merely a structural declaration:
+it becomes the **default action invoked by bare `gogenmux`**. Likewise, an
+explicitly annotated `config` function handles bare `gogenmux config`.
+The hierarchy still produces one executable:
+
+```go
+// Gogenmux is a subcommand `gogenmux` -- Multiplexer tools.
+func Gogenmux() {}
+
+// Generate is a subcommand `gogenmux generate` -- Generate source.
+func Generate() {}
+
+// Config is a subcommand `gogenmux config` -- Manage configuration.
+func Config() {}
+
+// Show is a subcommand `gogenmux config show` -- Show configuration.
+func Show() {}
+```
+
+```text
+gogenmux                  [explicit root + default action: Gogenmux()]
+├── generate              [Generate()]
+└── config                [explicit command action: Config()]
+    └── show              [Show()]
+```
+
+For Example B, invocation selects the corresponding action:
+
+```text
+gogenmux                  → Gogenmux()       (default/root action)
+gogenmux generate         → Generate()       (not Gogenmux())
+gogenmux config           → Config()         (intermediate action)
+gogenmux config show      → Show()           (not Config() or Gogenmux())
+```
+
+An **explicit root action is optional at definition time**, but when declared
+it is also the application's default action. There is currently no separate
+`commentv1` annotation for an *explicit, metadata-only root* that avoids
+registering such a default action. For a dispatch-only root, use the implicit
+root form in Example A rather than adding an empty root function solely to
+declare the executable name. Similarly, omit the explicit `config` function
+when that intermediate node needs no action.
+
+Durable functions stay in their original source package; gosubc generates
+the dispatch wrappers and help resources. A function specifically named
+`Root` is not required. For related distinctions involving a literal child
+command named `root`, see [issue #513](https://github.com/arran4/go-subcommand/issues/513).
+
+**Syntax matters:** use backticks around the entire command path:
+
+```go
+// Show is a subcommand `gogenmux config show`
+```
+
+A comment such as `// Show is a subcommand gogenmux config show` (without backticks)
+is **not equivalent** in the current `commentv1` parser; it can fall back to
+the Go function name and create an unintended executable tree. See
+[issue #478](https://github.com/arran4/go-subcommand/issues/478) for
+tracking of that ambiguity.
+
 ### Parent Flags (Inheritance)
 
 Subcommands can explicitly map a parameter to a flag declared by an ancestor command using `(from parent)`.
@@ -311,6 +421,7 @@ Generates the Go code for your CLI.
 *   `--dir <path>`: Root directory containing `go.mod`. Defaults to current directory.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
+*   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
 
 ### `gosubc template`
 
@@ -339,9 +450,50 @@ Generates release configuration.
 *   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
 
 ### Parser Backend Configuration
+
+### Generated application Go compatibility
+
+The Go version needed to run `gosubc` is separate from the version supported by
+the generated application. Generated command packages require **Go 1.16 or
+newer** because they use standard-library embedding and `io/fs`.
+
+The generator reads the target module's `go` directive and adapts its output:
+
+| Target module version | Generated compatibility form |
+| --- | --- |
+| Go 1.16–1.17 | `interface{}` and local loops (no `slices`) |
+| Go 1.18–1.20 | `any` and local loops |
+| Go 1.21+ | `any` and `slices.Contains` |
+
+Generation fails before writing output when a target module declares Go 1.15 or
+older. The compatibility forms are regression-tested as generated source; the
+local campaign environment currently has a Go 1.25.0 compiler, so it does not
+claim binary compilation with unavailable historical toolchains.
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
+
+### Target-aware source discovery
+
+`commentv1` selects source files with Go build-constraint semantics. In
+particular it excludes `_test.go` files and honours platform filename suffixes,
+`//go:build`, legacy `// +build`, and explicit build tags. A generator invoked
+through `GenerateWithFS` can select the intended output target with
+`parsers.ParseOptions`:
+
+```go
+parseOptions := &parsers.ParseOptions{
+	Recursive: true,
+	GOOS:      "windows",
+	GOARCH:    "amd64",
+	BuildTags: []string{"enterprise"},
+}
+```
+
+The generated command tree is valid for that selected target, not a universal
+mixture of mutually exclusive platform implementations. Compile or package the
+result using the same target values. Empty target fields retain the generator
+host defaults.
 
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).

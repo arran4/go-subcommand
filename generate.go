@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -359,6 +360,9 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 type GenerateOptions struct {
 	// CLIParser is the generation-wide runtime CLI parser backend fallback.
 	CLIParser string
+	// SuppressGoGenerate omits the nested go:generate directive from generated
+	// main.go. Its zero value retains the compatible default of emitting it.
+	SuppressGoGenerate bool
 }
 
 func extractGenerateOptions(ops []any) GenerateOptions {
@@ -369,9 +373,15 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value.SuppressGoGenerate {
+				result.SuppressGoGenerate = true
+			}
 		case *GenerateOptions:
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
+			}
+			if value != nil && value.SuppressGoGenerate {
+				result.SuppressGoGenerate = true
 			}
 		}
 	}
@@ -475,12 +485,18 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CLIParser); err != nil {
 		return err
 	}
+	for _, cmd := range dataModel.Commands {
+		cmd.SuppressGoGenerate = generateOptions.SuppressGoGenerate
+	}
 
 	if err := dataModel.Validate(); err != nil {
 		return err
 	}
 
 	dataModel.GoVersion = getGoVersion(inputFS)
+	if err := validateGeneratedGoVersion(dataModel.GoVersion); err != nil {
+		return err
+	}
 	prov := GetProvenance(replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate)
 	dataModel.Provenance = &prov
 
@@ -556,20 +572,44 @@ func isGenerated(content []byte) bool {
 	return false
 }
 func assignUsageFileNames(subCommands []*model.SubCommand) {
-	seen := make(map[string]int)
-	for _, sc := range subCommands {
-		lower := strings.ToLower(sc.SubCommandName)
-		count := seen[lower]
-		seen[lower]++
-		suffix := ""
-		if count > 0 {
-			suffix = fmt.Sprintf("_%d", count)
-		}
-		sc.UsageFileName = fmt.Sprintf("%s%s_usage.txt", lower, suffix)
+	type usageTarget struct {
+		command *model.SubCommand
+		path    []string
+	}
 
-		if len(sc.SubCommands) > 0 {
-			assignUsageFileNames(sc.SubCommands)
+	var targets []usageTarget
+	var collect func([]*model.SubCommand, []string)
+	collect = func(commands []*model.SubCommand, parentPath []string) {
+		for _, sc := range commands {
+			path := append(append([]string(nil), parentPath...), sc.SubCommandName)
+			targets = append(targets, usageTarget{command: sc, path: path})
+			collect(sc.SubCommands, path)
 		}
+	}
+	collect(subCommands, nil)
+
+	leafCount := make(map[string]int)
+	for _, target := range targets {
+		leafCount[strings.ToLower(target.path[len(target.path)-1])]++
+	}
+
+	seen := make(map[string]int)
+	for _, target := range targets {
+		name := strings.ToLower(target.path[len(target.path)-1])
+		if leafCount[name] > 1 && len(target.path) > 1 {
+			parts := make([]string, len(target.path))
+			for i, part := range target.path {
+				parts[i] = strings.ToLower(part)
+			}
+			name = strings.Join(parts, "_")
+		}
+
+		count := seen[name]
+		seen[name]++
+		if count > 0 {
+			name = fmt.Sprintf("%s_%d", name, count)
+		}
+		target.command.UsageFileName = fmt.Sprintf("%s_usage.txt", name)
 	}
 }
 
@@ -669,6 +709,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
 		"base":                filepath.Base,
+		"goString":            strconv.Quote,
 		"isDefaultExpression": isDefaultExpression,
 	})
 
@@ -762,7 +803,7 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		if p.Generator.Type == model.SourceTypeGenerator {
 			add(p.Generator.Func)
 		}
-		if isDefaultExpression(p.Default) {
+		if p.DefaultExpr == nil && isDefaultExpression(p.Default) {
 			if expr, err := parser.ParseExpr(p.Default); err == nil {
 				var extractPkg func(e ast.Expr) string
 				extractPkg = func(e ast.Expr) string {
@@ -808,35 +849,53 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 }
 
 func deduplicateAndSortImports(imports []templateImport) fileImports {
+	// Plan import identifiers once per generated file.  A path is semantic
+	// identity; Alias is merely the preferred spelling found in parsed source.
+	// The resulting Alias is the only spelling emitted by the import block.
+	// Callers that render references prepare their model from this same plan.
 	seen := make(map[string]templateImport)
 	for _, imp := range imports {
-		if _, ok := seen[imp.Path]; !ok {
+		if imp.Path == "" {
+			continue
+		}
+		previous, ok := seen[imp.Path]
+		if !ok || (previous.Alias == "" && imp.Alias != "") || (previous.Alias != "" && imp.Alias != "" && imp.Alias < previous.Alias) {
 			seen[imp.Path] = imp
+		}
+	}
+
+	paths := make([]string, 0, len(seen))
+	for importPath := range seen {
+		paths = append(paths, importPath)
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		leftFixed := isGeneratedImport(paths[i])
+		rightFixed := isGeneratedImport(paths[j])
+		if leftFixed != rightFixed {
+			return leftFixed
+		}
+		return paths[i] < paths[j]
+	})
+
+	used := make(map[string]bool, len(paths))
+	finalImports := make([]templateImport, 0, len(paths))
+	for _, importPath := range paths {
+		imp := seen[importPath]
+		preferred := imp.Alias
+		if preferred == "" {
+			preferred = path.Base(importPath)
+		}
+		identifier := ""
+		if isGeneratedImport(importPath) {
+			identifier = path.Base(importPath)
 		} else {
-			if imp.Alias != "" && seen[imp.Path].Alias == "" {
-				seen[imp.Path] = imp
-			}
+			identifier = uniqueImportIdentifier(preferred, used)
 		}
-	}
-
-	nameCounts := make(map[string]int)
-	for path, imp := range seen {
-		name := imp.Alias
-		if name == "" {
-			name = filepath.Base(path)
-		}
-		nameCounts[name]++
-	}
-
-	var finalImports []templateImport
-	for path, imp := range seen {
-		name := imp.Alias
-		if name == "" {
-			name = filepath.Base(path)
-		}
-
-		if nameCounts[name] > 1 && imp.Alias == "" {
-			imp.Alias = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(path, "/", "x"), ".", "x"), "-", "x")
+		used[identifier] = true
+		if identifier == path.Base(importPath) {
+			imp.Alias = ""
+		} else {
+			imp.Alias = identifier
 		}
 		finalImports = append(finalImports, imp)
 	}
@@ -863,6 +922,55 @@ func deduplicateAndSortImports(imports []templateImport) fileImports {
 		Standard: standard,
 		Other:    other,
 	}
+}
+
+func isGeneratedImport(importPath string) bool {
+	switch importPath {
+	case "errors", "flag", "fmt", "io", "os", "slices", "strconv", "strings", "sync", "time":
+		return true
+	default:
+		return false
+	}
+}
+
+func uniqueImportIdentifier(preferred string, used map[string]bool) string {
+	identifier := sanitizeImportIdentifier(preferred)
+	if identifier == "" {
+		identifier = "pkg"
+	}
+	if !used[identifier] {
+		return identifier
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := fmt.Sprintf("%s_%d", identifier, suffix)
+		if !used[candidate] {
+			return candidate
+		}
+	}
+}
+
+func sanitizeImportIdentifier(identifier string) string {
+	var b strings.Builder
+	for _, r := range identifier {
+		if r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	result := b.String()
+	if result == "" {
+		return ""
+	}
+	if first := result[0]; first >= '0' && first <= '9' {
+		result = "pkg_" + result
+	}
+	for _, reserved := range model.ReservedKeywords {
+		if result == reserved {
+			return "pkg_" + result
+		}
+	}
+	return result
 }
 
 func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
@@ -1075,7 +1183,120 @@ func getGoVersion(fsys fs.FS) string {
 	return f.Go.Version
 }
 
+// prepareGeneratedIdentifiers applies the import plan to the small rendering
+// view held by a command.  The semantic model continues to retain import
+// paths; only transient Go spelling is changed while one Go template is being
+// rendered.  This keeps type identity distinct from emitted identifiers and
+// avoids teaching every template a parallel alias lookup API.
+func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
+	if templateName != "root.go.gotmpl" && templateName != "cmd.go.gotmpl" {
+		return func() {}
+	}
+
+	var params []*model.FunctionParameter
+	var imports fileImports
+	var commandRef *model.FuncRef
+	switch value := data.(type) {
+	case *model.Command:
+		params = value.Parameters
+		imports = commandImports(value, value.ImportPath)
+		commandRef = &model.FuncRef{ImportPath: value.ImportPath, CommandPackageName: value.CommandPackageName}
+	case *model.SubCommand:
+		params = value.Parameters
+		imports = subCommandImports(value, value.ImportPath)
+		commandRef = &model.FuncRef{ImportPath: value.ImportPath, CommandPackageName: value.SubCommandPackageName}
+	default:
+		return func() {}
+	}
+
+	identifiers := importIdentifiers(imports)
+	var restores []func()
+	rewriteRef := func(ref *model.FuncRef) {
+		if ref == nil || ref.ImportPath == "" {
+			return
+		}
+		identifier, ok := identifiers[ref.ImportPath]
+		if !ok || ref.CommandPackageName == identifier {
+			return
+		}
+		previous := ref.CommandPackageName
+		ref.CommandPackageName = identifier
+		restores = append(restores, func() { ref.CommandPackageName = previous })
+	}
+
+	for _, parameter := range params {
+		if parameter.TypeImportPath != "" && parameter.TypeName != "" {
+			if identifier, ok := identifiers[parameter.TypeImportPath]; ok {
+				base := parameter.BaseType()
+				if dot := strings.IndexByte(base, '.'); dot >= 0 {
+					previous := parameter.Type
+					prefix := strings.TrimSuffix(parameter.Type, base)
+					parameter.Type = prefix + identifier + base[dot:]
+					restores = append(restores, func() { parameter.Type = previous })
+				}
+			}
+		}
+		if parameter.DefaultExpr != nil {
+			previousDefault := parameter.Default
+			previousQualifier := parameter.DefaultExpr.CommandPackageName
+			rewriteRef(parameter.DefaultExpr)
+			if previousQualifier != "" && parameter.DefaultExpr.CommandPackageName != previousQualifier {
+				parameter.Default = strings.ReplaceAll(parameter.Default, previousQualifier+".", parameter.DefaultExpr.CommandPackageName+".")
+				restores = append(restores, func() { parameter.Default = previousDefault })
+			}
+		}
+		rewriteRef(parameter.Parser.Func)
+		rewriteRef(parameter.Generator.Func)
+	}
+
+	if commandRef.ImportPath != "" {
+		if identifier, ok := identifiers[commandRef.ImportPath]; ok {
+			switch value := data.(type) {
+			case *model.Command:
+				previous := value.CommandPackageName
+				value.CommandPackageName = identifier
+				restores = append(restores, func() { value.CommandPackageName = previous })
+			case *model.SubCommand:
+				previous := value.SubCommandPackageName
+				value.SubCommandPackageName = identifier
+				restores = append(restores, func() { value.SubCommandPackageName = previous })
+			}
+		}
+	}
+
+	return func() {
+		for i := len(restores) - 1; i >= 0; i-- {
+			restores[i]()
+		}
+	}
+}
+
+func importIdentifiers(imports fileImports) map[string]string {
+	identifiers := make(map[string]string, len(imports.Standard)+len(imports.Other))
+	for _, group := range [][]templateImport{imports.Standard, imports.Other} {
+		for _, imp := range group {
+			identifier := imp.Alias
+			if identifier == "" {
+				identifier = path.Base(imp.Path)
+			}
+			identifiers[imp.Path] = identifier
+		}
+	}
+	return identifiers
+}
+
+const minimumGeneratedGoVersion = "1.16"
+
+func validateGeneratedGoVersion(version string) error {
+	if semver.Compare("v"+version, "v"+minimumGeneratedGoVersion) < 0 {
+		return fmt.Errorf("generated applications require Go %s or newer; target module declares go %s", minimumGeneratedGoVersion, version)
+	}
+	return nil
+}
+
 func generateFile(writer FileWriter, dir, fileName, templateName string, data interface{}, formatCode bool) error {
+	restore := prepareGeneratedIdentifiers(data, templateName)
+	defer restore()
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, templateName, data); err != nil {
 		return fmt.Errorf("failed to execute template %s: %w", templateName, err)
@@ -1105,7 +1326,13 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 	return nil
 }
 
-// GenerateCLI is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLI generates code using the legacy public CLI-facing API. It remains
+// available so previously generated gosubc commands can bootstrap newer ones.
+func GenerateCLI(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
+}
+
+// GenerateCLICommand is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1129,10 +1356,18 @@ func generateFile(writer FileWriter, dir, fileName, templateName string, data in
 //	replaceTemplates:	--replace-template			Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
 //	projectProvenance: --project-provenance, --project (default: true) Include target Git metadata in provenance
 //	timestamp:         --timestamp (default: true) Include timestamp in provenance
+//	emitGoGenerate:    --emit-go-generate (default: true) Emit nested //go:generate directive in generated main.go
 //	provVersion:       --prov-version    (default: "") Overwrite provenance version
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
-func GenerateCLI(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error {
+func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
+	})
+}
+
+func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {
 	if dir == "." {
 		if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
 			if root, err := findModuleRoot("."); err == nil {
@@ -1143,5 +1378,5 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 	return GenerateWithFS(os.DirFS(dir), &OSFileWriter{}, dir, manDir, parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	}, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
+	}, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, options)
 }
