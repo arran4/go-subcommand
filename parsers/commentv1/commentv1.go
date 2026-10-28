@@ -611,6 +611,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Generator.Func.PackagePath = importPath
 							fp.Generator.Func.CommandPackageName = f.Name.Name
 						}
+						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
 						if len(fp.FlagAliases) == 0 {
 							kebab := parsers.ToKebabCase(name.Name)
@@ -703,6 +704,44 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ReturnsError:   returnsError,
 				ReturnCount:    returnCount,
 			})
+		}
+	}
+	return nil
+}
+
+// resolveDefaultExpressionImport records the semantic package identity of a
+// qualified default expression.  Rendering must not guess an import path from
+// its source qualifier: an alias can differ from both the package and path
+// base names.
+func resolveDefaultExpressionImport(value string, imports []*ast.ImportSpec) *model.FuncRef {
+	expression, err := parser.ParseExpr(value)
+	if err != nil {
+		return nil
+	}
+	var qualifier string
+	switch expression := expression.(type) {
+	case *ast.CallExpr:
+		if selector, ok := expression.Fun.(*ast.SelectorExpr); ok {
+			if ident, ok := selector.X.(*ast.Ident); ok {
+				qualifier = ident.Name
+			}
+		}
+	case *ast.SelectorExpr:
+		if ident, ok := expression.X.(*ast.Ident); ok {
+			qualifier = ident.Name
+		}
+	}
+	if qualifier == "" {
+		return nil
+	}
+	for _, imp := range imports {
+		importPath := strings.Trim(imp.Path.Value, `"`)
+		importName := path.Base(importPath)
+		if imp.Name != nil {
+			importName = imp.Name.Name
+		}
+		if importName == qualifier {
+			return &model.FuncRef{ImportPath: importPath, PackagePath: importPath, CommandPackageName: qualifier}
 		}
 	}
 	return nil

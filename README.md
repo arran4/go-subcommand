@@ -155,6 +155,8 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
+
 ### Supported Types
 
 The following Go types are supported for function parameters:
@@ -252,6 +254,22 @@ func CreateUser(...) { ... }
 // ListUsers is a subcommand `app users list`
 func ListUsers(...) { ... }
 ```
+
+Each generated command owns a distinct usage resource. Commands with the same
+leaf name in different paths (for example, `app serve` and
+`app scenario serve`) retain separate help text and usage syntax.
+
+### Root Actions and Subcommand Dispatch
+
+When an application defines both a root action and subcommands, a recognized
+subcommand (including the built-in `version`, `help`, and `usage` commands) is
+dispatched without running the root action. Root flags are still parsed and
+validated before dispatch. `--` preserves root positional-argument semantics,
+so a token after it is not treated as a subcommand.
+
+An error returned by a durable command action is annotated once with the
+command name (for example, `app failed: ...`). The generated wrapper uses `%w`,
+so callers can still use `errors.Is` and `errors.As` with the underlying error.
 
 An explicit function for `app` is optional. Leaf annotations that share the same first path element are coalesced into one generated executable tree, so this produces only `cmd/gogenmux`:
 

@@ -164,15 +164,15 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) (err error) {
-	if c.CommandAction != nil {
-		if err := c.CommandAction(c); err != nil {
-			return fmt.Errorf("myroot failed: %w", err)
-		}
-	}
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
 		}
 	}
 	return nil

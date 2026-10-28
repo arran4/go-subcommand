@@ -2,6 +2,9 @@ package go_subcommand
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/arran4/go-subcommand/model"
@@ -19,37 +22,56 @@ import (
 //	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
 //	recursive:	--recursive	(default: true)		Search recursively
 func Scan(dir string, parserName string, paths []string, recursive bool) error {
-	dataModel, err := parse(dir, parserName, &parsers.ParseOptions{
+	return ScanWithFS(os.DirFS(dir), os.Stdout, parserName, paths, recursive)
+}
+
+// ScanWithFS lists subcommands from inputFS and writes the stable report to
+// output. It is the side-effect-free core used by Scan and tests.
+func ScanWithFS(inputFS fs.FS, output io.Writer, parserName string, paths []string, recursive bool) error {
+	dataModel, err := parse(".", parserName, &parsers.ParseOptions{
 		SearchPaths: paths,
 		Recursive:   recursive,
-	})
+	}, inputFS)
 	if err != nil {
 		return err
 	}
 
 	for _, cmd := range dataModel.Commands {
-		fmt.Printf("Command: %s\n", cmd.MainCmdName)
-		printSubCommands(cmd.SubCommands, 1)
+		if _, err := fmt.Fprintf(output, "Command: %s\n", cmd.MainCmdName); err != nil {
+			return err
+		}
+		if err := printSubCommands(output, cmd.SubCommands, 1); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func printSubCommands(subCmds []*model.SubCommand, indentLevel int) {
+func printSubCommands(output io.Writer, subCmds []*model.SubCommand, indentLevel int) error {
 	indent := strings.Repeat("  ", indentLevel)
 	for _, sc := range subCmds {
-		fmt.Printf("%sSubcommand: %s\n", indent, sc.SubCommandSequence())
+		if _, err := fmt.Fprintf(output, "%sSubcommand: %s\n", indent, sc.SubCommandSequence()); err != nil {
+			return err
+		}
 		if len(sc.Parameters) > 0 {
-			fmt.Printf("%s  Flags:\n", indent)
+			if _, err := fmt.Fprintf(output, "%s  Flags:\n", indent); err != nil {
+				return err
+			}
 			for _, p := range sc.Parameters {
 				defaultVal := ""
 				if p.Default != "" {
 					defaultVal = fmt.Sprintf(" (default: %q)", p.Default)
 				}
-				fmt.Printf("%s    %s%s %s\n", indent, p.FlagString(), defaultVal, p.Description)
+				if _, err := fmt.Fprintf(output, "%s    %s%s %s\n", indent, p.FlagString(), defaultVal, p.Description); err != nil {
+					return err
+				}
 			}
 		}
 		if len(sc.SubCommands) > 0 {
-			printSubCommands(sc.SubCommands, indentLevel+1)
+			if err := printSubCommands(output, sc.SubCommands, indentLevel+1); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
