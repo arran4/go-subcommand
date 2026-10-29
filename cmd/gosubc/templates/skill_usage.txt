@@ -2,16 +2,9 @@
 Usage: gosubc skill <subcommand>
 
 Subcommands:
-{{if .Recursive}}
-    skill inspect                            inspects an AI agent skill.
-    skill install                            installs an AI agent skill.
-    skill list                               lists installed AI agent skills.
-    skill remove                             removes an AI agent skill.
-    skill update                             updates an AI agent skill.
-{{else}}
-    inspect    inspects an AI agent skill.
-    install    installs an AI agent skill.
-    list       lists installed AI agent skills.
-    remove     removes an AI agent skill.
-    update     updates an AI agent skill.
-{{end}}
+{{ $maxSize := 7 }}{{ if .Recursive }}{{ $maxSize = 13 }}{{ end }}
+    {{ $label := "inspect" }}{{ if .Recursive }}{{ $label = "skill inspect" }}{{ end }}{{formatHelpRow $maxSize $label "inspects an AI agent skill."}}
+    {{ $label := "install" }}{{ if .Recursive }}{{ $label = "skill install" }}{{ end }}{{formatHelpRow $maxSize $label "installs an AI agent skill."}}
+    {{ $label := "list" }}{{ if .Recursive }}{{ $label = "skill list" }}{{ end }}{{formatHelpRow $maxSize $label "lists installed AI agent skills."}}
+    {{ $label := "remove" }}{{ if .Recursive }}{{ $label = "skill remove" }}{{ end }}{{formatHelpRow $maxSize $label "removes an AI agent skill."}}
+    {{ $label := "update" }}{{ if .Recursive }}{{ $label = "skill update" }}{{ end }}{{formatHelpRow $maxSize $label "updates an AI agent skill."}}
