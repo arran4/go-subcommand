@@ -278,30 +278,44 @@ func TestGenerateCLIConfiguredCommandUsesFileThenExplicitFlags(t *testing.T) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("configured generation failed: %v\n%s", err, output)
 	}
-	root, err := os.ReadFile(filepath.Join(project, "cmd", "app", "root.go"))
+	main, err := os.ReadFile(filepath.Join(project, "cmd", "app", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(root), "fs.Parse(args)") || strings.Contains(string(root), "//go:generate") {
-		t.Fatalf("configuration was not applied to generated root:\n%s", root)
+	if strings.Contains(string(main), "//go:generate") {
+		t.Fatalf("configuration did not suppress nested generation:\n%s", main)
 	}
+	assertParser := func(want string) {
+		t.Helper()
+		binary := filepath.Join(project, "app")
+		build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+		build.Dir = project
+		if output, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build configured application: %v\n%s", err, output)
+		}
+		run := exec.Command(binary, "--unknown")
+		run.Dir = project
+		output, err := run.CombinedOutput()
+		exit, ok := err.(*exec.ExitError)
+		if !ok || exit.ExitCode() != 1 || !strings.Contains(string(output), want) {
+			t.Fatalf("configured parser: err=%v output=%q; want status 1 and %q", err, output, want)
+		}
+	}
+	assertParser("flag provided but not defined: -unknown")
 
 	command = exec.Command("go", "run", "./cmd/gosubc", "generate", "--config", configPath, "--cli-parser", "gnu", "--emit-go-generate=true", "--timestamp=false", "--project=false", "--prov-version=")
 	command.Dir = "."
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("explicit configured generation failed: %v\n%s", err, output)
 	}
-	root, err = os.ReadFile(filepath.Join(project, "cmd", "app", "root.go"))
+	main, err = os.ReadFile(filepath.Join(project, "cmd", "app", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	main, err := os.ReadFile(filepath.Join(project, "cmd", "app", "main.go"))
-	if err != nil {
-		t.Fatal(err)
+	if !strings.Contains(string(main), "//go:generate") {
+		t.Fatalf("explicit flags did not override config:\n%s", main)
 	}
-	if strings.Contains(string(root), "fs.Parse(args)") || !strings.Contains(string(main), "//go:generate") {
-		t.Fatalf("explicit flags did not override config:\nroot:\n%s\nmain:\n%s", root, main)
-	}
+	assertParser("unknown flag: --unknown")
 }
 
 func TestGenerateRejectsUnintendedOneFlag(t *testing.T) {
