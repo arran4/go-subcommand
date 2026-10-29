@@ -1344,11 +1344,11 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
-		case AttributeRootContext, "constructor":
-			p.Generator.Type = model.SourceTypeConstructor
 			if p.Generator.Func != nil {
 				p.Generator.Func.FunctionName, p.Generator.Inputs = parseGeneratorInputs(p.Generator.Func.FunctionName)
 			}
+		case AttributeRootContext, "constructor":
+			p.Generator.Type = model.SourceTypeConstructor
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
 			if val != "" {
