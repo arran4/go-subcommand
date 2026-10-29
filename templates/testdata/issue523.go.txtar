@@ -1,0 +1,525 @@
+Typed-error source, process invocations and inspectable error contract.
+Run by TestGenerateTypedErrors and the existing TestGoTemplates loader.
+-- input.json --
+{
+  "PackagePath": "example.com/typederrors",
+  "GoVersion": "1.22"
+}
+-- template_name --
+errors.go.gotmpl
+-- input/go.mod --
+module example.com/typederrors
+
+go 1.22
+-- input/app.go --
+package app
+
+import (
+	"errors"
+	"fmt"
+	"io"
+
+	"example.com/typederrors/cmd"
+)
+
+var ParserCause = errors.New("parser cause")
+var UsageFailure = &cmd.UsageError{CommandPath: "app action", Kind: cmd.UsageInvalidValue, Message: "usage failure"}
+var WrappedUsage = fmt.Errorf("wrapped: %w", UsageFailure)
+
+func ParseCustom(value string) (string, error) {
+	if value == "bad" { return "", ParserCause }
+	return value, nil
+}
+
+// Root is a subcommand `app` demonstrates typed errors.
+//
+// Flags:
+//
+//	prefix: --prefix (default: "root") Inherited label.
+func Root(prefix string) { fmt.Printf("root:%s\n", prefix) }
+
+// Check is a subcommand `app group check` binds inherited flags and values.
+//
+// Flags:
+//
+//	prefix: (from parent) Inherited label.
+//	count: --count -n (default: 0) Item count.
+//	enabled: --enabled -e (default: false) Enable output.
+//	custom: (parser: ParseCustom) --custom Custom input.
+func Check(prefix string, count int, enabled bool, custom string) {
+	fmt.Printf("%s:%d:%t:%s\n", prefix, count, enabled, custom)
+}
+
+// Action is a subcommand `app action` returns representative application errors.
+//
+// Flags:
+//
+//	mode: --mode (default: "plain") Error category.
+//	code: --code (default: 0) Explicit status.
+func Action(mode string, code int) error {
+	switch mode {
+	case "usage": return UsageFailure
+	case "wrapped-usage": return WrappedUsage
+	case "exit": return &cmd.ErrExitCode{Code: code}
+	case "wrapped-exit": return fmt.Errorf("outer: %w", &cmd.ErrExitCode{Code: code})
+	case "exit-cause": return fmt.Errorf("outer: %w", &cmd.ErrExitCode{Code: code, Err: errors.New("inner cause")})
+	case "exit-help": return &cmd.ErrExitCode{Code: code, Err: cmd.ErrPrintHelp}
+	case "validation": return fmt.Errorf("outer: %w", &cmd.ErrExitCode{Code: 2, Err: errors.New("validation failure")})
+	case "internal": return fmt.Errorf("outer: %w", &cmd.ErrExitCode{Code: 3, Err: errors.New("internal failure")})
+	case "help": return fmt.Errorf("wrapped: %w", cmd.ErrPrintHelp)
+	case "hint": return fmt.Errorf("wrapped: %w", cmd.ErrHelp)
+	}
+	return errors.New("plain failure")
+}
+
+// Required is a subcommand `app required` requires a token.
+//
+// Flags:
+//
+//	token: (required) --token -t Token.
+func Required(token string) { fmt.Println(token) }
+
+// Positional is a subcommand `app positional` reads a required integer.
+//
+// Flags:
+//
+//	value: @1 Integer argument.
+func Positional(value int) { fmt.Println(value) }
+
+// Tail is a subcommand `app tail` takes one or two values.
+//
+// Flags:
+//
+//	values: @1 1...2 Values.
+func Tail(values ...string) { fmt.Println(values) }
+
+func Build() (string, error) { fmt.Println("provider"); return "provided", nil }
+
+// Effect is a subcommand `app effect` acquires a business provider.
+//
+// Flags:
+//
+//	value: (generator: Build) Acquired value.
+func Effect(value string) { fmt.Println(value) }
+
+// Read is a subcommand `app read` acquires input without reclassifying I/O errors.
+//
+// Flags:
+//
+//	input: --input Input file.
+func Read(input io.Reader) { _, _ = io.Copy(io.Discard, input) }
+
+-- expected/invocations.json --
+[
+  {"args": ["usage", "effect"], "help": true, "stderrFile": "effect-help.stderr"},
+  {"args": ["group", "missing"], "status": 1, "stderrFile": "group-unknown.stderr"},
+  {"args": ["action", "--mode=hint"], "stderr": "Use 'app help' for more information.\n"},
+  {
+    "args": [
+      "--unknown"
+    ],
+    "status": 1,
+    "stderr": {
+      "gnu": "Error: unknown flag: --unknown\n",
+      "go-flag": "Error: flag provided but not defined: -unknown\n"
+    }
+  },
+  {
+    "args": [
+      "group",
+      "check",
+      "--count"
+    ],
+    "status": 1,
+    "stderr": {
+      "gnu": "Error: flag count requires a value\n",
+      "go-flag": "Error: flag needs an argument: -count\n"
+    }
+  },
+  {
+    "args": [
+      "group",
+      "check",
+      "--count=bad"
+    ],
+    "status": 1,
+    "stderr": {
+      "gnu": "Error: invalid integer value for flag count: bad\n",
+      "go-flag": "Error: invalid value \"bad\" for flag -count: parse error\n"
+    }
+  },
+  {
+    "args": [
+      "group",
+      "check",
+      "--enabled=bad"
+    ],
+    "status": 1,
+    "stderr": {
+      "gnu": "Error: invalid boolean value for flag enabled: bad\n",
+      "go-flag": "Error: invalid boolean value \"bad\" for -enabled: parse error\n"
+    }
+  },
+  {
+    "args": [
+      "required"
+    ],
+    "status": 1,
+    "stderr": "Error: required flag --token not provided\n"
+  },
+  {
+    "args": [
+      "positional"
+    ],
+    "status": 1,
+    "stderr": "Error: expected at least 1 positional arguments, got 0\n"
+  },
+  {
+    "args": [
+      "positional",
+      "bad"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid integer argument for value at index 0: bad\n"
+  },
+  {
+    "args": [
+      "tail"
+    ],
+    "status": 1,
+    "stderr": "Error: expected at least 1 arguments for values, got 0\n"
+  },
+  {
+    "args": [
+      "tail",
+      "a",
+      "b",
+      "c"
+    ],
+    "status": 1,
+    "stderr": "Error: expected at most 2 arguments for values, got 3\n"
+  },
+  {
+    "args": [
+      "--prefix=x",
+      "group",
+      "check",
+      "--count=7",
+      "--custom=ok"
+    ],
+    "stdout": "x:7:false:ok\n"
+  },
+  {
+    "args": [
+      "group",
+      "check",
+      "--custom",
+      "--count=7"
+    ],
+    "stdout": "root:0:false:--count=7\n"
+  },
+  {
+    "args": [
+      "tail",
+      "--",
+      "--unknown"
+    ],
+    "stdout": "[--unknown]\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=plain"
+    ],
+    "status": 1,
+    "stderr": "Error: action failed: plain failure\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=usage"
+    ],
+    "status": 1,
+    "stderr": "Error: usage failure\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=wrapped-usage"
+    ],
+    "status": 1,
+    "stderr": "Error: wrapped: usage failure\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit",
+      "--code=0"
+    ],
+    "status": 0
+  },
+  {
+    "args": [
+      "action",
+      "--mode=wrapped-exit",
+      "--code=0"
+    ],
+    "status": 0
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit-cause",
+      "--code=0"
+    ],
+    "status": 0,
+    "stderr": "Error: inner cause\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit",
+      "--code=1"
+    ],
+    "status": 1
+  },
+  {
+    "args": [
+      "action",
+      "--mode=wrapped-exit",
+      "--code=1"
+    ],
+    "status": 1
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit-cause",
+      "--code=1"
+    ],
+    "status": 1,
+    "stderr": "Error: inner cause\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit",
+      "--code=7"
+    ],
+    "status": 7
+  },
+  {
+    "args": [
+      "action",
+      "--mode=wrapped-exit",
+      "--code=7"
+    ],
+    "status": 7
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit-cause",
+      "--code=7"
+    ],
+    "status": 7,
+    "stderr": "Error: inner cause\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=validation"
+    ],
+    "status": 2,
+    "stderr": "Error: validation failure\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=internal"
+    ],
+    "status": 3,
+    "stderr": "Error: internal failure\n"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=exit-help",
+      "--code=9"
+    ],
+    "status": 9,
+    "stderr": "Error: print help\n"
+  },
+  {
+    "args": [
+      "--help"
+    ],
+    "help": true,
+    "stderrFile": "root-help.stderr"
+  },
+  {
+    "args": [
+      "effect",
+      "--help"
+    ],
+    "help": true,
+    "stderrFile": "effect-help.stderr"
+  },
+  {
+    "args": [
+      "help",
+      "effect"
+    ],
+    "help": true,
+    "stderrFile": "effect-help.stderr"
+  },
+  {
+    "args": [
+      "action",
+      "--mode=help"
+    ],
+    "help": true,
+    "stderrFile": "action-help.stderr"
+  },
+  {
+    "args": [
+      "effect"
+    ],
+    "stdout": "provider\nprovided\n"
+  },
+  {
+    "args": [
+      "version"
+    ],
+    "stdout": "Version: dev\nCommit: none\nDate: unknown\n"
+  }
+]
+-- expected/group-unknown.stderr --
+Usage: app [flags...] group <subcommand>
+
+Subcommands:
+
+    check binds inherited flags and values.
+
+
+Flags:
+    --prefix string   (default: "root")   Inherited label.
+Error: unknown command: missing
+-- expected/root-help.stderr --
+Usage: app [flags...] <subcommand>
+
+demonstrates typed errors.
+
+Subcommands:
+
+    action     returns representative application errors.
+    effect     acquires a business provider.
+    group
+    positional reads a required integer.
+    read       acquires input without reclassifying I/O errors.
+    required   requires a token.
+    tail       takes one or two values.
+    help       Print this help message
+    usage      Print this usage message
+
+
+Flags:
+    --prefix string   (default: "root")   Inherited label.
+-- expected/effect-help.stderr --
+Usage: app [flags...] effect
+
+acquires a business provider.
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    --prefix string   (default: "root")   Inherited label.
+-- expected/action-help.stderr --
+Usage: app [flags...] action [flags...]
+
+returns representative application errors.
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+
+`app` Flags:
+    --prefix string   (default: "root")    Inherited label.
+
+`action` Flags:
+    --mode string     (default: "plain")   Error category.
+    --code int        (default: 0)         Explicit status.
+-- output.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package cmd
+
+import "errors"
+
+// ErrPrintHelp when returned by any function anywhere it will switch the command from whatever it is to help.
+var ErrPrintHelp = errors.New("print help")
+
+// ErrHelp tells the user to use help.
+var ErrHelp = errors.New("help requested")
+
+// ErrUsage identifies parser and command-usage failures independently of text.
+var ErrUsage = errors.New("invalid command usage")
+
+type UsageErrorKind string
+
+const (
+	UsageUnknownCommand      UsageErrorKind = "unknown-command"
+	UsageUnknownFlag         UsageErrorKind = "unknown-flag"
+	UsageMissingFlagValue    UsageErrorKind = "missing-flag-value"
+	UsageInvalidValue        UsageErrorKind = "invalid-value"
+	UsageInvalidArguments    UsageErrorKind = "invalid-arguments"
+	UsageMissingRequiredFlag UsageErrorKind = "missing-required-flag"
+)
+
+// UsageError is one parser failure. CommandPath is the canonical command path;
+// Flag is the supplied flag name without leading dashes, when applicable.
+// Message is presentation text, never a source of classification.
+type UsageError struct {
+	CommandPath string
+	Flag        string
+	Kind        UsageErrorKind
+	Err         error
+	Message     string
+}
+
+func (e *UsageError) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return ErrUsage.Error()
+}
+
+func (e *UsageError) Is(target error) bool { return target == ErrUsage }
+
+func (e *UsageError) Unwrap() error { return e.Err }
+
+// ErrExitCode overrides the process status even through ordinary wrapping.
+// A nil inner error suppresses diagnostics; a nonnil cause is rendered separately.
+type ErrExitCode struct {
+	Err  error
+	Code int
+}
+
+func (e *ErrExitCode) Error() string {
+	if e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+
+func (e *ErrExitCode) Unwrap() error {
+	return e.Err
+}

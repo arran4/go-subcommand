@@ -4,12 +4,7 @@ package main
 
 //go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
 
-import (
-	"fmt"
-	"os"
-
-	"github.com/arran4/go-subcommand/cmd"
-)
+import "os"
 
 var (
 	version = "dev"
@@ -25,20 +20,5 @@ var (
 )
 
 func main() {
-	root, err := NewRoot("gosubc", version, commit, date)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := root.Execute(os.Args[1:]); err != nil {
-		if e, ok := err.(*cmd.ErrExitCode); ok {
-			if e.Err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", e.Err)
-			}
-			os.Exit(e.Code)
-		}
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	os.Exit(generatedRun(os.Args[1:], os.Stderr))
 }

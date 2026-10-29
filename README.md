@@ -812,6 +812,56 @@ Generates release configuration.
 
 ### Parser Backend Configuration
 
+### Generated parser and process errors
+
+Generated applications expose `ErrUsage` and `UsageError` in their own `cmd`
+package, with no go-subcommand runtime dependency. Callers can classify errors
+without inspecting their messages:
+
+```go
+var usage *cmd.UsageError
+if errors.Is(err, cmd.ErrUsage) && errors.As(err, &usage) {
+    fmt.Printf("%s: kind=%s flag=%s\n", usage.CommandPath, usage.Kind, usage.Flag)
+}
+```
+
+`UsageError.Kind` distinguishes unknown commands, unknown flags, missing flag
+values, invalid supplied values, invalid positional arguments, and missing
+required flags. `CommandPath` is the canonical command path; `Flag` is the
+supplied name without leading dashes where applicable. `Err` preserves the
+underlying parser cause, and `Message` controls presentation. Both `errors.Is`
+and `errors.As` work through ordinary wrapping. Application-supplied usage errors
+and explicit exit errors pass through dispatch with their wrappers intact.
+
+Generated `main.go` delegates to testable helpers in `process.go`. Only main calls
+`os.Exit`; rendering and status selection are separate. Status precedence is:
+
+1. An explicit `cmd.ErrExitCode`, detected with `errors.As`, including codes 0
+   and 1 and custom nonzero codes.
+2. The typed usage category's default status 1.
+3. The historical unclassified-error fallback status 1.
+
+An explicit status takes precedence even when its cause requests help. A nil
+inner cause suppresses error output, including through a wrapper; a nonnil inner
+cause prints `Error: <cause>` to stderr even when the explicit status is 0.
+Ordinary help and usage keep their existing successful behaviour and do not
+acquire business providers. Go-flag retains the standard library's parsing
+grammar and value implementations; its adapter classifies failures at their
+source and renders a parser diagnostic once.
+
+For example, an ordinary action can return
+`fmt.Errorf("validation: %w", &cmd.ErrExitCode{Code: 2, Err: err})` to select status
+2, while an internal error may select 3. This does not change the default fallback
+or install a global policy callback. The standalone source, generated error
+contract and exact invocation outputs are in
+`templates/testdata/issue523.go.txtar`.
+
+This supplies gogenmux's typed parser classification and wrapped explicit statuses.
+Removing its custom main template still requires declarative no-command policy,
+version/build metadata (including `builtBy` and propagation), version-output
+customization, and its validation/internal default classification and rendering
+contract. Those facilities remain separate work under #524 and #479/#503.
+
 ### Generated application Go compatibility
 
 The Go version needed to run `gosubc` is separate from the version supported by
