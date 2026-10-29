@@ -4,5 +4,5 @@ Usage: gosubc syntax
 prints the available forms of function comments
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}

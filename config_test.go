@@ -56,6 +56,21 @@ func TestExplicitGenerateFlags(t *testing.T) {
 			t.Errorf("%q not recorded", name)
 		}
 	}
+
+	// Verify that arguments before "generate" or unrelated arguments without "generate" are ignored.
+	if explicit := explicitGenerateFlags([]string{"--clean", "--dir=foo"}); explicit != nil {
+		t.Errorf("expected nil for args without generate subcommand, got %#v", explicit)
+	}
+	if explicit := explicitGenerateFlags([]string{"-run", "generate", "--clean"}); explicit != nil {
+		t.Errorf("expected nil when generate is a flag value, got %#v", explicit)
+	}
+	explicitRootAndChild := explicitGenerateFlags([]string{"--root-flag", "generate", "--dir=child"})
+	if explicitRootAndChild["root-flag"] {
+		t.Errorf("root-flag before generate should not be recorded")
+	}
+	if !explicitRootAndChild["dir"] {
+		t.Errorf("dir after generate should be recorded")
+	}
 }
 
 func TestGenerateCLIConfiguredCommandUsesFileThenExplicitFlags(t *testing.T) {

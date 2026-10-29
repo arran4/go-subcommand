@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -2308,6 +2308,157 @@ func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	}
+}
+
+func TestGenerate_RuntimeUsageHelpFormatting(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/issue481\n\ngo 1.22\n")
+	src := strings.Replace(issue481Source, "package main", "package issue481", 1)
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), src)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	binPath := filepath.Join(dir, "app-bin")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/app")
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build generated CLI: %v\n%s", err, out)
+	}
+
+	runCLIAtWidth := func(columns string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "COLUMNS="+columns)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("CLI %v (COLUMNS=%s) failed: %v\n%s", args, columns, err, out)
+		}
+		return string(out)
+	}
+	runCLI := func(args ...string) string {
+		t.Helper()
+		return runCLIAtWidth("140", args...)
+	}
+
+	rootShallow := runCLI("help")
+	for _, want := range []string{
+		"Short root description with {{.Injected}} literal braces.",
+		`Extended help with {{printf "%s" .Exploit}} and unmatched }} or {{.`,
+		"    render                      Render {{.Injected}} template output }} safely {{.",
+		"    scenario",
+		"    serve                       Run the primary server.",
+		"    service                     Manage services.",
+		"    up                          Start everything.",
+		"    very-long-top-level-command Execute the long top-level command and wrap continuation lines under the description column.",
+		"    help                        Print this help message",
+		"    usage                       Print this usage message",
+	} {
+		if !strings.Contains(rootShallow, want) {
+			t.Errorf("root help missing %q:\n%s", want, rootShallow)
+		}
+	}
+
+	rootShallowNarrow := runCLIAtWidth("52", "help")
+	wantRootNarrowWrapped := strings.Join([]string{
+		"    very-long-top-level-command Execute the long",
+		"                                top-level command",
+		"                                and wrap",
+		"                                continuation lines",
+		"                                under the",
+		"                                description column.",
+	}, "\n")
+	if !strings.Contains(rootShallowNarrow, wantRootNarrowWrapped) {
+		t.Errorf("root narrow help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantRootNarrowWrapped, rootShallowNarrow)
+	}
+
+	serviceShallow := runCLI("service", "--help")
+	for _, want := range []string{
+		"    silent-group",
+		"    status       Show service status and health details across all configured environments.",
+		"    help         Print this help message",
+		"    usage        Print this usage message",
+	} {
+		if !strings.Contains(serviceShallow, want) {
+			t.Errorf("service --help missing %q:\n%s", want, serviceShallow)
+		}
+	}
+
+	serviceDeep := runCLI("service", "help", "-deep")
+	for _, want := range []string{
+		"    service silent-group",
+		"    service silent-group deep-leaf-command Deep nested leaf action.",
+		"    service status                         Show service status and health details across all configured environments.",
+		"    help                                   Print this help message",
+		"    usage                                  Print this usage message",
+	} {
+		if !strings.Contains(serviceDeep, want) {
+			t.Errorf("service help -deep missing %q:\n%s", want, serviceDeep)
+		}
+	}
+
+	serviceDeepNarrow := runCLIAtWidth("62", "service", "help", "-deep")
+	wantServiceDeepNarrow := strings.Join([]string{
+		"    service status                         Show service status",
+		"                                           and health details",
+		"                                           across all",
+		"                                           configured",
+		"                                           environments.",
+	}, "\n")
+	if !strings.Contains(serviceDeepNarrow, wantServiceDeepNarrow) {
+		t.Errorf("service deep narrow help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantServiceDeepNarrow, serviceDeepNarrow)
+	}
+
+	serveShallow := runCLIAtWidth("64", "serve", "help")
+	serveDeep := runCLIAtWidth("64", "serve", "help", "-deep")
+	if serveShallow != serveDeep {
+		t.Errorf("expected identical shallow and deep help for leaf command serve:\nshallow:\n%q\ndeep:\n%q", serveShallow, serveDeep)
+	}
+	wantServeFlagNarrow := strings.Join([]string{
+		"    --port int          (default: 8080)    Port to listen on",
+		"                                           when starting the",
+		"                                           HTTP listener and",
+		"                                           accepting client",
+		"                                           connections",
+	}, "\n")
+	if !strings.Contains(serveShallow, wantServeFlagNarrow) {
+		t.Errorf("serve narrow flag help did not wrap with hanging indent:\nwant substring:\n%s\ngot:\n%s", wantServeFlagNarrow, serveShallow)
+	}
+	if !strings.Contains(serveShallow, "\n    --quiet             (default: false)\n") {
+		t.Errorf("serve flag without description should have no trailing spaces:\n%q", serveShallow)
+	}
+
+	serveUsageTemplate, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "templates", "serve_usage.txt"))
+	if err != nil {
+		t.Fatalf("failed to read generated serve_usage.txt: %v", err)
+	}
+	if strings.Contains(string(serveUsageTemplate), ".Recursive") {
+		t.Errorf("leaf command serve_usage.txt must not contain redundant .Recursive branch:\n%s", serveUsageTemplate)
+	}
+
+	serveCompact40 := runCLIAtWidth("40", "serve", "help")
+	wantServeCompact40 := strings.Join([]string{
+		"    --port int (default: 8080)",
+		"        Port to listen on when starting",
+		"        the HTTP listener and accepting",
+		"        client connections",
+	}, "\n")
+	if !strings.Contains(serveCompact40, wantServeCompact40) {
+		t.Errorf("serve COLUMNS=40 flag help did not switch to compact fallback:\nwant substring:\n%s\ngot:\n%s", wantServeCompact40, serveCompact40)
+	}
+	if !strings.Contains(serveCompact40, "https://service.example.com/very/long/endpoint/path/without/spaces") {
+		t.Errorf("serve COLUMNS=40 truncated unbreakable URL token:\n%s", serveCompact40)
+	}
+	for _, line := range strings.Split(serveCompact40, "\n") {
+		if strings.Contains(line, "https://service.example.com/") {
+			continue
+		}
+		if len([]rune(line)) > 40 {
+			t.Errorf("serve COLUMNS=40 line exceeded 40 columns (len=%d): %q", len([]rune(line)), line)
+		}
 	}
 }
 
