@@ -48,6 +48,11 @@
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
+				{{- if $param.OptionalValue }}
+				if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
+					return fmt.Errorf("invalid optional value for flag %s: %w", name, err)
+				}
+				{{- else }}
 				{{- if or $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
@@ -136,6 +141,7 @@
 				{{- end }}
 				{{- end }}
 				{{- end }}
+				{{- end }}
 			{{- end }}
 			{{- end }}
 			{{- end }}
@@ -167,6 +173,18 @@
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
+					{{- if $param.OptionalValue }}
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = strings.TrimPrefix(shorts[j+1:], "=")
+						hasValue = true
+						j = len(shorts)
+					}
+					if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
+						return fmt.Errorf("invalid optional value for flag -%s: %w", char, err)
+					}
+					{{- else }}
 					{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
@@ -241,6 +259,7 @@
 					c.{{$param.Name}} = &val
 					{{- else }}
 					c.{{$param.Name}} = {{$param.CastCode "v"}}
+					{{- end }}
 					{{- end }}
 					{{- end }}
 					{{- end }}

@@ -611,6 +611,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -647,6 +650,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -682,6 +688,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
+							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
@@ -720,6 +729,14 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Generator.Func.ImportPath = importPath
 							fp.Generator.Func.PackagePath = importPath
 							fp.Generator.Func.CommandPackageName = f.Name.Name
+						}
+						// Optional-value parameters are consumer-owned state values. A
+						// locally declared type must be qualified from generated code just
+						// like a local parser or provider function.
+						if fp.OptionalValue && fp.TypeImportPath == "" && f.Name.Name != "main" {
+							fp.TypeImportPath = importPath
+							fp.TypePackageName = f.Name.Name
+							fp.TypeName = fp.BaseType()
 						}
 						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
@@ -891,6 +908,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
+	OptionalValue      bool
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
 	DefaultExpr        *model.FuncRef
@@ -1146,7 +1164,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent"}
+	knownSingles := []string{"required", "inherited", "from parent", AttributeOptionalValue}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1299,6 +1317,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		switch key {
 		case AttributeRequired:
 			p.Required = true
+		case AttributeOptionalValue:
+			p.OptionalValue = true
 		case AttributeGenerator:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
