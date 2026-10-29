@@ -19,24 +19,25 @@ var _ Cmd = (*Generate)(nil)
 
 type Generate struct {
 	*RootCmd
-	Flags             *flag.FlagSet
-	dir               string
-	manDir            string
-	parserName        string
-	cliParser         string
-	paths             []string
-	recursive         bool
-	force             bool
-	clean             bool
-	replaceTemplates  []string
-	projectProvenance bool
-	timestamp         bool
-	emitGoGenerate    bool
-	provVersion       string
-	provCommit        string
-	provDate          string
-	SubCommands       map[string]func() Cmd
-	CommandAction     func(c *Generate) error
+	Flags               *flag.FlagSet
+	dir                 string
+	manDir              string
+	parserName          string
+	cliParser           string
+	paths               []string
+	recursive           bool
+	force               bool
+	clean               bool
+	replaceTemplates    []string
+	projectProvenance   bool
+	timestamp           bool
+	emitGoGenerate      bool
+	regenerationCommand string
+	provVersion         string
+	provCommit          string
+	provDate            string
+	SubCommands         map[string]func() Cmd
+	CommandAction       func(c *Generate) error
 }
 
 type UsageDataGenerate struct {
@@ -218,6 +219,17 @@ func (c *Generate) Execute(args []string) (err error) {
 					c.emitGoGenerate = true
 				}
 
+			case "regenerationCommand", "regenerate-command":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.regenerationCommand = value
+
 			case "provVersion", "prov-version":
 				if !hasValue {
 					if i+1 < len(args) {
@@ -324,6 +336,8 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	set.BoolVar(&v.emitGoGenerate, "emit-go-generate", true, "Emit nested //go:generate directive in generated main.go")
 
+	set.StringVar(&v.regenerationCommand, "regenerate-command", "", "Project pinned regeneration command for generated AGENTS.md")
+
 	set.StringVar(&v.provVersion, "prov-version", "", "Overwrite provenance version")
 
 	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
@@ -333,7 +347,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.GenerateCLICommand(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.GenerateCLICommandWithGuidance(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.regenerationCommand, c.provVersion, c.provCommit, c.provDate)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

@@ -556,6 +556,7 @@ Generates the Go code for your CLI.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
 *   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
+*   `--regenerate-command <command>`: Record the project's pinned canonical regeneration command in generated `cmd/AGENTS.md`.
 
 ### `gosubc template`
 
@@ -600,9 +601,7 @@ The generator reads the target module's `go` directive and adapts its output:
 | Go 1.21+ | `any` and `slices.Contains` |
 
 Generation fails before writing output when a target module declares Go 1.15 or
-older. The compatibility forms are regression-tested as generated source; the
-local campaign environment currently has a Go 1.25.0 compiler, so it does not
-claim binary compilation with unavailable historical toolchains.
+older. The compatibility forms are regression-tested as generated source.
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
