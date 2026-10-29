@@ -21,126 +21,6 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
-//go:embed templates/testdata/issue523.go.txtar
-var typedErrorsFixture []byte
-
-//go:embed testdata/issue523_process_test.go
-var typedErrorsProcessTests string
-
-func TestGenerateTypedErrors(t *testing.T) {
-	archive := txtar.Parse(typedErrorsFixture)
-	input, expected := splitInputExpected(archive)
-	var invocations []struct {
-		Args       []string
-		Stdout     string
-		Stderr     json.RawMessage
-		StderrFile string
-		Status     int
-		Help       bool
-	}
-	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
-		t.Fatal(err)
-	}
-	var errorGolden []byte
-	for _, f := range archive.Files {
-		if f.Name == "output.go" {
-			errorGolden = f.Data
-		}
-	}
-	for _, backend := range []string{"gnu", "go-flag"} {
-		t.Run(backend, func(t *testing.T) {
-			generate := func() map[string][]byte {
-				writer := NewCollectingFileWriter()
-				if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", input, GenerateOptions{CLIParser: backend}); err != nil {
-					t.Fatal(err)
-				}
-				return writer.Files
-			}
-			files := generate()
-			if !reflect.DeepEqual(files, generate()) {
-				t.Fatal("nondeterministic generation")
-			}
-			if !bytes.Equal(files["cmd/errors.go"], errorGolden) {
-				t.Fatal("actual generated error contract differs from inspectable golden")
-			}
-			for name, data := range files {
-				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
-					t.Fatalf("runtime generator dependency in %s", name)
-				}
-				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
-					t.Fatalf("process exit outside main in %s", name)
-				}
-			}
-			// Disk materialization is limited to the Go compiler/process boundary.
-			dir := t.TempDir()
-			for name, f := range input {
-				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
-			}
-			for name, data := range files {
-				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
-			}
-			writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/process_test.go"), typedErrorsProcessTests)
-			tests := exec.Command("go", "test", "./cmd/app", "-run", "TestTypedUsageErrors|TestGeneratedProcessErrors|TestGoFlagGrammarParity")
-			tests.Dir = dir
-			if out, err := tests.CombinedOutput(); err != nil {
-				t.Fatalf("generated API tests: %v\n%s", err, out)
-			}
-			binary := filepath.Join(dir, "app")
-			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
-			build.Dir = dir
-			if out, err := build.CombinedOutput(); err != nil {
-				t.Fatalf("build: %v\n%s", err, out)
-			}
-			for _, invocation := range invocations {
-				command := exec.Command(binary, invocation.Args...)
-				command.Dir = dir
-				command.Env = append(os.Environ(), "COLUMNS=80")
-				var stdout, stderr bytes.Buffer
-				command.Stdout, command.Stderr = &stdout, &stderr
-				err := command.Run()
-				status := 0
-				if err != nil {
-					if exit, ok := err.(*exec.ExitError); ok {
-						status = exit.ExitCode()
-					} else {
-						t.Fatal(err)
-					}
-				}
-				if status != invocation.Status || stdout.String() != invocation.Stdout {
-					t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
-				}
-				if invocation.Help {
-					if !strings.HasPrefix(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "Error:") {
-						t.Errorf("%v: help=%q", invocation.Args, stderr.String())
-					}
-				}
-				want := ""
-				if invocation.StderrFile != "" {
-					file, ok := expected[invocation.StderrFile]
-					if !ok {
-						t.Fatalf("missing expected stderr %s", invocation.StderrFile)
-					}
-					want = string(file.Data)
-				}
-				if len(invocation.Stderr) != 0 {
-					if invocation.Stderr[0] == '{' {
-						var alternatives map[string]string
-						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
-							t.Fatal(err)
-						}
-						want = alternatives[backend]
-					} else if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if strings.ReplaceAll(stderr.String(), binary, "app") != want {
-					t.Errorf("%v: stderr=%q want=%q", invocation.Args, stderr.String(), want)
-				}
-			}
-		})
-	}
-}
-
 //go:embed testdata/issue_runtime.go
 var issueRuntimeSource string
 
@@ -2697,5 +2577,125 @@ func TestGenerate_ManWhitespace(t *testing.T) {
 	}
 	if !sawDefault || !sawNoDefault {
 		t.Fatalf("expected both defaulted and non-defaulted option descriptions:\n%s", output)
+	}
+}
+
+//go:embed templates/testdata/issue523.go.txtar
+var typedErrorsFixture []byte
+
+//go:embed testdata/issue523_process_test.go
+var typedErrorsProcessTests string
+
+func TestGenerateTypedErrors(t *testing.T) {
+	archive := txtar.Parse(typedErrorsFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     json.RawMessage
+		StderrFile string
+		Status     int
+		Help       bool
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	var errorGolden []byte
+	for _, f := range archive.Files {
+		if f.Name == "output.go" {
+			errorGolden = f.Data
+		}
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", input, GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			if !bytes.Equal(files["cmd/errors.go"], errorGolden) {
+				t.Fatal("actual generated error contract differs from inspectable golden")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
+					t.Fatalf("process exit outside main in %s", name)
+				}
+			}
+			// Disk materialization is limited to the Go compiler/process boundary.
+			dir := t.TempDir()
+			for name, f := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/process_test.go"), typedErrorsProcessTests)
+			tests := exec.Command("go", "test", "./cmd/app", "-run", "TestTypedUsageErrors|TestGeneratedProcessErrors|TestGoFlagGrammarParity")
+			tests.Dir = dir
+			if out, err := tests.CombinedOutput(); err != nil {
+				t.Fatalf("generated API tests: %v\n%s", err, out)
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				if status != invocation.Status || stdout.String() != invocation.Stdout {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
+				}
+				if invocation.Help {
+					if !strings.HasPrefix(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "Error:") {
+						t.Errorf("%v: help=%q", invocation.Args, stderr.String())
+					}
+				}
+				want := ""
+				if invocation.StderrFile != "" {
+					file, ok := expected[invocation.StderrFile]
+					if !ok {
+						t.Fatalf("missing expected stderr %s", invocation.StderrFile)
+					}
+					want = string(file.Data)
+				}
+				if len(invocation.Stderr) != 0 {
+					if invocation.Stderr[0] == '{' {
+						var alternatives map[string]string
+						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
+							t.Fatal(err)
+						}
+						want = alternatives[backend]
+					} else if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if strings.ReplaceAll(stderr.String(), binary, "app") != want {
+					t.Errorf("%v: stderr=%q want=%q", invocation.Args, stderr.String(), want)
+				}
+			}
+		})
 	}
 }
