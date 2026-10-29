@@ -5,6 +5,8 @@ weight: 5
 
 # Advanced Topics
 
+See [Generator design principles](generator-design-principles/) for the function-and-comment-first design, execution ownership, scoped initializer decisions, and when advanced startup/template customization is appropriate. The architecture document clearly distinguishes current behaviour from proposed features.
+
 ## Man Page Generation
 
 `go-subcommand` can generate standard Unix man pages.
