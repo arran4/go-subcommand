@@ -3,6 +3,7 @@ package go_subcommand
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -17,7 +18,142 @@ import (
 
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
+	"golang.org/x/tools/txtar"
 )
+
+//go:embed templates/testdata/flag_presence.go.txtar
+var flagPresenceFixture []byte
+
+func TestGenerateFlagPresence(t *testing.T) {
+	archive := txtar.Parse(flagPresenceFixture)
+	input := fstest.MapFS{}
+	var templateGolden []byte
+	var invocations []struct {
+		Args          []string
+		Stdout        string
+		Status        int
+		ErrorContains string
+		Help          bool
+		GNUOnly       bool
+	}
+	for _, f := range archive.Files {
+		if f.Name == "output.go" {
+			templateGolden = f.Data
+		}
+		if name, ok := strings.CutPrefix(f.Name, "input/"); ok {
+			input[name] = &fstest.MapFile{Data: f.Data}
+		}
+		if f.Name == "expected/invocations.json" {
+			if err := json.Unmarshal(f.Data, &invocations); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(input) == 0 || len(invocations) == 0 {
+		t.Fatal("incomplete runtime fixture")
+	}
+	config, err := loadGenerateConfigMarkdown("gosubc.mdc", input["gosubc.mdc"].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"gnu", "go-flag", "gnu-template-golden"} {
+		t.Run(backend, func(t *testing.T) {
+			parserBackend := strings.TrimSuffix(backend, "-template-golden")
+			values := generateCLIValues{cliParser: parserBackend, emitGoGenerate: true}
+			values.applyConfig(config, map[string]bool{"cliParser": true})
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: values.recursive}, false, false, nil, values.projectProvenance, values.timestamp, "", "", "", input, GenerateOptions{CLIParser: values.cliParser, SuppressGoGenerate: !values.emitGoGenerate}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if bytes.Contains(files["cmd/app/main.go"], []byte("//go:generate")) {
+				t.Fatal("configuration did not suppress nested generation")
+			}
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("generation is nondeterministic")
+			}
+			if backend == "gnu-template-golden" {
+				files["cmd/app/child.go"] = templateGolden
+			}
+			for _, name := range []string{"cmd/app/root.go", "cmd/app/child.go"} {
+				code := string(files[name])
+				if !strings.Contains(code, "c.seen = seenFlags") || strings.Contains(code, `set.Func("seen"`) {
+					t.Fatalf("presence was not supplied by parser in %s", name)
+				}
+			}
+			// Materialize only for the actual Go compiler and executable boundary.
+			dir := t.TempDir()
+			for name, f := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				if invocation.GNUOnly && parserBackend != "gnu" {
+					continue
+				}
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				if status != invocation.Status || stdout.String() != invocation.Stdout {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
+				}
+				if invocation.Help {
+					if !strings.Contains(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "--seen") {
+						t.Errorf("help: %q", stderr.String())
+					}
+				} else if invocation.ErrorContains != "" {
+					if !strings.Contains(stderr.String(), invocation.ErrorContains) {
+						t.Errorf("%v: stderr=%q", invocation.Args, stderr.String())
+					}
+				} else if stderr.Len() != 0 {
+					t.Errorf("%v: unexpected stderr=%q", invocation.Args, stderr.String())
+				}
+			}
+		})
+	}
+	for _, tc := range []struct{ name, from, to string }{
+		{"wrong type", "seen map[string]bool", "seen string"},
+		{"alias", "(flag presence)", "--seen (flag presence)"},
+		{"required", "(flag presence)", "(flag presence; required)"},
+		{"default", "(flag presence)", "(flag presence; default: nil)"},
+		{"inherited", "(flag presence)", "(flag presence; inherited)"},
+		{"provider first", "(flag presence)", "(generator: Build; flag presence)"},
+		{"provider last", "(flag presence)", "(flag presence; generator: Build)"},
+		{"parser", "(flag presence)", "(flag presence; parser: Parse)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := fstest.MapFS{
+				"go.mod": input["go.mod"],
+				"app.go": &fstest.MapFile{Data: []byte(strings.ReplaceAll(string(input["app.go"].Data), tc.from, tc.to))},
+			}
+			err := GenerateWithFS(invalid, NewCollectingFileWriter(), ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", invalid)
+			if err == nil {
+				t.Fatal("accepted invalid flag presence annotation")
+			}
+		})
+	}
+}
 
 //go:embed testdata/issue_runtime.go
 var issueRuntimeSource string
@@ -45,7 +181,6 @@ var issue475LinuxSource string
 
 //go:embed testdata/issue475_windows.go
 var issue475WindowsSource string
-
 
 //go:embed testdata/issue456_imports.go
 var issue456ImportsSource string

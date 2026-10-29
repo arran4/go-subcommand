@@ -8,7 +8,9 @@
 
 
 	{{- $hasTrackedFlags := false }}
+	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
+		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
 		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
@@ -203,15 +205,17 @@
 	{{- range .Parameters }}
 	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
 	{{$param := .}}
-	{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+	{{- if or $hasFlagPresence $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+	{{- if not $hasFlagPresence }}
 	seenFlags["{{$param.Name}}"] = false
+	{{- end }}
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "{{$param.Name}}" {
 			seenFlags["{{$param.Name}}"] = true
 		}
 		{{- range $alias := $param.FlagAliases }}
 		{{- if ne $alias $param.Name }}
-		else if f.Name == "{{$alias}}" {
+		if f.Name == "{{$alias}}" {
 			seenFlags["{{$param.Name}}"] = true
 		}
 		{{- end }}

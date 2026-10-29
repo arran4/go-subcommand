@@ -1384,7 +1384,6 @@ type GenerateCLIOptions struct {
 	ProvDate          string
 	ConfigPath        string
 	ExplicitFlags     map[string]bool
-	TemplateVariables map[string]any
 }
 
 // GenerateCLIConfiguredWithOptions performs code generation with typed options and explicit flag overrides.
@@ -1420,7 +1419,7 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 	})
 }
 
-// GenerateCLIConfiguredCommand is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLIConfiguredAction is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1449,11 +1448,8 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
 //	configPath:        --config (default: "") Optional generation configuration file.
-func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
-	var explicit map[string]bool
-	if isGosubcCLI() {
-		explicit = ExplicitGenerateFlags(os.Args[1:])
-	}
+//	explicit:          (flag presence) Explicitly supplied parameters, keyed by Go parameter name.
+func GenerateCLIConfiguredAction(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string, explicit map[string]bool) error {
 	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
 		Dir:               dir,
 		ManDir:            manDir,
@@ -1475,16 +1471,11 @@ func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, 
 	})
 }
 
-func isGosubcCLI() bool {
-	if len(os.Args) < 2 {
-		return false
-	}
-	base := filepath.Base(os.Args[0])
-	base = strings.TrimSuffix(base, ".exe")
-	if base != "gosubc" {
-		return false
-	}
-	return os.Args[1] == "generate" || os.Args[1] == "gen"
+// GenerateCLIConfiguredCommand generates with configuration overriding the supplied
+// fallback values. It never reads process arguments. To explicitly override file
+// settings, use GenerateCLIConfiguredWithOptions and its ExplicitFlags field.
+func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
+	return GenerateCLIConfiguredAction(dir, manDir, parserName, cliParser, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, emitGoGenerate, provVersion, provCommit, provDate, configPath, nil)
 }
 
 func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {
