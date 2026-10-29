@@ -347,25 +347,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.GenerateCLIConfiguredWithOptions(go_subcommand.GenerateCLIOptions{
-			Dir:               c.dir,
-			ManDir:            c.manDir,
-			ParserName:        c.parserName,
-			CLIParser:         c.cliParser,
-			Paths:             c.paths,
-			Recursive:         c.recursive,
-			Force:             c.force,
-			Clean:             c.clean,
-			ReplaceTemplates:  c.replaceTemplates,
-			ProjectProvenance: c.projectProvenance,
-			Timestamp:         c.timestamp,
-			EmitGoGenerate:    c.emitGoGenerate,
-			ProvVersion:       c.provVersion,
-			ProvCommit:        c.provCommit,
-			ProvDate:          c.provDate,
-			ConfigPath:        c.configPath,
-			ExplicitFlags:     go_subcommand.ExplicitGenerateFlags(os.Args[1:]),
-		})
+		err := go_subcommand.GenerateCLIConfiguredCommand(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.provVersion, c.provCommit, c.provDate, c.configPath)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

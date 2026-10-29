@@ -1450,6 +1450,10 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
 //	configPath:        --config (default: "") Optional generation configuration file.
 func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
+	var explicit map[string]bool
+	if isGosubcCLI() {
+		explicit = ExplicitGenerateFlags(os.Args[1:])
+	}
 	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
 		Dir:               dir,
 		ManDir:            manDir,
@@ -1467,7 +1471,20 @@ func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, 
 		ProvCommit:        provCommit,
 		ProvDate:          provDate,
 		ConfigPath:        configPath,
+		ExplicitFlags:     explicit,
 	})
+}
+
+func isGosubcCLI() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+	base := filepath.Base(os.Args[0])
+	base = strings.TrimSuffix(base, ".exe")
+	if base != "gosubc" {
+		return false
+	}
+	return os.Args[1] == "generate" || os.Args[1] == "gen"
 }
 
 func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {
