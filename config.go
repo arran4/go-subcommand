@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/arran4/go-subcommand/parsers"
 )
 
 // GenerateConfig is the optional, versioned configuration accepted by
@@ -18,22 +21,24 @@ import (
 // deliberately distinguish an omitted value from an explicit false, empty string,
 // or empty list.
 type GenerateConfig struct {
-	Version           int       `json:"version"`
-	Dir               *string   `json:"dir,omitempty"`
-	ManDir            *string   `json:"manDir,omitempty"`
-	ParserName        *string   `json:"parserName,omitempty"`
-	CLIParser         *string   `json:"cliParser,omitempty"`
-	Paths             *[]string `json:"paths,omitempty"`
-	Recursive         *bool     `json:"recursive,omitempty"`
-	Force             *bool     `json:"force,omitempty"`
-	Clean             *bool     `json:"clean,omitempty"`
-	ReplaceTemplates  *[]string `json:"replaceTemplates,omitempty"`
-	ProjectProvenance *bool     `json:"projectProvenance,omitempty"`
-	Timestamp         *bool     `json:"timestamp,omitempty"`
-	EmitGoGenerate    *bool     `json:"emitGoGenerate,omitempty"`
-	ProvVersion       *string   `json:"provVersion,omitempty"`
-	ProvCommit        *string   `json:"provCommit,omitempty"`
-	ProvDate          *string   `json:"provDate,omitempty"`
+	// CommandDeclarations are native metadata/documentation blocks, not executable actions.
+	CommandDeclarations []parsers.CommandDeclaration `json:"-"`
+	Version             int                          `json:"version"`
+	Dir                 *string                      `json:"dir,omitempty"`
+	ManDir              *string                      `json:"manDir,omitempty"`
+	ParserName          *string                      `json:"parserName,omitempty"`
+	CLIParser           *string                      `json:"cliParser,omitempty"`
+	Paths               *[]string                    `json:"paths,omitempty"`
+	Recursive           *bool                        `json:"recursive,omitempty"`
+	Force               *bool                        `json:"force,omitempty"`
+	Clean               *bool                        `json:"clean,omitempty"`
+	ReplaceTemplates    *[]string                    `json:"replaceTemplates,omitempty"`
+	ProjectProvenance   *bool                        `json:"projectProvenance,omitempty"`
+	Timestamp           *bool                        `json:"timestamp,omitempty"`
+	EmitGoGenerate      *bool                        `json:"emitGoGenerate,omitempty"`
+	ProvVersion         *string                      `json:"provVersion,omitempty"`
+	ProvCommit          *string                      `json:"provCommit,omitempty"`
+	ProvDate            *string                      `json:"provDate,omitempty"`
 }
 
 // LoadGenerateConfig reads a configuration file, dispatching by extension.
@@ -43,12 +48,45 @@ func LoadGenerateConfig(filename string) (GenerateConfig, error) {
 	if err != nil {
 		return GenerateConfig{}, fmt.Errorf("read generation config %q: %w", filename, err)
 	}
+	extension := strings.ToLower(filepath.Ext(filename))
+	if extension != ".mdc" && extension != ".mdconf" {
+		return loadGenerateConfigContent(nil, filepath.Base(filename), filename, content)
+	}
+	root, err := os.OpenRoot(filepath.Dir(filename))
+	if err != nil {
+		return GenerateConfig{}, fmt.Errorf("read generation config %q: %w", filename, err)
+	}
+	defer func() { _ = root.Close() }()
+	return loadGenerateConfigContent(root.FS(), filepath.Base(filename), filename, content)
+}
+
+// LoadGenerateConfigFS reads a configuration and safe relative documentation
+// references from a caller-provided filesystem. It performs no output writes.
+func LoadGenerateConfigFS(fsys fs.FS, filename string) (GenerateConfig, error) {
+	return loadGenerateConfigFS(fsys, filename, filename)
+}
+
+func loadGenerateConfigFS(fsys fs.FS, filename, displayName string) (GenerateConfig, error) {
+	if fsys == nil {
+		return GenerateConfig{}, fmt.Errorf("nil configuration filesystem for %q", filename)
+	}
+	if !fs.ValidPath(filename) || strings.Contains(filename, "\\") {
+		return GenerateConfig{}, fmt.Errorf("invalid configuration path %q", filename)
+	}
+	content, err := fs.ReadFile(fsys, filename)
+	if err != nil {
+		return GenerateConfig{}, fmt.Errorf("read generation config %q: %w", displayName, err)
+	}
+	return loadGenerateConfigContent(fsys, filename, displayName, content)
+}
+
+func loadGenerateConfigContent(fsys fs.FS, filename, displayName string, content []byte) (GenerateConfig, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".json":
-		return loadGenerateConfigJSON(filename, content)
+		return loadGenerateConfigJSON(displayName, content)
 	case ".mdconf", ".mdc":
-		return loadGenerateConfigMarkdown(filename, content)
+		return loadGenerateConfigMarkdownFS(displayName, content, fsys, filename)
 	default:
 		return GenerateConfig{}, fmt.Errorf("unsupported configuration format %q for %q; supported formats are .json, .mdconf, .mdc", ext, filename)
 	}
@@ -102,6 +140,10 @@ func loadGenerateConfigJSON(filename string, content []byte) (GenerateConfig, er
 }
 
 func loadGenerateConfigMarkdown(filename string, content []byte) (GenerateConfig, error) {
+	return loadGenerateConfigMarkdownFS(filename, content, nil, filename)
+}
+
+func loadGenerateSettingsMarkdown(filename string, content []byte) (GenerateConfig, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	var config GenerateConfig
 	seen := make(map[string]int)

@@ -141,7 +141,7 @@ func TestGenerateConfigStrictDiagnostics(t *testing.T) {
 		{"unknown heading", "format-version: 1\n# Bananas\n", "unsupported heading", 2},
 		{"redundant heading", "# Configuration\nformat-version: 1\n", "unsupported heading", 1},
 		{"variables deferred", "format-version: 1\n# Variables\n", "unsupported heading", 2},
-		{"commands deferred", "format-version: 1\n# Commands\n", "unsupported heading", 2},
+		{"empty commands", "format-version: 1\n# Commands\n", "empty section", 2},
 		{"minimum deferred", "format-version: 1\nmin-gosubc: 1\n", "unknown key", 2},
 		{"missing version", "clean: false\n", "missing required", 1},
 		{"invalid version", "format-version: banana\n", "invalid format version", 1},
