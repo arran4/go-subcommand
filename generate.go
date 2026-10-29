@@ -358,6 +358,8 @@ func GetProvenance(replaceTemplates []string, projectProvenance bool, timestamp 
 
 // GenerateOptions carries optional generator settings that do not change the legacy positional API.
 type GenerateOptions struct {
+	// CommandDeclarations are functionless metadata and documentation sources.
+	CommandDeclarations []parsers.CommandDeclaration
 	// CLIParser is the generation-wide runtime CLI parser backend fallback.
 	CLIParser string
 	// SuppressGoGenerate omits the nested go:generate directive from generated
@@ -370,6 +372,7 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 	for _, opt := range ops {
 		switch value := opt.(type) {
 		case GenerateOptions:
+			result.CommandDeclarations = append(result.CommandDeclarations, value.CommandDeclarations...)
 			if value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
@@ -377,6 +380,9 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 				result.SuppressGoGenerate = true
 			}
 		case *GenerateOptions:
+			if value != nil {
+				result.CommandDeclarations = append(result.CommandDeclarations, value.CommandDeclarations...)
+			}
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
@@ -440,12 +446,6 @@ func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited stri
 // GenerateWithFS generates code using provided FS and Writer. Optional variadic args ops can provide custom dependencies such as readFS (fs.FS).
 func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string, parserName string, options *parsers.ParseOptions, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, ops ...any) error {
 
-	if clean {
-		if err := CleanGeneratedFiles(dir, manDir); err != nil {
-			return fmt.Errorf("failed to clean generated files: %w", err)
-		}
-	}
-
 	hasFS := false
 
 	for _, opt := range ops {
@@ -471,6 +471,20 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	if err != nil {
 		return err
 	}
+	generateOptions := extractGenerateOptions(ops)
+	if len(generateOptions.CommandDeclarations) != 0 {
+		var copied parsers.ParseOptions
+		if options != nil {
+			copied = *options
+		} else {
+			copied.Recursive = true
+		}
+		copied.CommandDeclarations = append(append([]parsers.CommandDeclaration(nil), copied.CommandDeclarations...), generateOptions.CommandDeclarations...)
+		options = &copied
+	}
+	if parserName != "commentv1" && options != nil && len(options.CommandDeclarations) != 0 {
+		return fmt.Errorf("command metadata requires parser commentv1, got %q", parserName)
+	}
 
 	// inputFS is already rooted at the source directory, so we parse from "."
 	dataModel, err := p.Parse(inputFS, ".", options)
@@ -481,7 +495,6 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return fmt.Errorf("no commands found in %s", dir)
 	}
 
-	generateOptions := extractGenerateOptions(ops)
 	if err := resolveCLIParsers(dataModel.Commands, generateOptions.CLIParser); err != nil {
 		return err
 	}
@@ -528,6 +541,8 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 			return err
 		}
 		rootUsage := &model.SubCommand{
+			Metadata:               cmd.Metadata,
+			ManSections:            cmd.ManSections,
 			Command:                cmd,
 			SubCommands:            cmd.SubCommands,
 			SubCommandDescription:  cmd.Description,
@@ -544,6 +559,11 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdTemplatesDir, rootUsage.UsageFileName, "usage.txt.gotmpl", rootUsage, false); err != nil {
 			return err
 		}
+		if manDir != "" {
+			if err := generateFile(collector, manDir, sanitizeManFileName(cmd.MainCmdName, ""), "man.gotmpl", rootUsage, false); err != nil {
+				return err
+			}
+		}
 		for _, subCmd := range cmd.SubCommands {
 			if err := generateSubCommandFiles(collector, cmdOutDir, cmdTemplatesDir, manDir, subCmd); err != nil {
 				return err
@@ -553,6 +573,12 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 
 	if err := collector.Verify(writer, force); err != nil {
 		return err
+	}
+	// Validate and render the entire request before removing owned old output.
+	if clean {
+		if err := CleanGeneratedFiles(dir, manDir); err != nil {
+			return fmt.Errorf("failed to clean generated files: %w", err)
+		}
 	}
 
 	return collector.Commit(writer)
@@ -1389,6 +1415,7 @@ type GenerateCLIOptions struct {
 // GenerateCLIConfiguredWithOptions performs code generation with typed options and explicit flag overrides.
 // It never reads ambient process arguments (os.Args).
 func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
+	var declarations []parsers.CommandDeclaration
 	values := generateCLIValues{
 		dir:               opts.Dir,
 		manDir:            opts.ManDir,
@@ -1412,10 +1439,12 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 			return err
 		}
 		values.applyConfig(config, opts.ExplicitFlags)
+		declarations = config.CommandDeclarations
 	}
 	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
-		CLIParser:          values.cliParser,
-		SuppressGoGenerate: !values.emitGoGenerate,
+		CommandDeclarations: declarations,
+		CLIParser:           values.cliParser,
+		SuppressGoGenerate:  !values.emitGoGenerate,
 	})
 }
 

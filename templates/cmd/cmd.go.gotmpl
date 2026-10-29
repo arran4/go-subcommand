@@ -147,7 +147,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{else}}
 	c.Usage()
-	{{- if .SubCommands }}
+	{{- if or .SubCommands .Metadata }}
 	if len(remainingArgs) > 0 {
 		return fmt.Errorf("unknown command: %s", remainingArgs[0])
 	}

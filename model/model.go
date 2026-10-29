@@ -87,6 +87,9 @@ type ParserConfig struct {
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
+	// Metadata records an explicit functionless declaration, independently of FunctionName.
+	Metadata    *CommandMetadata
+	ManSections []ManSection
 	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName string
 	// SubCommands is the list of direct subcommands for this command.
@@ -221,7 +224,8 @@ func (dm *DataModel) Validate() error {
 	return nil
 }
 
-func (cmd *Command) Validate() error {
+func (cmd *Command) Validate() (err error) {
+	defer func() { err = metadataError(cmd.Metadata, err) }()
 	if cmd.DefaultRoute != "" {
 		if err := cmd.validateDefaultRoute(); err != nil {
 			return err
@@ -316,7 +320,8 @@ func (cmd *Command) validateRootAliases() error {
 	return nil
 }
 
-func (sc *SubCommand) Validate() error {
+func (sc *SubCommand) Validate() (err error) {
+	defer func() { err = metadataError(sc.Metadata, err) }()
 	for _, alias := range sc.Aliases {
 		if strings.EqualFold(alias, sc.SubCommandName) {
 			return fmt.Errorf("command %s: alias %q on subcommand %q cannot alias itself", sc.ProgName(), alias, sc.SubCommandName)
@@ -700,6 +705,8 @@ func (p *FunctionParameter) TypeDescription() string {
 
 // SubCommand represents a subcommand within a command tree.
 type SubCommand struct {
+	Metadata    *CommandMetadata
+	ManSections []ManSection
 	*Command
 	// Parent points to the parent command.
 	Parent *SubCommand

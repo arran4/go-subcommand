@@ -9,6 +9,8 @@ See [Generator design principles](generator-design-principles/) for the function
 
 See [Project generation configuration](project-configuration/) for optional versioned generator settings and explicit CLI override precedence.
 
+See [Functionless command metadata](command-metadata/) for explicit root identity and help without an action, Go/config declarations, documentation and man appendices.
+
 ## Man Page Generation
 
 `go-subcommand` can generate standard Unix man pages.
@@ -17,7 +19,9 @@ See [Project generation configuration](project-configuration/) for optional vers
 gosubc generate --man-dir ./man
 ```
 
-This creates a `man1` directory inside `./man` containing gzipped man pages (e.g., `my-app.1.gz`, `my-app-subcmd.1.gz`).
+This writes root and child roff pages directly under `./man`, for example
+`my-app.1` and `my-app-subcmd.1`. Native config man appendices are included in the
+selected command's page.
 
 The content is derived from:
 *   The command description.
