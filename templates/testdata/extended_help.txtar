@@ -14,3 +14,11 @@ Info command
 This is extended help text.
 It spans multiple lines.
 Useful for providing examples or detailed usage instructions.
+-- rendered-80-shallow.txt --
+Usage: helpapp info
+
+Info command
+
+This is extended help text.
+It spans multiple lines.
+Useful for providing examples or detailed usage instructions.
