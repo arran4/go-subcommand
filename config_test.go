@@ -57,19 +57,12 @@ func TestExplicitGenerateFlags(t *testing.T) {
 		}
 	}
 
-	// Verify that arguments before "generate" or unrelated arguments without "generate" are ignored.
+	// Verify that programmatic calls without "generate" as the first argument return nil.
 	if explicit := explicitGenerateFlags([]string{"--clean", "--dir=foo"}); explicit != nil {
 		t.Errorf("expected nil for args without generate subcommand, got %#v", explicit)
 	}
-	if explicit := explicitGenerateFlags([]string{"-run", "generate", "--clean"}); explicit != nil {
-		t.Errorf("expected nil when generate is a flag value, got %#v", explicit)
-	}
-	explicitRootAndChild := explicitGenerateFlags([]string{"--root-flag", "generate", "--dir=child"})
-	if explicitRootAndChild["root-flag"] {
-		t.Errorf("root-flag before generate should not be recorded")
-	}
-	if !explicitRootAndChild["dir"] {
-		t.Errorf("dir after generate should be recorded")
+	if explicit := explicitGenerateFlags([]string{"-test.v", "-run", "TestSomething"}); explicit != nil {
+		t.Errorf("expected nil for test runner arguments, got %#v", explicit)
 	}
 }
 

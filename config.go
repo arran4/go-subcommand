@@ -115,20 +115,10 @@ func (v *generateCLIValues) applyConfig(config GenerateConfig, explicit map[stri
 }
 
 func explicitGenerateFlags(args []string) map[string]bool {
-	generateIdx := -1
-	for i, arg := range args {
-		if arg == "generate" {
-			if i > 0 && strings.HasPrefix(args[i-1], "-") && !strings.Contains(args[i-1], "=") {
-				continue
-			}
-			generateIdx = i
-			break
-		}
-	}
-	if generateIdx == -1 {
+	if len(args) == 0 || args[0] != "generate" {
 		return nil
 	}
-	args = args[generateIdx+1:]
+	args = args[1:]
 	explicit := make(map[string]bool)
 	for _, arg := range args {
 		if arg == "--" {
