@@ -597,6 +597,47 @@ func TestConstructorContextIsInherited(t *testing.T) {
 	if output, err := compile.CombinedOutput(); err != nil {
 		t.Fatalf("generated root-context module failed: %v\n%s", err, output)
 	}
+
+	mainSource := `package main
+
+import (
+	"fmt"
+	"os"
+
+	"example.com/contextapp/buildinfo"
+)
+
+func main() {
+	root, err := NewRootWithContext("contextapp", "1.0.0", "abc", "2026-10-29", buildinfo.BuildInfo{Version: "v1"})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize: %v\n", err)
+		os.Exit(1)
+	}
+	if err := root.Execute(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cmd", "contextapp", "main.go"), []byte(mainSource), 0644); err != nil {
+		t.Fatalf("write main: %v", err)
+	}
+	binPath := filepath.Join(dir, "contextapp")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/contextapp")
+	buildCmd.Dir = dir
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build executable failed: %v\n%s", err, output)
+	}
+	for _, args := range [][]string{
+		{"child"},
+		{"child", "grandchild"},
+	} {
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("run %v failed: %v\n%s", args, err, output)
+		}
+	}
 }
 
 func TestGenerate_ImportableDispatcher(t *testing.T) {
