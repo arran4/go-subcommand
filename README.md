@@ -391,6 +391,12 @@ Each generated command owns a distinct usage resource. Commands with the same
 leaf name in different paths (for example, `app serve` and
 `app scenario serve`) retain separate help text and usage syntax.
 
+Subcommand and flag rows remain inline in each generated `*_usage.txt` template
+and are formatted at runtime with hanging-indent word wrapping to the active
+terminal width (`COLUMNS`). Recursive help displays full command paths while
+shallow help displays direct child names, aligning descriptions from each
+branch's displayed labels without fixed padding widths.
+
 ### Root Actions and Subcommand Dispatch
 
 When an application defines both a root action and subcommands, a recognized
@@ -661,9 +667,7 @@ The generator reads the target module's `go` directive and adapts its output:
 | Go 1.21+ | `any` and `slices.Contains` |
 
 Generation fails before writing output when a target module declares Go 1.15 or
-older. The compatibility forms are regression-tested as generated source; the
-local campaign environment currently has a Go 1.25.0 compiler, so it does not
-claim binary compilation with unavailable historical toolchains.
+older. The compatibility forms are regression-tested as generated source.
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
