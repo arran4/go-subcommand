@@ -40,11 +40,15 @@ func TestGenerate_Execute(t *testing.T) {
 	args = append(args, "--project-provenance")
 	args = append(args, "--timestamp")
 	args = append(args, "--emit-go-generate")
+	args = append(args, "--regenerate-command")
+	args = append(args, "test")
 	args = append(args, "--prov-version")
 	args = append(args, "test")
 	args = append(args, "--prov-commit")
 	args = append(args, "test")
 	args = append(args, "--prov-date")
+	args = append(args, "test")
+	args = append(args, "--config")
 	args = append(args, "test")
 
 	err := cmd.Execute(args)
@@ -86,6 +90,9 @@ func TestGenerate_Execute(t *testing.T) {
 	if cmd.emitGoGenerate != true {
 		t.Errorf("Expected emitGoGenerate to be true, got '%v'", cmd.emitGoGenerate)
 	}
+	if cmd.regenerationCommand != "test" {
+		t.Errorf("Expected regenerationCommand to be 'test', got '%v'", cmd.regenerationCommand)
+	}
 	if cmd.provVersion != "test" {
 		t.Errorf("Expected provVersion to be 'test', got '%v'", cmd.provVersion)
 	}
@@ -94,6 +101,9 @@ func TestGenerate_Execute(t *testing.T) {
 	}
 	if cmd.provDate != "test" {
 		t.Errorf("Expected provDate to be 'test', got '%v'", cmd.provDate)
+	}
+	if cmd.configPath != "test" {
+		t.Errorf("Expected configPath to be 'test', got '%v'", cmd.configPath)
 	}
 }
 

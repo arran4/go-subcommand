@@ -271,6 +271,18 @@ Generated files plan import identifiers for the complete file before rendering. 
 
 Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
 
+Constructor context and `(flag presence)` are independent inputs. A root or nested
+action may receive both inherited typed context and its own `map[string]bool`
+presence parameter. Context is never an argv flag or an execution-time provider;
+explicit false, zero and empty flag values still appear in the presence map.
+`templates/testdata/runtime/issue483_presence.txtar` contains the complete annotated source,
+generated root/grandchild snapshots and compiled GNU/Go-flag examples. For example,
+`app child grandchild --enabled=false -n 0 -l ""` reports the same supplied context
+and `seen={"count":true,"enabled":true,"label":true}`. The ordinary `NewRoot`
+constructor supplies zero context, while `NewRootWithContext` accepts imported
+typed context without changing flag binding. Help, usage and version execute no
+actions, and a reused tree receives a fresh presence map for each invocation.
+
 ```go
 // Root is a subcommand `app`.
 //
@@ -571,6 +583,83 @@ Generates the Go code for your CLI.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
 *   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
+*   `--regenerate-command <command>`: Record the project's pinned canonical regeneration command in generated `cmd/AGENTS.md`.
+*   `--config <path>`: Read an optional version-one project configuration (`.mdconf`, `.mdc`, or `.json`). Explicit command-line flags override configuration values, and configuration values override built-in defaults. Unknown keys and unsupported versions fail before generation.
+
+#### Generation configuration
+
+Configuration is opt-in. Both candidate native extensions, `.mdconf` and `.mdc`,
+accept top-level generator settings, without a `# Configuration` heading:
+
+```text
+format-version: 1
+cli-parser: gnu
+recursive: true
+emit-go-generate: false
+paths:
+- commands
+- internal/actions
+```
+
+Run `gosubc generate --config gosubc.mdc`. Explicit `--recursive=false` and
+`--prov-version=` override file values even though they supply zero/empty values.
+Native keys ignore case, hyphens and underscores. `version: 1` remains an alias
+for `format-version: 1`; declaring both is an error. Supported settings are
+`dir`, `man-dir`, `parser-name`, `cli-parser`, `paths`, `recursive`, `force`,
+`clean`, `replace-templates`, `project-provenance` (alias `project`), `timestamp`,
+`emit-go-generate`, `prov-version`, `prov-commit`, and `prov-date`.
+Lists accept comma-separated strings, JSON string arrays, or Markdown list entries
+after an empty list setting. Strings may be quoted; booleans accept true/false,
+yes/no, and 1/0. Invalid values, duplicate or conflicting aliases, unknown keys,
+and unsupported headings fail with the source filename and line number.
+
+JSON uses lower-camel-case names and a required `version` field:
+
+```json
+{
+  "version": 1,
+  "cliParser": "gnu",
+  "recursive": true,
+  "emitGoGenerate": false
+}
+```
+
+The configuration file is only read by `gosubc generate --config`; generated
+applications do not read it at runtime. `--config` is also safe for pinned
+generation scripts because malformed input and unknown keys are rejected.
+This initial slice supports generator settings only. `min-gosubc`, typed template
+variables, command metadata, documentation/man-page appendices, external references,
+and multiple generation targets remain tracked in #63. Sections such as
+`# Variables` and `# Commands` are rejected until implemented; no placeholder
+template-variable API is exposed.
+
+Programmatic callers use `GenerateCLIConfiguredWithOptions(GenerateCLIOptions{...})`
+and set `ExplicitFlags` to preserve supplied options over file values. Keys may be
+Go parameter names (for example `emitGoGenerate`) or documented flag aliases.
+`GenerateCLIConfiguredCommand` retains its original signature and treats its
+arguments as fallback values. Neither API inspects process arguments.
+
+For commands that need presence independently of value, annotate a
+`map[string]bool` parameter with `(flag presence)` in the `Flags:` block:
+
+```go
+// Show is a subcommand `app show` reports explicit overrides.
+//
+// Flags:
+//
+//     count: --count -n (default: 7) Item count.
+//     seen: (flag presence) Explicit parameters.
+func Show(count int, seen map[string]bool) {
+    fmt.Printf("count=%d explicit=%t\n", count, seen["count"])
+}
+```
+
+`app show` prints `count=7 explicit=false`; `app show --count=0` prints
+`count=0 explicit=true`. GNU and Go-flag parsers supply a fresh map keyed by Go
+parameter name, normalizing aliases and recording only flags actually consumed
+on that command. Flag-looking values and arguments after `--` do not mark flags.
+The map is not a CLI flag and does not appear in help. It cannot be positional,
+inherited, required, or combined with defaults, aliases, custom parsers or providers.
 
 ### `gosubc template`
 
