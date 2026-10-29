@@ -2606,11 +2606,19 @@ func TestGenerateTypedErrors(t *testing.T) {
 			errorGolden = f.Data
 		}
 	}
-	for _, backend := range []string{"gnu", "go-flag"} {
+	for _, backend := range []string{"gnu", "go-flag", "gnu-cmd-package"} {
 		t.Run(backend, func(t *testing.T) {
+			parserBackend := strings.TrimSuffix(backend, "-cmd-package")
+			scenarioInput := fstest.MapFS{}
+			for name, file := range input {
+				scenarioInput[name] = file
+			}
+			if backend == "gnu-cmd-package" {
+				scenarioInput["app.go"] = &fstest.MapFile{Data: []byte(strings.Replace(string(input["app.go"].Data), "package app", "package cmd", 1))}
+			}
 			generate := func() map[string][]byte {
 				writer := NewCollectingFileWriter()
-				if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", input, GenerateOptions{CLIParser: backend}); err != nil {
+				if err := GenerateWithFS(scenarioInput, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", scenarioInput, GenerateOptions{CLIParser: parserBackend}); err != nil {
 					t.Fatal(err)
 				}
 				return writer.Files
@@ -2632,7 +2640,7 @@ func TestGenerateTypedErrors(t *testing.T) {
 			}
 			// Disk materialization is limited to the Go compiler/process boundary.
 			dir := t.TempDir()
-			for name, f := range input {
+			for name, f := range scenarioInput {
 				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
 			}
 			for name, data := range files {
@@ -2687,7 +2695,7 @@ func TestGenerateTypedErrors(t *testing.T) {
 						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
 							t.Fatal(err)
 						}
-						want = alternatives[backend]
+						want = alternatives[parserBackend]
 					} else if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
 						t.Fatal(err)
 					}

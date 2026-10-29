@@ -787,6 +787,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 type templateImport struct {
 	Alias string
 	Path  string
+	Fixed bool
 }
 
 type fileImports struct {
@@ -885,6 +886,13 @@ func deduplicateAndSortImports(imports []templateImport) fileImports {
 			continue
 		}
 		previous, ok := seen[imp.Path]
+		if imp.Fixed {
+			seen[imp.Path] = imp
+			continue
+		}
+		if previous.Fixed {
+			continue
+		}
 		if !ok || (previous.Alias == "" && imp.Alias != "") || (previous.Alias != "" && imp.Alias != "" && imp.Alias < previous.Alias) {
 			seen[imp.Path] = imp
 		}
@@ -895,8 +903,8 @@ func deduplicateAndSortImports(imports []templateImport) fileImports {
 		paths = append(paths, importPath)
 	}
 	sort.Slice(paths, func(i, j int) bool {
-		leftFixed := isGeneratedImport(paths[i])
-		rightFixed := isGeneratedImport(paths[j])
+		leftFixed := seen[paths[i]].Fixed || isGeneratedImport(paths[i])
+		rightFixed := seen[paths[j]].Fixed || isGeneratedImport(paths[j])
 		if leftFixed != rightFixed {
 			return leftFixed
 		}
@@ -912,7 +920,7 @@ func deduplicateAndSortImports(imports []templateImport) fileImports {
 			preferred = path.Base(importPath)
 		}
 		identifier := ""
-		if isGeneratedImport(importPath) {
+		if imp.Fixed || isGeneratedImport(importPath) {
 			identifier = path.Base(importPath)
 		} else {
 			identifier = uniqueImportIdentifier(preferred, used)
@@ -1002,7 +1010,7 @@ func sanitizeImportIdentifier(identifier string) string {
 func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
 	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"}, templateImport{Path: "os"})
-	imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd"})
+	imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd", Fixed: true})
 
 	if cmd.SubCommandFunctionName != "" && cmd.ReturnsError {
 		imports = append(imports, templateImport{Path: "errors"})
@@ -1031,7 +1039,7 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 func commandImports(cmd *model.Command, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
 	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"}, templateImport{Path: "io"}, templateImport{Path: "os"}, templateImport{Path: "sync"})
-	imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd"})
+	imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd", Fixed: true})
 
 	if cmd.FunctionName != "" && cmd.ReturnsError {
 		imports = append(imports, templateImport{Path: "errors"})
