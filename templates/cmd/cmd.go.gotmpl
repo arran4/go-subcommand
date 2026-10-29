@@ -54,7 +54,7 @@ func (c *{{.SubCommandStructName}}) UsageRecursive() {
 func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- $hasFileExec := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader .HasGenerator }}
+	{{- if or .IsWriter .IsReader (and .HasGenerator (not .IsFlagPresence)) }}
 	{{- $hasFileExec = true }}
 	{{- end }}
 	{{- end }}
@@ -123,6 +123,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
 	}
+	{{- end }}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if .IsFlagPresence }}
+	c.{{.ValueFieldName}} = seenFlags
 	{{- end }}
 	{{- end }}
 	{{- range orderedGenerators .Parameters }}

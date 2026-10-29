@@ -55,6 +55,8 @@ type SourceType string
 const (
 	SourceTypeFlag      SourceType = "flag"
 	SourceTypeGenerator SourceType = "generator"
+	// SourceTypeFlagPresence supplies the parser's per-invocation presence map.
+	SourceTypeFlagPresence SourceType = "flag-presence"
 )
 
 type ParserType string
@@ -127,6 +129,8 @@ type Command struct {
 	// SuppressGoGenerate omits the nested regeneration directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
+	// RegenerationCommand is the documented project-owned generation command.
+	RegenerationCommand string
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
@@ -416,6 +420,9 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	var hasOptionalPos bool
 	var hasVarArg bool
 	for _, p := range params {
+		if p.IsFlagPresence() && (p.Type != "map[string]bool" || p.IsPositional || p.IsVarArg || p.Required || p.HasDefaultValue || p.Inherited || len(p.FlagAliases) != 0 || p.Parser.Type != "" || p.Generator.Func != nil) {
+			return fmt.Errorf("parameter %q: flag presence requires map[string]bool without positional, inherited, required, default, parser or provider options", p.Name)
+		}
 		if !p.IsPositional {
 			continue
 		}
@@ -451,7 +458,7 @@ func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) 
 	providers := make(map[string]*FunctionParameter)
 	for _, param := range params {
 		all[param.Name] = param
-		if param.HasGenerator() && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
 			providers[param.Name] = param
 		}
 	}
@@ -479,7 +486,10 @@ func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) 
 		state[provider.Name] = 2
 		return nil
 	}
-	for _, provider := range providers {
+	for _, provider := range params {
+		if providers[provider.Name] == nil {
+			continue
+		}
 		if err := visit(provider); err != nil {
 			return err
 		}
@@ -1320,7 +1330,11 @@ func (sc *SubCommand) MaxUsageDefaultLength() int {
 }
 
 func (p *FunctionParameter) HasGenerator() bool {
-	return p.Generator.Type == SourceTypeGenerator
+	return p.Generator.Type == SourceTypeGenerator || p.IsFlagPresence()
+}
+
+func (p *FunctionParameter) IsFlagPresence() bool {
+	return p.Generator.Type == SourceTypeFlagPresence
 }
 
 func (p *FunctionParameter) GeneratorCall() string {
@@ -1353,7 +1367,7 @@ func (p *FunctionParameter) GeneratorCallFor(receiver string, fields bool) strin
 func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
 	byName := make(map[string]*FunctionParameter)
 	for _, param := range params {
-		if param.HasGenerator() && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
 			byName[param.Name] = param
 		}
 	}
@@ -1374,7 +1388,7 @@ func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
 		ordered = append(ordered, param)
 	}
 	for _, param := range params {
-		if param.HasGenerator() && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
 			visit(param)
 		}
 	}

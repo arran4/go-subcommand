@@ -42,6 +42,26 @@ type FileWriter interface {
 	ReadDir(path string, ops ...any) ([]fs.DirEntry, error)
 }
 
+// FileRemover is an optional FileWriter capability used only by migrations
+// which must remove an obsolete generated file.  It is deliberately separate
+// from FileWriter so existing user implementations of FileWriter remain source
+// compatible.
+type FileRemover interface {
+	Remove(path string) error
+}
+
+// FileRenamer is an optional FileWriter capability used for a case-only
+// generated-file migration on case-insensitive filesystems.
+type FileRenamer interface {
+	Rename(oldPath, newPath string) error
+}
+
+// FileIdentity is an optional FileWriter capability for determining whether
+// two spellings refer to one underlying file.
+type FileIdentity interface {
+	SameFile(path1, path2 string) (bool, error)
+}
+
 // OSFileWriter implements FileWriter using os package
 type OSFileWriter struct{}
 
@@ -63,18 +83,61 @@ func (w *OSFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
 	}
 	return os.ReadDir(path)
 }
+func (w *OSFileWriter) Remove(path string) error { return os.Remove(path) }
+func (w *OSFileWriter) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+func (w *OSFileWriter) SameFile(path1, path2 string) (bool, error) {
+	first, err := os.Stat(path1)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	second, err := os.Stat(path2)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return os.SameFile(first, second), nil
+}
 
 // CollectingFileWriter collects files and directories to be written
 type CollectingFileWriter struct {
-	Files map[string][]byte
-	Dirs  map[string]bool
+	Files   map[string][]byte
+	Dirs    map[string]bool
+	Deletes map[string]bool
+	Renames map[string]string
 }
 
 func NewCollectingFileWriter() *CollectingFileWriter {
 	return &CollectingFileWriter{
-		Files: make(map[string][]byte),
-		Dirs:  make(map[string]bool),
+		Files:   make(map[string][]byte),
+		Dirs:    make(map[string]bool),
+		Deletes: make(map[string]bool),
+		Renames: make(map[string]string),
 	}
+}
+
+func (w *CollectingFileWriter) Remove(path string) error {
+	delete(w.Files, path)
+	w.Deletes[path] = true
+	return nil
+}
+
+func (w *CollectingFileWriter) Rename(oldPath, newPath string) error {
+	if content, ok := w.Files[oldPath]; ok {
+		delete(w.Files, oldPath)
+		w.Files[newPath] = content
+	}
+	return nil
+}
+
+func (w *CollectingFileWriter) SameFile(path1, path2 string) (bool, error) {
+	return path1 == path2, nil
 }
 
 func (w *CollectingFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
@@ -199,7 +262,7 @@ func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 						continue
 					}
 					fullPath := filepath.Join(dir, entry.Name())
-					if _, ok := w.Files[fullPath]; !ok {
+					if _, ok := w.Files[fullPath]; !ok && !w.Deletes[fullPath] && w.Renames[fullPath] == "" {
 						return fmt.Errorf("file %s is present in the directory but not in the generated set (use --force to ignore)", fullPath)
 					}
 				}
@@ -210,12 +273,30 @@ func (w *CollectingFileWriter) Verify(writer FileWriter, force bool) error {
 }
 
 func (w *CollectingFileWriter) Commit(writer FileWriter) error {
+	for oldPath, newPath := range w.Renames {
+		renamer, ok := writer.(FileRenamer)
+		if !ok {
+			return fmt.Errorf("cannot rename legacy generated file %s to %s: supplied FileWriter does not implement FileRenamer", oldPath, newPath)
+		}
+		if err := renamer.Rename(oldPath, newPath); err != nil {
+			return fmt.Errorf("failed to rename legacy generated file %s to %s: %w", oldPath, newPath, err)
+		}
+	}
 	for path, content := range w.Files {
 		if err := writer.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", filepath.Dir(path), err)
 		}
 		if err := writer.WriteFile(path, content, 0644); err != nil {
 			return fmt.Errorf("failed to create file %s: %w", path, err)
+		}
+	}
+	for path := range w.Deletes {
+		remover, ok := writer.(FileRemover)
+		if !ok {
+			return fmt.Errorf("cannot remove obsolete generated file %s: supplied FileWriter does not implement FileRemover", path)
+		}
+		if err := remover.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove file %s: %w", path, err)
 		}
 	}
 	return nil
@@ -363,6 +444,9 @@ type GenerateOptions struct {
 	// SuppressGoGenerate omits the nested go:generate directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
+	// RegenerationCommand is the project-owned, pinned command described in
+	// generated AGENTS.md. An empty value emits generic safe guidance.
+	RegenerationCommand string
 }
 
 func extractGenerateOptions(ops []any) GenerateOptions {
@@ -376,12 +460,18 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value.SuppressGoGenerate {
 				result.SuppressGoGenerate = true
 			}
+			if value.RegenerationCommand != "" {
+				result.RegenerationCommand = value.RegenerationCommand
+			}
 		case *GenerateOptions:
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
 			if value != nil && value.SuppressGoGenerate {
 				result.SuppressGoGenerate = true
+			}
+			if value != nil && value.RegenerationCommand != "" {
+				result.RegenerationCommand = value.RegenerationCommand
 			}
 		}
 	}
@@ -487,6 +577,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	}
 	for _, cmd := range dataModel.Commands {
 		cmd.SuppressGoGenerate = generateOptions.SuppressGoGenerate
+		cmd.RegenerationCommand = generateOptions.RegenerationCommand
 	}
 
 	if err := dataModel.Validate(); err != nil {
@@ -517,7 +608,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
-		if err := generateFile(collector, filepath.Join(dir, "cmd"), "agents.md", "agents.md.gotmpl", cmd, false); err != nil {
+		if err := generateFile(collector, filepath.Join(dir, "cmd"), "AGENTS.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
 		if err := generateFile(collector, cmdOutDir, "root_test.go", "root_test.go.gotmpl", cmd, true); err != nil {
@@ -551,11 +642,56 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		}
 	}
 
+	if err := planLegacyAgentsMigration(writer, collector, filepath.Join(dir, "cmd", "AGENTS.md"), filepath.Join(dir, "cmd", "agents.md")); err != nil {
+		return err
+	}
+
 	if err := collector.Verify(writer, force); err != nil {
 		return err
 	}
 
 	return collector.Commit(writer)
+}
+
+const generatedAgentGuidanceHeader = "<!-- Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT. -->"
+
+func planLegacyAgentsMigration(writer FileWriter, collector *CollectingFileWriter, canonicalPath, legacyPath string) error {
+	content, err := writer.ReadFile(legacyPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect legacy agent guidance %s: %w", legacyPath, err)
+	}
+	if !isOwnedGeneratedAgentGuidance(content) {
+		return fmt.Errorf("legacy agent guidance %s is not generated by gosubc; rename or remove it before generating AGENTS.md", legacyPath)
+	}
+	if _, ok := writer.(FileRemover); !ok {
+		return fmt.Errorf("cannot remove obsolete generated file %s: supplied FileWriter does not implement FileRemover", legacyPath)
+	}
+	if strings.EqualFold(canonicalPath, legacyPath) {
+		identity, ok := writer.(FileIdentity)
+		if !ok {
+			return fmt.Errorf("cannot safely migrate legacy agent guidance %s: supplied FileWriter does not implement FileIdentity for a case-only rename", legacyPath)
+		}
+		same, err := identity.SameFile(canonicalPath, legacyPath)
+		if err != nil {
+			return fmt.Errorf("identify legacy agent guidance %s: %w", legacyPath, err)
+		}
+		if same {
+			if _, ok := writer.(FileRenamer); !ok {
+				return fmt.Errorf("cannot safely migrate legacy agent guidance %s: supplied FileWriter does not implement FileRenamer for a case-only rename", legacyPath)
+			}
+			collector.Renames[legacyPath] = canonicalPath
+			return nil
+		}
+	}
+	collector.Deletes[legacyPath] = true
+	return nil
+}
+
+func isOwnedGeneratedAgentGuidance(content []byte) bool {
+	return bytes.HasPrefix(content, []byte(generatedAgentGuidanceHeader+"\n")) || bytes.Equal(content, []byte(generatedAgentGuidanceHeader))
 }
 
 func isGenerated(content []byte) bool {
@@ -1007,7 +1143,7 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	}
 
 	for _, p := range cmd.Parameters {
-		if p.HasGenerator() {
+		if p.HasGenerator() && !p.IsFlagPresence() {
 			imports = append(imports, templateImport{Path: "io"})
 		}
 		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
@@ -1359,7 +1495,108 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{CLIParser: cliParser})
 }
 
-// GenerateCLICommand is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLICommand generates code using the compatible command API.
+func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
+	})
+}
+
+// GenerateCLICommandWithGuidance is the backwards-compatible explicit guidance entry point.
+// Aliases: gen
+//
+// This command supports customizing templates via the --replace-template flag.
+// You can provide multiple replacements in the following formats:
+//
+//	--replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
+//	--replace-template <folder>          Overlay a folder containing templates onto the default templates
+//	--replace-template <txtar>           Overlay a txtar archive containing templates
+//
+// Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
+// Flags:
+//
+//	dir:		--dir		(default: ".")		Project root directory containing go.mod
+//	manDir:		--man-dir	(default: "")		Directory to generate man pages in optional
+//	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
+//	cliParser:	--cli-parser	(default: "gnu")	Name of the runtime CLI parser backend to use
+//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	recursive:	--recursive	(default: true)		Search recursively
+//	force:		--force		(default: false)	Force overwrite of files not generated by gosubc
+//	clean:		--clean		(default: false)	Clean/remove generated files before generating
+//	replaceTemplates:	--replace-template			Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
+//	projectProvenance: --project-provenance, --project (default: true) Include target Git metadata in provenance
+//	timestamp:         --timestamp (default: true) Include timestamp in provenance
+//	emitGoGenerate:    --emit-go-generate (default: true) Emit nested //go:generate directive in generated main.go
+//	regenerationCommand: --regenerate-command (default: "") Project pinned regeneration command for generated AGENTS.md
+//	provVersion:       --prov-version    (default: "") Overwrite provenance version
+//	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
+//	provDate:          --prov-date       (default: "") Overwrite provenance date
+func GenerateCLICommandWithGuidance(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string) error {
+	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
+		CLIParser:           cliParser,
+		SuppressGoGenerate:  !emitGoGenerate,
+		RegenerationCommand: regenerationCommand,
+	})
+}
+
+// GenerateCLIOptions specifies configuration and explicit flag overrides for code generation.
+type GenerateCLIOptions struct {
+	Dir                 string
+	ManDir              string
+	ParserName          string
+	CLIParser           string
+	Paths               []string
+	Recursive           bool
+	Force               bool
+	Clean               bool
+	ReplaceTemplates    []string
+	ProjectProvenance   bool
+	Timestamp           bool
+	EmitGoGenerate      bool
+	ProvVersion         string
+	ProvCommit          string
+	ProvDate            string
+	ConfigPath          string
+	RegenerationCommand string
+	ExplicitFlags       map[string]bool
+}
+
+// GenerateCLIConfiguredWithOptions performs code generation with typed options and explicit flag overrides.
+// It never reads ambient process arguments (os.Args).
+func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
+	values := generateCLIValues{
+		dir:               opts.Dir,
+		manDir:            opts.ManDir,
+		parserName:        opts.ParserName,
+		cliParser:         opts.CLIParser,
+		paths:             opts.Paths,
+		recursive:         opts.Recursive,
+		force:             opts.Force,
+		clean:             opts.Clean,
+		replaceTemplates:  opts.ReplaceTemplates,
+		projectProvenance: opts.ProjectProvenance,
+		timestamp:         opts.Timestamp,
+		emitGoGenerate:    opts.EmitGoGenerate,
+		provVersion:       opts.ProvVersion,
+		provCommit:        opts.ProvCommit,
+		provDate:          opts.ProvDate,
+	}
+	if opts.ConfigPath != "" {
+		config, err := LoadGenerateConfig(opts.ConfigPath)
+		if err != nil {
+			return err
+		}
+		values.applyConfig(config, opts.ExplicitFlags)
+	}
+	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
+		CLIParser:           values.cliParser,
+		SuppressGoGenerate:  !values.emitGoGenerate,
+		RegenerationCommand: opts.RegenerationCommand,
+	})
+}
+
+// GenerateCLIConfiguredAction is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1387,11 +1624,37 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 //	provVersion:       --prov-version    (default: "") Overwrite provenance version
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
-func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
-	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser:          cliParser,
-		SuppressGoGenerate: !emitGoGenerate,
+//	regenerationCommand: --regenerate-command (default: "") Project pinned regeneration command for generated AGENTS.md
+//	configPath:        --config (default: "") Optional generation configuration file.
+//	explicit:          (flag presence) Explicitly supplied parameters, keyed by Go parameter name.
+func GenerateCLIConfiguredAction(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string, configPath string, explicit map[string]bool) error {
+	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
+		Dir:                 dir,
+		ManDir:              manDir,
+		ParserName:          parserName,
+		CLIParser:           cliParser,
+		Paths:               paths,
+		Recursive:           recursive,
+		Force:               force,
+		Clean:               clean,
+		ReplaceTemplates:    replaceTemplates,
+		ProjectProvenance:   projectProvenance,
+		Timestamp:           timestamp,
+		EmitGoGenerate:      emitGoGenerate,
+		RegenerationCommand: regenerationCommand,
+		ProvVersion:         provVersion,
+		ProvCommit:          provCommit,
+		ProvDate:            provDate,
+		ConfigPath:          configPath,
+		ExplicitFlags:       explicit,
 	})
+}
+
+// GenerateCLIConfiguredCommand generates with configuration overriding the supplied
+// fallback values. It never reads process arguments. To explicitly override file
+// settings, use GenerateCLIConfiguredWithOptions and its ExplicitFlags field.
+func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
+	return GenerateCLIConfiguredAction(dir, manDir, parserName, cliParser, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, emitGoGenerate, "", provVersion, provCommit, provDate, configPath, nil)
 }
 
 func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {

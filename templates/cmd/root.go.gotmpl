@@ -287,7 +287,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
-	{{- if or .IsWriter .IsReader .HasGenerator }}
+	{{- if or .IsWriter .IsReader (and .HasGenerator (not .IsFlagPresence)) }}
 	{{- $hasFile = true }}
 	{{- end }}
 	{{- if or .IsPositional .IsVarArg }}
@@ -361,6 +361,11 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
 	}
+	{{- end }}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if .IsFlagPresence }}
+	c.{{.Name}} = seenFlags
 	{{- end }}
 	{{- end }}
 	{{- range orderedGenerators .Parameters }}

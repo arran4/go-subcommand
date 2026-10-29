@@ -160,6 +160,20 @@ func TestGeneratorDependenciesRejectUnknownAndCycles(t *testing.T) {
 	}
 }
 
+func TestOrderedGeneratorsExcludeFlagPresence(t *testing.T) {
+	seen := &FunctionParameter{Name: "seen", Type: "map[string]bool", Generator: GeneratorConfig{Type: SourceTypeFlagPresence}}
+	first := &FunctionParameter{Name: "first", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"seen"}}}
+	second := &FunctionParameter{Name: "second", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"first", "seen"}}}
+	parameters := []*FunctionParameter{second, first, seen}
+	if err := validateParameters(parameters, "app"); err != nil {
+		t.Fatal(err)
+	}
+	ordered := OrderedGenerators(parameters)
+	if len(ordered) != 2 || ordered[0] != first || ordered[1] != second {
+		t.Fatalf("providers=%v", ordered)
+	}
+}
+
 func TestFunctionParameterUsageStreamHelp(t *testing.T) {
 	tests := []struct {
 		name        string
