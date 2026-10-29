@@ -50,6 +50,7 @@ cmd.go.gotmpl
 package main
 
 import (
+	"/cmd"
 	"flag"
 	"fmt"
 	"io"
@@ -80,6 +81,12 @@ func (c *ServiceCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *ServiceCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ServiceCmd) commandPath() string { return "app service" }
 
 func (c *ServiceCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "service_usage.txt", UsageDataServiceCmd{c, true})
@@ -130,12 +137,12 @@ func (c *ServiceCmd) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.prefix = value
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -149,7 +156,7 @@ func (c *ServiceCmd) Execute(args []string) (err error) {
 				found := false
 
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
