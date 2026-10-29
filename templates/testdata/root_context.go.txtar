@@ -73,6 +73,7 @@ import (
 	"sync"
 
 	"example.com/contextapp/buildinfo"
+	"example.com/contextapp/cmd"
 	"example.com/contextapp/cmd/contextapp/templates"
 )
 
@@ -142,6 +143,12 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "contextapp" }
+
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "contextapp_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
@@ -201,7 +208,7 @@ func NewRootWithContext(name, version, commit, date string, buildInfo buildinfo.
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -237,7 +244,7 @@ func NewRootWithContext(name, version, commit, date string, buildInfo buildinfo.
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -272,7 +279,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	c.Usage()
 	if len(remainingArgs) > 0 {
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 	return nil
 }

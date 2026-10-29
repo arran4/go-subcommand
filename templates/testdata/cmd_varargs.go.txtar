@@ -1,5 +1,6 @@
 -- input.json --
 {
+  "PackagePath": "example.com/fixture",
   "PackageName": "main",
   "SubCommandName": "mycmd",
   "SubCommandStructName": "MyCmd",
@@ -39,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 
+	"example.com/fixture/cmd"
 	"example.com/mypkg"
 )
 
@@ -64,6 +66,12 @@ func (c *MyCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *MyCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *MyCmd) commandPath() string { return "mycmd" }
 
 func (c *MyCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataMyCmd{c, true})

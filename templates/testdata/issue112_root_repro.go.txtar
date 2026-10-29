@@ -1,5 +1,6 @@
 -- input.json --
 {
+  "PackagePath": "example.com/fixture",
   "PackageName": "main",
   "MainCmdName": "myroot",
   "Version": "1.0.0",
@@ -17,13 +18,15 @@ root.go.gotmpl
 package main
 
 import (
-	"/cmd/myroot/templates"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
+
+	"example.com/fixture/cmd"
+	"example.com/fixture/cmd/myroot/templates"
 )
 
 type Cmd interface {
@@ -90,6 +93,12 @@ func (c *RootCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "myroot" }
 
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "myroot_usage.txt", UsageDataRootCmd{c, true})

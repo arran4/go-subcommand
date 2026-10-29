@@ -8,6 +8,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/arran4/go-subcommand/cmd"
 )
 
 var _ Cmd = (*Skill)(nil)
@@ -30,6 +32,12 @@ func (c *Skill) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *Skill) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Skill) commandPath() string { return "gosubc skill" }
 
 func (c *Skill) UsageRecursive() {
 	err := executeUsage(os.Stderr, "skill_usage.txt", UsageDataSkill{c, true})
@@ -66,7 +74,7 @@ func (c *Skill) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -79,7 +87,7 @@ func (c *Skill) Execute(args []string) (err error) {
 				}
 				found := false
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -96,7 +104,7 @@ func (c *Skill) Execute(args []string) (err error) {
 
 	c.Usage()
 	if len(remainingArgs) > 0 {
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 
 	return nil
@@ -164,7 +172,7 @@ func (c *RootCmd) NewSkill() *Skill {
 						return sub().Execute(nextArgs)
 					}
 					v.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					v.UsageRecursive()
@@ -199,7 +207,7 @@ func (c *RootCmd) NewSkill() *Skill {
 						return sub().Execute(nextArgs)
 					}
 					v.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					v.UsageRecursive()
