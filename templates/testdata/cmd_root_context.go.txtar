@@ -39,6 +39,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"example.com/contextapp/cmd"
 )
 
 var _ Cmd = (*Child)(nil)
@@ -61,6 +63,12 @@ func (c *Child) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *Child) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Child) commandPath() string { return "contextapp child" }
 
 func (c *Child) UsageRecursive() {
 	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, true})
@@ -97,7 +105,7 @@ func (c *Child) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -110,7 +118,7 @@ func (c *Child) Execute(args []string) (err error) {
 				}
 				found := false
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
