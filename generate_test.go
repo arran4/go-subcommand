@@ -37,6 +37,9 @@ var aliasRootIOSource string
 //go:embed testdata/provider_di.go
 var providerDISource string
 
+//go:embed testdata/provider_di_closable.go
+var providerDIClosableSource string
+
 //go:embed testdata/provider_di_imported.go
 var providerDIImportedSource string
 
@@ -1167,6 +1170,113 @@ func TestGenerateImportedProviderDependencies(t *testing.T) {
 	if output, err := run.CombinedOutput(); err != nil || strings.TrimSpace(string(output)) != "value-imported" {
 		t.Fatalf("run imported provider graph = %q, %v", output, err)
 	}
+}
+
+func TestGenerate_ClosableProviderReverseCleanupAndErrorPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/closable\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), providerDIClosableSource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+
+	runCase := func(t *testing.T, env map[string]string, args ...string) (string, []string, error) {
+		t.Helper()
+		marker := filepath.Join(t.TempDir(), "markers.txt")
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "CLEANUP_MARKER_FILE="+marker)
+		for k, v := range env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		output, err := cmd.CombinedOutput()
+		var markers []string
+		if data, readErr := os.ReadFile(marker); readErr == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				if line != "" {
+					markers = append(markers, line)
+				}
+			}
+		}
+		return string(output), markers, err
+	}
+
+	t.Run("normal execution runs cleanups once in reverse order", func(t *testing.T) {
+		output, markers, err := runCase(t, nil, "run")
+		if err != nil {
+			t.Fatalf("expected success, got err: %v\noutput: %s", err, output)
+		}
+		if !strings.Contains(output, "action executed") {
+			t.Errorf("output missing 'action executed': %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want reverse order %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("partial acquisition failure only cleans up already acquired providers", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{"FAIL_ACQUIRE_SECOND": "1"}, "run")
+		if err == nil {
+			t.Fatal("expected failure on second acquisition")
+		}
+		if !strings.Contains(output, "failed to generate r2: failed to acquire second") {
+			t.Errorf("expected failure message for r2, got: %s", output)
+		}
+		wantMarkers := []string{"close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want only first cleaned up: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("action error takes precedence over cleanup error", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{
+			"FAIL_ACTION":        "1",
+			"FAIL_CLOSE_second": "1",
+		}, "run")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(output, "action error") {
+			t.Errorf("expected action error to take precedence, got: %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want all cleanups attempted: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("cleanup error returned when action succeeds", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{
+			"FAIL_CLOSE_second": "1",
+		}, "run")
+		if err == nil {
+			t.Fatal("expected cleanup error")
+		}
+		if !strings.Contains(output, "cleanup failed for second") {
+			t.Errorf("expected cleanup error in output, got: %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want reverse order: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("help request has zero provider side effects", func(t *testing.T) {
+		output, markers, err := runCase(t, nil, "run", "--help")
+		if err != nil {
+			t.Fatalf("help failed: %v\noutput: %s", err, output)
+		}
+		if len(markers) > 0 {
+			t.Fatalf("expected 0 cleanup markers for help, got: %v", markers)
+		}
+	})
 }
 
 func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
