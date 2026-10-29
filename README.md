@@ -556,6 +556,7 @@ Generates the Go code for your CLI.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
 *   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
+*   `--regenerate-command <command>`: Record the project's pinned canonical regeneration command in generated `cmd/AGENTS.md`.
 *   `--config <path>`: Read an optional version-one project configuration (`.mdconf`, `.mdc`, or `.json`). Explicit command-line flags override configuration values, and configuration values override built-in defaults. Unknown keys and unsupported versions fail before generation.
 
 #### Generation configuration

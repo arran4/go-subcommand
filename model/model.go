@@ -126,6 +126,8 @@ type Command struct {
 	// SuppressGoGenerate omits the nested regeneration directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
+	// RegenerationCommand is the documented project-owned generation command.
+	RegenerationCommand string
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
