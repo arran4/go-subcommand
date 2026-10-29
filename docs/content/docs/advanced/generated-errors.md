@@ -48,9 +48,10 @@ repeatability, compiles their complete source, checks error identities and
 causes, compares Go-flag behaviour with the standard library, and executes the
 recorded invocations. Help cases verify that business providers do not run.
 
-This feature enables gogenmux to replace parser-message scanning. Its complete
-custom-main removal still needs [no-command policy (#524)](https://github.com/arran4/go-subcommand/issues/524),
-version/build metadata and version output, propagation of `builtBy`, and its
+This feature enables gogenmux to replace parser-message scanning. The
+[no-command policy](../no-command-policy/) also supplies typed bare-invocation errors.
+Complete custom-main removal still needs version/build metadata and version output,
+propagation of `builtBy`, and its
 validation=2/internal=3 default classification and rendering contract under
 [#479](https://github.com/arran4/go-subcommand/issues/479). Explicit exit errors
 can already carry those statuses, but arbitrary application error types are not

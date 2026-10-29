@@ -122,6 +122,8 @@ type Command struct {
 	Aliases []string
 	// DefaultRoute specifies an explicit default route for bare invocation (e.g. "help simple" or "tools docs simple").
 	DefaultRoute string
+	// NoCommand is independent of executable default routing.
+	NoCommand NoCommandPolicy
 	// CLIParser is the explicit runtime CLI parser backend selected for this command.
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
@@ -226,6 +228,15 @@ func (dm *DataModel) Validate() error {
 
 func (cmd *Command) Validate() (err error) {
 	defer func() { err = metadataError(cmd.Metadata, err) }()
+	switch cmd.NoCommand {
+	case NoCommandDefault:
+	case NoCommandError:
+		if cmd.FunctionName != "" || cmd.DefaultRoute != "" {
+			return fmt.Errorf("command %s: No command: error conflicts with a root action or Default route", cmd.MainCmdName)
+		}
+	default:
+		return fmt.Errorf("command %s: unsupported No command policy %q", cmd.MainCmdName, cmd.NoCommand)
+	}
 	if cmd.DefaultRoute != "" {
 		if err := cmd.validateDefaultRoute(); err != nil {
 			return err

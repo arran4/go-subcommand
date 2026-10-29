@@ -414,6 +414,11 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	{{- end }}
 	{{- end }}
+	{{- if eq .NoCommand "error" }}
+	if len(remainingArgs) == 0 {
+		return c.usageError(cmd.UsageNoCommand, "", nil, "no command provided")
+	}
+	{{- end }}
 	c.Usage()
 	if len(remainingArgs) > 0 {
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])

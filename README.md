@@ -825,7 +825,7 @@ if errors.Is(err, cmd.ErrUsage) && errors.As(err, &usage) {
 }
 ```
 
-`UsageError.Kind` distinguishes unknown commands, unknown flags, missing flag
+`UsageError.Kind` distinguishes no selected command (when requested), unknown commands, unknown flags, missing flag
 values, invalid supplied values, invalid positional arguments, and missing
 required flags. `CommandPath` is the canonical command path; `Flag` is the
 supplied name without leading dashes where applicable. `Err` preserves the
@@ -857,10 +857,51 @@ contract and exact invocation outputs are in
 `templates/testdata/issue523.go.txtar`.
 
 This supplies gogenmux's typed parser classification and wrapped explicit statuses.
-Removing its custom main template still requires declarative no-command policy,
-version/build metadata (including `builtBy` and propagation), version-output
+The declarative no-command policy below also covers bare invocation. Removing its
+custom main template still requires version/build metadata (including `builtBy` and propagation), version-output
 customization, and its validation/internal default classification and rendering
-contract. Those facilities remain separate work under #524 and #479/#503.
+contract. Those facilities remain separate work under #479/#503.
+
+### Require a selected command
+
+Add the accepted execution policy to functionless root metadata:
+
+```go
+// App is a command `app` -- Run jobs.
+// No command: error
+package commands
+```
+
+The equivalent native config block is:
+
+~~~text
+format-version: 1
+# Commands
+```command: app
+Description: Run jobs.
+No command: error
+```
+~~~
+
+Bare `app` and `app --` now return `cmd.UsageError` with kind
+`cmd.UsageNoCommand`, canonical path `app`, no flag and no inner cause.
+The generated process prints `Error: no command provided` on stderr and exits 1.
+`errors.Is(err, cmd.ErrUsage)` and `errors.As` work through wrapping; an explicit
+`cmd.ErrExitCode` still overrides the status. Unknown commands retain their own
+`cmd.UsageUnknownCommand` category.
+
+When the declaration is absent, bare invocation keeps existing help/status 0.
+This root-only policy conflicts with any real root action or `Default route:`,
+including help routes; generation rejects those combinations. It is independent
+of routing. `help`, `usage`, `--help` and `version` retain normal behavior without
+business providers. A bare `--` selects no command; `-- run` remains an unknown
+command after the routing terminator. Ordinary nested actions, aliases, inherited
+flags and positionals retain parser behavior. Functionless root flags still
+require separate typed binding support under #63/#522.
+
+See [No-command policy](docs/content/docs/advanced/no-command-policy.md) and
+`templates/testdata/issue524.go.txtar` for compiled Go/config examples and exact
+stdout/stderr/status snapshots on GNU and Go-flag.
 
 ### Generated application Go compatibility
 

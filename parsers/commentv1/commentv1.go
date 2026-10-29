@@ -70,6 +70,7 @@ type CommandTree struct {
 	ExtendedHelp       string
 	Aliases            []string
 	DefaultRoute       string
+	NoCommand          model.NoCommandPolicy
 	CLIParser          string
 	ImportPath         string
 }
@@ -300,6 +301,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ExtendedHelp:       cmdTree.ExtendedHelp,
 			Aliases:            cmdTree.Aliases,
 			DefaultRoute:       cmdTree.DefaultRoute,
+			NoCommand:          cmdTree.NoCommand,
 			CLIParser:          cmdTree.CLIParser,
 		}
 
@@ -420,6 +422,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			defaultRoute, isDefault := parseDefaultDirective(s.Doc.Text())
 			if !ok {
 				continue
+			}
+			for index, line := range strings.Split(s.Doc.Text(), "\n") {
+				key, _, colon := strings.Cut(line, ":")
+				if colon && strings.EqualFold(strings.TrimSpace(key), "No command") {
+					position := fset.Position(s.Doc.Pos())
+					return fmt.Errorf("%s:%d: No command policy belongs in functionless root metadata and conflicts with an executable action", filename, position.Line+index)
+				}
 			}
 
 			if cmdName == "" && len(subCommandSequence) == 0 {

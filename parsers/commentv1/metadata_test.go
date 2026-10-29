@@ -48,7 +48,9 @@ func TestMetadataDiagnostics(t *testing.T) {
 		{"duplicate", "// App is a command `app`\npackage commands\n\n// Again is a command `app`\n", "duplicate command metadata"},
 		{"description", "// App is a command `app` -- Inline.\n// Description: Another.\npackage commands\n", "both inline"},
 		{"duplicate directive", "// App is a command `app`\n// Description: One.\n// Description: Two.\npackage commands\n", "duplicate metadata directive"},
-		{"policy deferred", "// App is a command `app`\n// No command: error\npackage commands\n", "#524"},
+		{"unknown policy", "// App is a command `app`\n// No command: ignore\npackage commands\n", "unsupported No command policy"},
+		{"child policy", "// Child is a command `app child`\n// No command: error\npackage commands\n", "only supported on an application root"},
+		{"duplicate policy", "// App is a command `app`\n// No command: error\n// No command: error\npackage commands\n", "duplicate metadata directive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := fstest.MapFS{"go.mod": {Data: []byte("module example.com/meta\n\ngo 1.22\n")}, "metadata.go": {Data: []byte(tc.source)}}
