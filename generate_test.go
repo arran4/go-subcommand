@@ -1595,7 +1595,7 @@ func TestGenerateProviderFlagPresence(t *testing.T) {
 			if backend == "gnu" {
 				for _, name := range []string{"root.go", "group_run.go"} {
 					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
-						t.Fatalf("generated %s differs from source-comment golden", name)
+						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
 					}
 				}
 			}
