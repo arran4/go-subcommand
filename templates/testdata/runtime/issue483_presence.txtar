@@ -225,6 +225,12 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
@@ -268,6 +274,10 @@ func NewRootWithContext(name, version, commit, date string, info buildinfo.Build
 
 		err := app.Root(c.info, c.enabled, c.count, c.label, c.seen)
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -276,9 +286,8 @@ func NewRootWithContext(name, version, commit, date string, info buildinfo.Build
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("app failed: %w", err)
 		}
@@ -313,7 +322,7 @@ func NewRootWithContext(name, version, commit, date string, info buildinfo.Build
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -348,7 +357,7 @@ func NewRootWithContext(name, version, commit, date string, info buildinfo.Build
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -408,7 +417,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.enabled = b
 				} else {
@@ -422,12 +431,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				v, err := strconv.Atoi(value)
 				if err != nil {
-					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
 				}
 				c.count = v
 
@@ -438,12 +447,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.label = value
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -480,12 +489,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					v, err := strconv.Atoi(value)
 					if err != nil {
-						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
 					}
 					c.count = v
 				}
@@ -508,13 +517,13 @@ func (c *RootCmd) Execute(args []string) (err error) {
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					c.label = value
 				}
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -528,7 +537,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			return cmd().Execute(remainingArgs[1:])
 		}
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 	c.seen = seenFlags
 	if c.CommandAction != nil {
