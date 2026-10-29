@@ -32,7 +32,7 @@
     },
     {
       "Name": "args",
-      "Type": "[]string",
+      "Type": "string",
       "IsPositional": true,
       "IsVarArg": true,
       "PositionalArgIndex": 1,
@@ -63,7 +63,7 @@ type ToggleCmd struct {
 	x             bool
 	verbose       bool
 	count         int
-	args          [][]string
+	args          []string
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *ToggleCmd) error
 }
