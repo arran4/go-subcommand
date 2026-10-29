@@ -55,7 +55,7 @@
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -93,7 +93,7 @@
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				{{- if and $param.IsString (not $param.HasCustomParser) }}
@@ -117,7 +117,7 @@
 				{{- else }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
-					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
 				}
 				{{- if $param.IsSlice }}
 				{{- if $param.HasPointer }}
@@ -140,7 +140,7 @@
 			{{- end }}
 			{{- end }}
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -202,7 +202,7 @@
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					{{- if and $param.IsString (not $param.HasCustomParser) }}
@@ -226,7 +226,7 @@
 					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
-						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
 					}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -250,7 +250,7 @@
 				{{- end }}
 				{{- end }}
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {

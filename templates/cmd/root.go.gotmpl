@@ -97,6 +97,12 @@ func (c *RootCmd) Usage() {
 	}
 }
 
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...{{if minGoVersion "1.18" .GoVersion}}any{{else}}interface{}{{end}}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "{{.MainCmdName}}" }
+
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
@@ -128,6 +134,8 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
     err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .CommandPackageName (ne .CommandPackageName "main")}}{{.CommandPackageName}}.{{end}}{{.FunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.Name}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
     if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) { return err }
       if errors.Is(err, cmd.ErrPrintHelp) {
         c.Usage()
         return nil
@@ -136,10 +144,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
-      }
+			if errors.Is(err, cmd.ErrUsage) { return err }
       return fmt.Errorf("{{.MainCmdName | lower}} failed: %w", err)
     }
 		{{else}}
@@ -188,7 +193,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -244,7 +249,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -334,7 +339,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		{{- range .Parameters }}
 		{{- if and .Required (not .IsPositional) (not .HasGenerator) }}
 		if !seenFlags["{{.Name}}"] {
-			return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
 		}
 		{{- end }}
 		{{- end }}
@@ -347,7 +352,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 		{{- if and .FunctionName .SubCommands (not $needsRemainingArgs) (ne .ResolvedCLIParser "go-flag") }}
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 		{{- end }}
 	}
 
@@ -409,7 +414,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	c.Usage()
 	if len(remainingArgs) > 0 {
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 	return nil
 	{{- end}}

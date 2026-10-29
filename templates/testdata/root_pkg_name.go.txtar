@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 
+	"example.com/myproject/cmd"
 	"example.com/myproject/cmd/mycmd/templates"
 	"example.com/myproject/rootpkg"
 )
@@ -93,6 +94,12 @@ func (c *RootCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "mycmd" }
 
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, true})

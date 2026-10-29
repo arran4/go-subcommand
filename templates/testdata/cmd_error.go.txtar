@@ -53,6 +53,12 @@ func (c *MyCmd) Usage() {
 	}
 }
 
+func (c *MyCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *MyCmd) commandPath() string { return "mycmd" }
+
 func (c *MyCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataMyCmd{c, true})
 	if err != nil {
@@ -92,6 +98,10 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 
 		err := mypkg.MyCmdFunc()
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -100,9 +110,8 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("mycmd failed: %w", err)
 		}

@@ -1,5 +1,6 @@
 -- input.json --
 {
+  "PackagePath": "example.com/fixture",
   "PackageName": "main",
   "MainCmdName": "app",
   "SubCommandName": "child",
@@ -53,6 +54,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"example.com/fixture/cmd"
 )
 
 var _ Cmd = (*ParentChild)(nil)
@@ -76,6 +79,12 @@ func (c *ParentChild) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *ParentChild) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ParentChild) commandPath() string { return "app parent child" }
 
 func (c *ParentChild) UsageRecursive() {
 	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataParentChild{c, true})
@@ -116,14 +125,14 @@ func (c *ParentChild) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.local = b
 				} else {
 					c.local = true
 				}
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -141,7 +150,7 @@ func (c *ParentChild) Execute(args []string) (err error) {
 					c.local = true
 				}
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {

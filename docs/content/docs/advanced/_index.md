@@ -22,6 +22,8 @@ The content is derived from:
 *   The extended help text in comments.
 *   Flag descriptions and defaults.
 
+See [Generated errors and process boundary](generated-errors/) for typed usage failures, wrapped explicit exit statuses, and the generated runner.
+
 ## Architecture
 
 The generator works by:
@@ -29,6 +31,7 @@ The generator works by:
 2.  **Modeling**: It builds a tree of commands, handling implicit parent commands and resolving parameter details.
 3.  **Generating**: It uses Go templates (embedded in the tool) to generate:
     *   `root.go`: The entry point and root command logic.
+    *   `process.go`: Testable error rendering, exit selection, and process runner.
     *   `cmd.go`: Helper interfaces and shared logic.
     *   Subcommand files: `subcommand_xyz.go` for each command node.
     *   Usage templates: Text files for usage output.
