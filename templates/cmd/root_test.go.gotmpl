@@ -31,7 +31,7 @@ func TestRoot_Execute(t *testing.T) {
 	args := []string{}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) (not .IsPositional)}}
+	{{- if and (not .HasGenerator) (not .HasConstructor) (not .IsPositional)}}
 	args = append(args, "{{.PrimaryFlagName}}")
 		{{- if and (ne .BaseType "bool") (not .IsBool)}}
 			{{- if eq .BaseType "string"}}
@@ -52,7 +52,7 @@ func TestRoot_Execute(t *testing.T) {
 	{{- end}}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) .IsPositional}}
+	{{- if and (not .HasGenerator) (not .HasConstructor) .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
 				{{- range until .VarArgMin}}
@@ -103,7 +103,7 @@ func TestRoot_Execute(t *testing.T) {
 
 	{{range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) (not .HasCustomParser)}}
+	{{- if and (not .HasGenerator) (not .HasConstructor) (not .HasCustomParser)}}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}

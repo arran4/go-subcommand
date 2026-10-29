@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -170,6 +171,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue483_root_context.go
+var issue483RootContextSource string
+
 // oldStyleFileWriter models an external implementation compiled against the
 // FileWriter interface before generated-file migration needed deletion.
 type oldStyleFileWriter struct {
@@ -209,9 +213,6 @@ func (w *caseAliasWriter) Rename(oldPath, newPath string) error {
 	w.renamed = true
 	return w.CollectingFileWriter.Rename(oldPath, newPath)
 }
-
-//go:embed testdata/issue464_plus_minus.go
-var issue464PlusMinusSource string
 
 //go:embed testdata/issue478_nested_commands.go
 var issue478NestedCommandsSource string
@@ -769,6 +770,198 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 }
 
+//go:embed templates/testdata/runtime/issue483_presence.txtar
+var constructorPresenceFixture []byte
+
+func TestGenerateConstructorFlagPresence(t *testing.T) {
+	input, expected := splitInputExpected(txtar.Parse(constructorPresenceFixture))
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     json.RawMessage
+		StderrFile string
+		Status     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			if backend == "gnu" {
+				for _, name := range []string{"root.go", "child_grandchild.go"} {
+					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
+						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+			// Files are materialized only for the Go compiler and process boundary.
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/contract_test.go"), string(expected["contract_test.go"].Data))
+			command := exec.Command("go", "test", "./cmd/app", "-run", "TestConstructorAndPresence")
+			command.Dir = dir
+			if out, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("typed constructor contract: %v\n%s", err, out)
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				want := ""
+				if invocation.StderrFile != "" {
+					want = string(expected[invocation.StderrFile].Data)
+				}
+				if len(invocation.Stderr) > 0 {
+					if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
+						var alternatives map[string]string
+						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
+							t.Fatal(err)
+						}
+						want = alternatives[backend]
+					}
+				}
+				got := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || got != want {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), got, invocation.Status, invocation.Stdout, want)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerate_ConstructorInjectedRootContext(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/contextapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue483RootContextSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "buildinfo", "buildinfo.go"), `package buildinfo
+
+type BuildInfo struct { Version string }
+`)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	rootSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated root: %v", err)
+	}
+	for _, want := range []string{
+		`"example.com/contextapp/buildinfo"`,
+		"buildInfo buildinfo.BuildInfo",
+		"func NewRootWithContext(name, version, commit, date string, buildInfo buildinfo.BuildInfo)",
+		"buildInfo: buildInfo,",
+	} {
+		if !strings.Contains(string(rootSource), want) {
+			t.Errorf("generated root missing %q:\n%s", want, rootSource)
+		}
+	}
+	childSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "child.go"))
+	if err != nil {
+		t.Fatalf("read generated child: %v", err)
+	}
+	if strings.Contains(string(childSource), "\n\tbuildInfo buildinfo.BuildInfo\n") {
+		t.Fatalf("child redeclared root context:\n%s", childSource)
+	}
+
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "contextapp", "context_test.go"), `package main
+
+import (
+    "testing"
+    "example.com/contextapp/buildinfo"
+)
+
+func TestConstructorContextIsInherited(t *testing.T) {
+    context := buildinfo.BuildInfo{Version: "v1"}
+    root, err := NewRootWithContext("contextapp", "", "", "", context)
+    if err != nil { t.Fatal(err) }
+    if root.buildInfo != context { t.Fatalf("root context = %#v", root.buildInfo) }
+    if err := root.Execute([]string{"child"}); err != nil { t.Fatalf("child: %v", err) }
+    if err := root.Execute([]string{"child", "grandchild"}); err != nil { t.Fatalf("grandchild: %v", err) }
+}
+`)
+
+	compile := exec.Command("go", "test", "./...")
+	compile.Dir = dir
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("generated root-context module failed: %v\n%s", err, output)
+	}
+
+	mainSource := `package main
+
+import (
+	"fmt"
+	"os"
+
+	"example.com/contextapp/buildinfo"
+)
+
+func main() {
+	root, err := NewRootWithContext("contextapp", "1.0.0", "abc", "2026-10-29", buildinfo.BuildInfo{Version: "v1"})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize: %v\n", err)
+		os.Exit(1)
+	}
+	if err := root.Execute(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cmd", "contextapp", "main.go"), []byte(mainSource), 0644); err != nil {
+		t.Fatalf("write main: %v", err)
+	}
+	binPath := filepath.Join(dir, "contextapp")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/contextapp")
+	buildCmd.Dir = dir
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build executable failed: %v\n%s", err, output)
+	}
+	for _, args := range [][]string{
+		{"child"},
+		{"child", "grandchild"},
+	} {
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("run %v failed: %v\n%s", args, err, output)
+		}
+	}
+}
+
 func TestGenerate_ImportIdentifierPlanCompilesCollidingRootAndSubcommand(t *testing.T) {
 	dir := t.TempDir()
 	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/importplan\n\ngo 1.22\n")
@@ -1100,11 +1293,8 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 
 			generatedContent := string(writer.Files["cmd/app/root.go"])
 
-			if tt.expectParser == "cli_parser_go-flag" && !strings.Contains(generatedContent, "fs.Parse(args)") {
+			if tt.expectParser == "cli_parser_go-flag" && !strings.Contains(generatedContent, "parseGoFlags(fs, args,") {
 				t.Fatalf("Expected output to contain Go flag parser logic, got: \n%s", generatedContent)
-			}
-			if tt.expectParser == "cli_parser_plus-minus" && !strings.Contains(generatedContent, "unknown plus flag") {
-				t.Fatalf("Expected output to contain plus-minus parser logic, got: \n%s", generatedContent)
 			}
 		})
 	}
@@ -1265,8 +1455,8 @@ func TestReplaceCLIParserTemplate(t *testing.T) {
 		files := generateWithOverlay(t, source, "go-flag", []string{"cli-parsers/gnu.gotmpl=custom-gnu.gotmpl"}, extra)
 
 		content := string(files["cmd/app/root.go"])
-		if !strings.Contains(content, "fs.Parse(args)") {
-			t.Errorf("Expected go-flag parser logic (fs.Parse(args)), got:\n%s", content)
+		if !strings.Contains(content, "parseGoFlags(fs, args,") {
+			t.Errorf("Expected go-flag parser logic, got:\n%s", content)
 		}
 	})
 
@@ -1284,7 +1474,7 @@ func TestReplaceCLIParserTemplate(t *testing.T) {
 		}
 
 		childContent := string(files["cmd/app/child.go"])
-		if !strings.Contains(childContent, "fs.Parse(args)") {
+		if !strings.Contains(childContent, "parseGoFlags(fs, args,") {
 			t.Errorf("Expected go-flag parser logic in child, got:\n%s", childContent)
 		}
 	})
@@ -1298,7 +1488,7 @@ func TestReplaceCLIParserTemplate(t *testing.T) {
 		files := generateWithOverlay(t, source, "go-flag", []string{"usage=custom-usage.gotmpl"}, extra)
 
 		content := string(files["cmd/app/root.go"])
-		if !strings.Contains(content, "fs.Parse(args)") {
+		if !strings.Contains(content, "parseGoFlags(fs, args,") {
 			t.Errorf("Expected go-flag parser logic, got:\n%s", content)
 		}
 	})
@@ -1399,6 +1589,7 @@ func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
 		"cmd/app/child_test.go",
 		"cmd/app/flag_helpers.go",
 		"cmd/app/main.go",
+		"cmd/app/process.go",
 		"cmd/app/root.go",
 		"cmd/app/root_test.go",
 		"cmd/app/templates/app_usage.txt",
@@ -1406,6 +1597,7 @@ func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
 		"cmd/app/templates/templates.go",
 		"cmd/errors.go",
 		"man/app-child.1",
+		"man/app.1",
 	}
 	for _, name := range want {
 		content, ok := first.Files[name]
@@ -1505,8 +1697,9 @@ func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 	}
 
 	mainGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "main.go")]
-	if !strings.Contains(mainGo, `NewRoot("downloadsd", version, commit, date)`) {
-		t.Fatalf("main.go must construct application root via NewRoot:\n%s", mainGo)
+	processGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "process.go")]
+	if !strings.Contains(mainGo, "generatedRun(os.Args[1:], os.Stderr)") || !strings.Contains(processGo, `NewRoot("downloadsd", version, commit, date)`) {
+		t.Fatalf("generated process must construct application root via NewRoot:\n%s\n%s", mainGo, processGo)
 	}
 	rootGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "root.go")]
 	if !strings.Contains(rootGo, "type RootCmd struct") || !strings.Contains(rootGo, `c.Commands["root"] = subCmd`) {
@@ -2543,68 +2736,37 @@ func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
 }
 
 func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
-	// 1. Verify signature exists and matches compilation
 	accept := func(_ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error) {
 	}
 	accept(GenerateCLI)
-
-	// 2. Verify actual forwarding of --cli-parser to the internal system.
+	input, expected := splitInputExpected(txtar.Parse(plusMinusFixture))
 	dir := t.TempDir()
-	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
-	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
-
+	for name, file := range input {
+		data := file.Data
+		if name == "app.go" {
+			data = bytes.Replace(data, []byte("// CLI-Parser: plus-minus\n"), nil, 1)
+		}
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
 	if err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
-		t.Fatalf("GenerateCLI with plus-minus: %v", err)
+		t.Fatal(err)
 	}
-	generated, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "root.go"))
-	if err != nil {
-		t.Fatalf("read generated parser: %v", err)
-	}
-	if !strings.Contains(string(generated), "unknown plus flag") {
-		t.Fatalf("plus-minus parser was not rendered:\n%s", generated)
-	}
-}
-
-func TestGenerate_PlusMinusRuntimeParser(t *testing.T) {
-	dir := t.TempDir()
-	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/toggle\n\ngo 1.22\n")
-	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue464PlusMinusSource)
-	if err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
-		t.Fatalf("GenerateCLI: %v", err)
-	}
-
-	bin := filepath.Join(dir, "toggle")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/toggle")
+	binary := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
 	build.Dir = dir
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build plus-minus executable: %v\n%s", err, output)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
 	}
-
-	for _, tt := range []struct {
-		name    string
-		args    []string
-		want    string
-		wantErr bool
-	}{
-		{name: "minus enables", args: []string{"-xvq", "--count", "3"}, want: "enabled=true verbose=true x=true count=3 args=[]"},
-		{name: "plus disables", args: []string{"-xvq", "+xvq", "--count=4"}, want: "enabled=false verbose=false x=false count=4 args=[]"},
-		{name: "termination leaves plus positional", args: []string{"--", "+x"}, want: "enabled=false verbose=false x=false count=0 args=[+x]"},
-		{name: "unknown plus", args: []string{"+z"}, want: "unknown plus flag: +z", wantErr: true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command(bin, tt.args...)
-			cmd.Dir = dir
-			output, err := cmd.CombinedOutput()
-			if tt.wantErr && err == nil {
-				t.Fatalf("%v unexpectedly succeeded: %s", tt.args, output)
-			}
-			if !tt.wantErr && err != nil {
-				t.Fatalf("%v failed: %v\n%s", tt.args, err, output)
-			}
-			if !strings.Contains(string(output), tt.want) {
-				t.Fatalf("%v output = %q, want %q", tt.args, output, tt.want)
-			}
-		})
+	var invocations []struct {
+		Args   []string
+		Stdout string
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, invocations[1].Args...)
+	if out, err := command.CombinedOutput(); err != nil || string(out) != invocations[1].Stdout {
+		t.Fatalf("forwarded parser: %v output=%q", err, out)
 	}
 }
 
@@ -2871,5 +3033,415 @@ func TestGenerate_ManWhitespace(t *testing.T) {
 	}
 	if !sawDefault || !sawNoDefault {
 		t.Fatalf("expected both defaulted and non-defaulted option descriptions:\n%s", output)
+	}
+}
+
+//go:embed templates/testdata/issue516.go.txtar
+var metadataFixture []byte
+
+func TestGenerateCommandMetadata(t *testing.T) {
+	archive := txtar.Parse(metadataFixture)
+	input, expected := splitInputExpected(archive)
+	config, err := LoadGenerateConfigFS(input, "gosubc.mdc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var invocations []struct {
+		Args     []string
+		Variants []string
+		Children bool
+		Stdout   string
+		Status   int
+		Help     bool
+		Error    string
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	var rootGolden []byte
+	for _, f := range archive.Files {
+		if f.Name == "output.go" {
+			rootGolden = f.Data
+		}
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		var equivalent map[string][]byte
+		for _, variant := range []string{"implicit", "go-metadata", "config-metadata", "action", "combined", "empty-go", "empty-config", "default-route", "help-default"} {
+			t.Run(backend+"/"+variant, func(t *testing.T) {
+				empty := strings.HasPrefix(variant, "empty-")
+				action := variant == "action" || variant == "combined"
+				metadata := variant != "implicit" && variant != "action"
+				scenario := fstest.MapFS{"go.mod": input["go.mod"]}
+				if !empty {
+					scenario["commands.go"] = input["commands.go"]
+				}
+				if action {
+					scenario["root-action.go"] = input["root-action.go"]
+				}
+				if variant == "go-metadata" {
+					scenario["metadata.go"] = input["metadata.go"]
+				}
+				if variant == "empty-go" {
+					rootSource, _, _ := strings.Cut(string(input["metadata.go"].Data), "\n// Config")
+					scenario["metadata.go"] = &fstest.MapFile{Data: []byte(rootSource)}
+				}
+				var declarations []parsers.CommandDeclaration
+				if metadata && !empty {
+					for _, declaration := range config.CommandDeclarations {
+						if variant == "go-metadata" && declaration.Kind == "command" {
+							continue
+						}
+						if declaration.Kind == "command" && declaration.Path == "app" {
+							if variant == "default-route" {
+								declaration.Text += "\nDefault route: config show\n"
+							}
+							if variant == "help-default" {
+								declaration.Text += "\nDefault route: help config show\n"
+							}
+						}
+						declarations = append(declarations, declaration)
+					}
+				} else if variant == "empty-config" {
+					for _, declaration := range config.CommandDeclarations {
+						if declaration.Kind == "command" && declaration.Path == "app" {
+							declarations = append(declarations, declaration)
+						}
+					}
+				}
+				generate := func() map[string][]byte {
+					writer := NewCollectingFileWriter()
+					options := GenerateOptions{CLIParser: backend, SuppressGoGenerate: true, CommandDeclarations: declarations}
+					if err := GenerateWithFS(scenario, writer, ".", "man", "commentv1", nil, false, false, nil, false, false, "", "", "", scenario, options); err != nil {
+						t.Fatal(err)
+					}
+					return writer.Files
+				}
+				files := generate()
+				if !reflect.DeepEqual(files, generate()) {
+					t.Fatal("non-deterministic metadata generation")
+				}
+				if variant == "go-metadata" {
+					equivalent = files
+				}
+				if variant == "config-metadata" && !reflect.DeepEqual(equivalent, files) {
+					t.Fatal("Go and native metadata produce different generated files")
+				}
+				if empty && backend == "gnu" && !bytes.Equal(rootGolden, files["cmd/app/root.go"]) {
+					t.Fatal("real generated root differs from inspectable golden")
+				}
+				if !action && bytes.Contains(files["cmd/app/root.go"], []byte("c.CommandAction = func")) {
+					t.Fatal("metadata registered a root action")
+				}
+				if metadata && !empty {
+					if !bytes.Contains(files["man/app.1"], []byte(".SH EXAMPLES\napp generate")) || !bytes.Contains(files["man/app-config.1"], []byte("app config show")) || !bytes.Contains(files["man/app.1"], []byte("Literal {{braces}} remain text.")) {
+						t.Fatal("metadata/documentation missing from manual pages")
+					}
+					if bytes.Contains(files["man/app.1"], []byte(".TH APP-")) {
+						t.Fatal("root man name has a spurious hyphen")
+					}
+				}
+				// Only the actual Go compiler and process tests need disk materialization.
+				dir := t.TempDir()
+				for name, file := range scenario {
+					writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+				}
+				for name, data := range files {
+					if strings.HasSuffix(name, ".go") && bytes.Contains(data, []byte(`"github.com/arran4/go-subcommand"`)) {
+						t.Fatalf("runtime generator dependency in %s", name)
+					}
+					writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+				}
+				binary := filepath.Join(dir, "app")
+				build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+				build.Dir = dir
+				if out, err := build.CombinedOutput(); err != nil {
+					t.Fatalf("build: %v\n%s", err, out)
+				}
+				for _, invocation := range invocations {
+					if invocation.Children && empty {
+						continue
+					}
+					if len(invocation.Variants) != 0 && !slices.Contains(invocation.Variants, variant) {
+						continue
+					}
+					command := exec.Command(binary, invocation.Args...)
+					command.Dir = dir
+					command.Env = append(os.Environ(), "COLUMNS=80")
+					var stdout, stderr bytes.Buffer
+					command.Stdout, command.Stderr = &stdout, &stderr
+					err := command.Run()
+					status := 0
+					if err != nil {
+						if exit, ok := err.(*exec.ExitError); ok {
+							status = exit.ExitCode()
+						} else {
+							t.Fatal(err)
+						}
+					}
+					if status != invocation.Status || stdout.String() != invocation.Stdout {
+						t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
+					}
+					if invocation.Help {
+						if !strings.HasPrefix(stderr.String(), "Usage: app") {
+							t.Errorf("%v: missing help: %q", invocation.Args, stderr.String())
+						}
+						if metadata && !empty && (len(invocation.Args) == 0 || reflect.DeepEqual(invocation.Args, []string{"--help"})) && !strings.Contains(stderr.String(), "Literal {{braces}} remain text.") {
+							if variant != "help-default" {
+								t.Errorf("root appendix not preserved: %s", stderr.String())
+							}
+						}
+						if (len(invocation.Args) == 0 || reflect.DeepEqual(invocation.Args, []string{"--help"})) && variant != "help-default" && variant != "default-route" {
+							key := variant
+							if key == "config-metadata" {
+								key = "go-metadata"
+							}
+							if key == "empty-config" {
+								key = "empty-go"
+							}
+							name := "root-" + key + ".stderr"
+							golden := expected[name]
+							if golden == nil || string(golden.Data) != stderr.String() {
+								t.Errorf("snapshot %s: %q", name, stderr.String())
+							}
+						}
+					} else if invocation.Error == "" && stderr.Len() != 0 {
+						t.Errorf("unexpected stderr: %q", stderr.String())
+					}
+					if invocation.Error != "" && !strings.HasSuffix(stderr.String(), "Error: "+invocation.Error+"\n") {
+						t.Errorf("error output=%q", stderr.String())
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestGenerateMetadataValidationBeforeOutput(t *testing.T) {
+	input, _ := splitInputExpected(txtar.Parse(metadataFixture))
+	for _, tc := range []struct {
+		name, want   string
+		declarations []parsers.CommandDeclaration
+		action       bool
+	}{
+		{"duplicate", "duplicate command metadata", []parsers.CommandDeclaration{{Kind: "command", Path: "app", Filename: "a.mdc", Line: 1}, {Kind: "command", Path: "app", Filename: "b.mdc", Line: 4}}, false},
+		{"unknown topic", "does not exist", []parsers.CommandDeclaration{{Kind: "markdown", Path: "app missing", Text: "help", Filename: "project.mdc", Line: 5}}, false},
+		{"duplicate manual", "duplicate man section", []parsers.CommandDeclaration{{Kind: "man", Path: "app", Section: "EXAMPLES", Filename: "project.mdc", Line: 5}, {Kind: "man", Path: "app", Section: "EXAMPLES", Filename: "project.mdc", Line: 8}}, false},
+		{"manual conflict", "built-in section", []parsers.CommandDeclaration{{Kind: "man", Path: "app", Section: "DESCRIPTION", Filename: "project.mdc", Line: 5}}, false},
+		{"unknown kind", "unsupported declaration kind", []parsers.CommandDeclaration{{Kind: "shell", Path: "app", Filename: "project.mdc", Line: 5}}, false},
+		{"action route conflict", "already has an action", []parsers.CommandDeclaration{{Kind: "command", Path: "app", Text: "Default route: config show", Filename: "project.mdc", Line: 5}}, true},
+		{"invalid route", "not found", []parsers.CommandDeclaration{{Kind: "command", Path: "app", Text: "Default route: missing", Filename: "project.mdc", Line: 5}}, false},
+		{"root alias without action", "without an action", []parsers.CommandDeclaration{{Kind: "command", Path: "app", Text: "Aliases: alternate", Filename: "project.mdc", Line: 5}}, false},
+		{"typed metadata flag", "cannot declare flags", []parsers.CommandDeclaration{{Kind: "command", Path: "app", Text: "Flags:\n  name: string --name", Filename: "project.mdc", Line: 5}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scenario := fstest.MapFS{"go.mod": input["go.mod"], "commands.go": input["commands.go"]}
+			if tc.action {
+				scenario["root-action.go"] = input["root-action.go"]
+			}
+			writer := NewCollectingFileWriter()
+			// Keep these invalid-input cases in memory. The CLI test separately
+			// verifies preservation of real old output with --clean selected.
+			err := GenerateWithFS(scenario, writer, "/nonexistent/metadata-validation", "", "commentv1", nil, false, true, nil, false, false, "", "", "", GenerateOptions{CommandDeclarations: tc.declarations})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v want %q", err, tc.want)
+			}
+			if len(writer.Files) != 0 || len(writer.Dirs) != 0 {
+				t.Fatal("invalid metadata wrote output")
+			}
+		})
+	}
+}
+
+func TestGenerateConfiguredMetadataCLI(t *testing.T) {
+	input, _ := splitInputExpected(txtar.Parse(metadataFixture))
+	project := t.TempDir()
+	for name, file := range input {
+		if name == "metadata.go" || name == "root-action.go" {
+			continue
+		}
+		writeRuntimeFixture(t, filepath.Join(project, name), string(file.Data))
+	}
+	generate := func() ([]byte, error) {
+		command := exec.Command("go", "run", "./cmd/gosubc", "generate", "--dir", project, "--config", filepath.Join(project, "gosubc.mdc"), "--man-dir", filepath.Join(project, "man"), "--clean", "--project-provenance=false", "--timestamp=false")
+		return command.CombinedOutput()
+	}
+	snapshot := func() map[string]string {
+		t.Helper()
+		result := make(map[string]string)
+		for _, directory := range []string{"cmd", "man"} {
+			err := fs.WalkDir(os.DirFS(project), directory, func(name string, entry fs.DirEntry, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if entry.IsDir() {
+					return nil
+				}
+				content, err := os.ReadFile(filepath.Join(project, name))
+				if err != nil {
+					return err
+				}
+				result[name] = string(content)
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		return result
+	}
+	if out, err := generate(); err != nil {
+		t.Fatalf("configured CLI generation: %v\n%s", err, out)
+	}
+	first := snapshot()
+	if out, err := generate(); err != nil {
+		t.Fatalf("second configured generation: %v\n%s", err, out)
+	}
+	if !reflect.DeepEqual(first, snapshot()) {
+		t.Fatal("CLI regeneration changed output")
+	}
+	binary := filepath.Join(project, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+	build.Dir = project
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	command := exec.Command(binary, "c", "show")
+	if out, err := command.CombinedOutput(); err != nil || string(out) != "show\n" {
+		t.Fatalf("metadata alias: %v output=%q", err, out)
+	}
+	writeRuntimeFixture(t, filepath.Join(project, "gosubc.mdc"), "format-version: 1\n# Commands\n```command: app\nFlags:\n  name: --name\n```\n")
+	if out, err := generate(); err == nil || !bytes.Contains(out, []byte("cannot declare flags")) {
+		t.Fatalf("invalid metadata: %v output=%q", err, out)
+	}
+	if !reflect.DeepEqual(first, snapshot()) {
+		t.Fatal("invalid --clean request removed or changed existing output")
+	}
+}
+
+//go:embed templates/testdata/issue523.go.txtar
+var typedErrorsFixture []byte
+
+//go:embed testdata/issue523_process_test.go
+var typedErrorsProcessTests string
+
+func TestGenerateTypedErrors(t *testing.T) {
+	archive := txtar.Parse(typedErrorsFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     json.RawMessage
+		StderrFile string
+		Status     int
+		Help       bool
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	var errorGolden []byte
+	for _, f := range archive.Files {
+		if f.Name == "output.go" {
+			errorGolden = f.Data
+		}
+	}
+	for _, backend := range []string{"gnu", "go-flag", "gnu-cmd-package"} {
+		t.Run(backend, func(t *testing.T) {
+			parserBackend := strings.TrimSuffix(backend, "-cmd-package")
+			scenarioInput := fstest.MapFS{}
+			for name, file := range input {
+				scenarioInput[name] = file
+			}
+			if backend == "gnu-cmd-package" {
+				scenarioInput["app.go"] = &fstest.MapFile{Data: []byte(strings.Replace(string(input["app.go"].Data), "package app", "package cmd", 1))}
+			}
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(scenarioInput, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", scenarioInput, GenerateOptions{CLIParser: parserBackend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			if !bytes.Equal(files["cmd/errors.go"], errorGolden) {
+				t.Fatal("actual generated error contract differs from inspectable golden")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
+					t.Fatalf("process exit outside main in %s", name)
+				}
+			}
+			// Disk materialization is limited to the Go compiler/process boundary.
+			dir := t.TempDir()
+			for name, f := range scenarioInput {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/process_test.go"), typedErrorsProcessTests)
+			tests := exec.Command("go", "test", "./cmd/app", "-run", "TestTypedUsageErrors|TestGeneratedProcessErrors|TestGoFlagGrammarParity")
+			tests.Dir = dir
+			if out, err := tests.CombinedOutput(); err != nil {
+				t.Fatalf("generated API tests: %v\n%s", err, out)
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				if status != invocation.Status || stdout.String() != invocation.Stdout {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
+				}
+				if invocation.Help {
+					if !strings.HasPrefix(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "Error:") {
+						t.Errorf("%v: help=%q", invocation.Args, stderr.String())
+					}
+				}
+				want := ""
+				if invocation.StderrFile != "" {
+					file, ok := expected[invocation.StderrFile]
+					if !ok {
+						t.Fatalf("missing expected stderr %s", invocation.StderrFile)
+					}
+					want = string(file.Data)
+				}
+				if len(invocation.Stderr) != 0 {
+					if invocation.Stderr[0] == '{' {
+						var alternatives map[string]string
+						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
+							t.Fatal(err)
+						}
+						want = alternatives[parserBackend]
+					} else if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if strings.ReplaceAll(stderr.String(), binary, "app") != want {
+					t.Errorf("%v: stderr=%q want=%q", invocation.Args, stderr.String(), want)
+				}
+			}
+		})
 	}
 }

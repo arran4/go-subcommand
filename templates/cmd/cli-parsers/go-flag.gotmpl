@@ -11,7 +11,7 @@
 	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
 		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
-		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
+		{{- if and (not .Inherited) (not .HasConstructor) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -24,7 +24,7 @@
 	fs.Usage = c.Usage
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 	{{$param := .}}
 	{{- $aliases := list }}
 	{{- $aliases = append $aliases .Name }}
@@ -37,11 +37,11 @@
 	{{- end }}
 	{{- range $uniqueAliases }}
 	{{- if or $param.IsWriter $param.IsReader }}
-	fs.Var(goFlagCustom(func(s string) error {
+	fs.Var(goFlagIO(func(s string) error {
 		value := s
 		{{- template "acquire_io" (list $param "value") }}
 		return nil
-	}, false), "{{.}}", {{goString $param.Description}})
+	}), "{{.}}", {{goString $param.Description}})
 	{{- else if $param.IsSlice }}
 	{{- $baseName := $param.BaseType | title }}
 	{{- if $param.IsDuration }}{{ $baseName = "Duration" }}{{ end }}
@@ -194,7 +194,7 @@
 	{{- end }}
 	{{- end }}
 
-	err = fs.Parse(args)
+	remainingArgs, dashDashSeen, err = parseGoFlags(fs, args, c.commandPath())
 	if err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -203,7 +203,7 @@
 	}
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 	{{$param := .}}
 	{{- if or $hasFlagPresence $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 	{{- if not $hasFlagPresence }}
@@ -224,41 +224,4 @@
 	{{- end }}
 	{{- end }}
 	{{- end }}
-	remainingArgs = fs.Args()
-
-
-
-	// A proper scan handles values attached vs detached and booleans safely to determine exact boundaries
-	parsedArgsCount := len(args) - len(remainingArgs)
-	if parsedArgsCount > 0 && args[parsedArgsCount-1] == "--" {
-		// Verify if it was consumed as a value by the preceding flag
-		wasValue := false
-		if parsedArgsCount >= 2 {
-			prevArg := args[parsedArgsCount-2]
-			if len(prevArg) > 0 && prevArg[0] == '-' {
-				prevName := prevArg[1:]
-				if len(prevName) > 0 && prevName[0] == '-' { prevName = prevName[1:] }
-				eqIdx := -1
-				for i, c := range prevName {
-					if c == '=' {
-						eqIdx = i
-						break
-					}
-				}
-				if eqIdx == -1 {
-					f := fs.Lookup(prevName)
-					if f != nil {
-						if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
-							wasValue = true
-						}
-					}
-				}
-			}
-		}
-		if !wasValue {
-			dashDashSeen = true
-		}
-	} else if parsedArgsCount < len(args) && args[parsedArgsCount] == "--" {
-		// we didn't consume it.
-	}
 {{- end }}

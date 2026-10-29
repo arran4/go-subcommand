@@ -38,6 +38,12 @@ func (c *SkillInspect) Usage() {
 	}
 }
 
+func (c *SkillInspect) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *SkillInspect) commandPath() string { return "gosubc skill inspect" }
+
 func (c *SkillInspect) UsageRecursive() {
 	err := executeUsage(os.Stderr, "inspect_usage.txt", UsageDataSkillInspect{c, true})
 	if err != nil {
@@ -79,7 +85,7 @@ func (c *SkillInspect) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.scope = value
@@ -90,12 +96,12 @@ func (c *SkillInspect) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.agent = value
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -109,7 +115,7 @@ func (c *SkillInspect) Execute(args []string) (err error) {
 				found := false
 
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -124,7 +130,7 @@ func (c *SkillInspect) Execute(args []string) (err error) {
 		}
 	}
 	if len(remainingArgs) < 1 {
-		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
 	}
 	// Handle positional argument name
 	{
@@ -164,6 +170,10 @@ func (c *Skill) NewSkillInspect() *SkillInspect {
 
 		err := skills.SkillInspect(c.name, c.scope, c.agent)
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -172,9 +182,8 @@ func (c *Skill) NewSkillInspect() *SkillInspect {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("inspect failed: %w", err)
 		}

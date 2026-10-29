@@ -1,0 +1,93 @@
+package main
+
+import (
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"strconv"
+	"testing"
+
+	"example.com/plusminus/cmd"
+)
+
+//go:embed invocations.json
+var invocationManifest []byte
+
+func TestPlusMinusManifestErrors(t *testing.T) {
+	var cases []struct { Args []string; Kind, Flag, Path string; Cause bool }
+	if err := json.Unmarshal(invocationManifest, &cases); err != nil { t.Fatal(err) }
+	for _, tc := range cases {
+		if tc.Kind == "" { continue }
+		root, err := NewRoot("app", "dev", "none", "unknown")
+		if err != nil { t.Fatal(err) }
+		err = root.Execute(tc.Args)
+		var usage *cmd.UsageError
+		if !errors.Is(err, cmd.ErrUsage) || !errors.As(fmt.Errorf("wrapped: %w", err), &usage) || string(usage.Kind) != tc.Kind || usage.Flag != tc.Flag || usage.CommandPath != tc.Path || (usage.Err != nil) != tc.Cause { t.Fatalf("%v: %#v error=%v", tc.Args, usage, err) }
+	}
+}
+
+func TestPlusMinusTokenizer(t *testing.T) {
+	option := func(key string) plusMinusOption { return plusMinusOption{Key: key, Boolean: true} }
+	short := map[string]plusMinusOption{"a": option("alpha"), "b": option("beta")}
+	long := map[string]plusMinusOption{"ab": option("ab")}
+	for _, tc := range []struct { token string; keys, values []string; boundary, terminated, help bool }{
+		{"+ab", []string{"alpha", "beta"}, []string{"false", "false"}, false, false, false},
+		{"-ab", []string{"alpha", "beta"}, []string{"true", "true"}, false, false, false},
+		{"--ab", []string{"ab"}, []string{"true"}, false, false, false},
+		{"--ab=false", []string{"ab"}, []string{"false"}, false, false, false},
+		{"word", nil, nil, true, false, false},
+		{"+", nil, nil, true, false, false},
+		{"-", nil, nil, true, false, false},
+		{"--", nil, nil, false, true, false},
+		{"-h", nil, nil, false, false, true},
+	} {
+		token, err := tokenizePlusMinus(tc.token, "app", short, long)
+		if err != nil { t.Fatal(err) }
+		var keys, values []string
+		for _, operation := range token.Values { keys = append(keys, operation.Option.Key); values = append(values, operation.Value) }
+		if !reflect.DeepEqual(keys, tc.keys) || !reflect.DeepEqual(values, tc.values) || token.Boundary != tc.boundary || token.Terminated != tc.terminated || token.Help != tc.help { t.Fatalf("%s: %#v", tc.token, token) }
+	}
+}
+
+func TestPlusMinusBoundariesAndAtomicClusters(t *testing.T) {
+	calls := 0
+	short := map[string]plusMinusOption{"a": {Key: "alpha", Boolean: true, Set: func(string) error { calls++; return nil }}}
+	for _, args := range [][]string{{"+az"}, {"-az"}, {"-ah"}, {"+a=value"}} {
+		calls = 0
+		if _, _, _, _, err := parsePlusMinus(args, "app", short, nil); err == nil || calls != 0 { t.Fatalf("partial cluster changed state: %v calls=%d error=%v", args, calls, err) }
+	}
+	for _, prefix := range []string{"child", "word", "--"} {
+		args := []string{prefix, "+childOnly", "--label=+a"}
+		before := append([]string(nil), args...)
+		tail, _, terminated, _, err := parsePlusMinus(args, "app", short, nil)
+		start := 0
+		if prefix == "--" { start = 1 }
+		if err != nil || !reflect.DeepEqual(args, before) || !reflect.DeepEqual(tail, before[start:]) || &tail[0] != &args[start] || terminated != (prefix == "--") { t.Fatalf("boundary changed argv: %v -> %v (%v)", args, tail, err) }
+	}
+	long := map[string]plusMinusOption{"label": {Key: "label", Set: func(s string) error { if s != "+a" { t.Fatalf("value rewritten: %q", s) }; return nil }}}
+	if _, seen, _, _, err := parsePlusMinus([]string{"--label", "+a"}, "app", short, long); err != nil || !seen["label"] { t.Fatalf("value/presence: %v %v", seen, err) }
+}
+
+func TestPlusMinusConversionAndErrors(t *testing.T) {
+	value := 7
+	long := map[string]plusMinusOption{"count": {Key: "count", Set: func(s string) error { n, err := strconv.Atoi(s); if err == nil { value = n }; return err }}}
+	_, seen, _, _, err := parsePlusMinus([]string{"--count=0"}, "app", nil, long)
+	if err != nil || value != 0 || !seen["count"] { t.Fatalf("conversion: %d %v %v", value, seen, err) }
+	for _, tc := range []struct { args []string; kind cmd.UsageErrorKind; cause bool }{
+		{[]string{"--count"}, cmd.UsageMissingFlagValue, false},
+		{[]string{"--count=bad"}, cmd.UsageInvalidValue, true},
+		{[]string{"--missing"}, cmd.UsageUnknownFlag, false},
+		{[]string{"++a"}, cmd.UsageInvalidArguments, false},
+	} {
+		_, _, _, _, err := parsePlusMinus(tc.args, "app nested", nil, long)
+		wrapped := fmt.Errorf("caller: %w", err)
+		var usage *cmd.UsageError
+		if !errors.Is(err, cmd.ErrUsage) || !errors.As(wrapped, &usage) || usage.Kind != tc.kind || usage.CommandPath != "app nested" || (usage.Err != nil) != tc.cause { t.Fatalf("typed failure: %#v %v", usage, err) }
+		if tc.cause { var number *strconv.NumError; if !errors.As(err, &number) { t.Fatal("lost conversion cause") } }
+	}
+	ioError := errors.New("I/O acquisition")
+	long["input"] = plusMinusOption{Key: "input", IO: true, Set: func(string) error { return ioError }}
+	if _, _, _, _, err := parsePlusMinus([]string{"--input=file"}, "app", nil, long); err != ioError || errors.Is(err, cmd.ErrUsage) { t.Fatalf("I/O error reclassified: %v", err) }
+}

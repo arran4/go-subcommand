@@ -55,6 +55,9 @@ type SourceType string
 const (
 	SourceTypeFlag      SourceType = "flag"
 	SourceTypeGenerator SourceType = "generator"
+	// SourceTypeConstructor is supplied once when the generated root is
+	// constructed. It is neither parsed from argv nor acquired at execution.
+	SourceTypeConstructor SourceType = "constructor"
 	// SourceTypeFlagPresence supplies the parser's per-invocation presence map.
 	SourceTypeFlagPresence SourceType = "flag-presence"
 )
@@ -87,6 +90,9 @@ type ParserConfig struct {
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
+	// Metadata records an explicit functionless declaration, independently of FunctionName.
+	Metadata    *CommandMetadata
+	ManSections []ManSection
 	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName string
 	// SubCommands is the list of direct subcommands for this command.
@@ -223,7 +229,8 @@ func (dm *DataModel) Validate() error {
 	return nil
 }
 
-func (cmd *Command) Validate() error {
+func (cmd *Command) Validate() (err error) {
+	defer func() { err = metadataError(cmd.Metadata, err) }()
 	if cmd.DefaultRoute != "" {
 		if err := cmd.validateDefaultRoute(); err != nil {
 			return err
@@ -234,6 +241,11 @@ func (cmd *Command) Validate() error {
 	}
 	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
 		return err
+	}
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && (parameter.IsPositional || parameter.Inherited) {
+			return fmt.Errorf("root context parameter %q in command %q cannot be positional or inherited", parameter.Name, cmd.MainCmdName)
+		}
 	}
 	if err := validateSubCommandCollisions(cmd.MainCmdName, true, cmd.SubCommands); err != nil {
 		return err
@@ -318,7 +330,8 @@ func (cmd *Command) validateRootAliases() error {
 	return nil
 }
 
-func (sc *SubCommand) Validate() error {
+func (sc *SubCommand) Validate() (err error) {
+	defer func() { err = metadataError(sc.Metadata, err) }()
 	for _, alias := range sc.Aliases {
 		if strings.EqualFold(alias, sc.SubCommandName) {
 			return fmt.Errorf("command %s: alias %q on subcommand %q cannot alias itself", sc.ProgName(), alias, sc.SubCommandName)
@@ -326,6 +339,11 @@ func (sc *SubCommand) Validate() error {
 	}
 	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
 		return err
+	}
+	for _, parameter := range sc.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			return fmt.Errorf("constructor context parameter %q is only supported on the root command", parameter.Name)
+		}
 	}
 	if err := validateSubCommandCollisions(sc.ProgName(), false, sc.SubCommands); err != nil {
 		return err
@@ -352,6 +370,22 @@ func (cmd *Command) HasIOParameters() bool {
 		}
 	}
 	return false
+}
+
+// ConstructorParameters are root-owned values supplied by the caller when it
+// creates a generated command tree.
+func (cmd *Command) ConstructorParameters() []*FunctionParameter {
+	var result []*FunctionParameter
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			result = append(result, parameter)
+		}
+	}
+	return result
+}
+
+func (cmd *Command) HasConstructorParameters() bool {
+	return len(cmd.ConstructorParameters()) > 0
 }
 
 // HasIOParameters reports whether this subcommand tree needs generated file
@@ -702,6 +736,8 @@ func (p *FunctionParameter) TypeDescription() string {
 
 // SubCommand represents a subcommand within a command tree.
 type SubCommand struct {
+	Metadata    *CommandMetadata
+	ManSections []ManSection
 	*Command
 	// Parent points to the parent command.
 	Parent *SubCommand
@@ -967,7 +1003,7 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.HasGenerator() {
+		if p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := displayWidth(p.FlagString())
@@ -980,7 +1016,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			return true
 		}
 	}
@@ -1038,6 +1074,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
+						}
+						if p.Generator.Type == "" && pp.Generator.Type != "" {
+							p.Generator = pp.Generator
+						}
+						if p.Parser.Type == "" && pp.Parser.Type != "" {
+							p.Parser = pp.Parser
 						}
 						break
 					}
@@ -1109,7 +1151,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	allParams := sc.AllParameters()
 	grouped := make(map[string][]*FunctionParameter)
 	for _, p := range allParams {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
@@ -1174,7 +1216,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 func appendFlagsUsage(parts *[]string, params []*FunctionParameter) {
 	hasFlags := false
 	for _, p := range params {
-		if !p.IsPositional && !p.HasGenerator() {
+		if !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			hasFlags = true
 			break
 		}
@@ -1255,7 +1297,7 @@ func (sc *SubCommand) MaxPositionalLength() int {
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := displayWidth(p.DefaultString())
@@ -1288,6 +1330,12 @@ func (p *FunctionParameter) HasGenerator() bool {
 
 func (p *FunctionParameter) IsFlagPresence() bool {
 	return p.Generator.Type == SourceTypeFlagPresence
+}
+
+// HasConstructor reports whether this value is supplied to the generated root
+// constructor instead of the command-line parser or an execution-time provider.
+func (p *FunctionParameter) HasConstructor() bool {
+	return p.Generator.Type == SourceTypeConstructor
 }
 
 func (p *FunctionParameter) GeneratorCall() string {

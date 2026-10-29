@@ -54,6 +54,12 @@ func (c *Generate) Usage() {
 	}
 }
 
+func (c *Generate) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Generate) commandPath() string { return "gosubc generate" }
+
 func (c *Generate) UsageRecursive() {
 	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
 	if err != nil {
@@ -97,7 +103,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.dir = value
@@ -109,7 +115,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.manDir = value
@@ -121,7 +127,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.parserName = value
@@ -133,7 +139,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.cliParser = value
@@ -145,7 +151,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.paths = append(c.paths, value)
@@ -155,7 +161,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.recursive = b
 				} else {
@@ -167,7 +173,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.force = b
 				} else {
@@ -179,7 +185,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.clean = b
 				} else {
@@ -193,7 +199,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.replaceTemplates = append(c.replaceTemplates, value)
@@ -203,7 +209,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.projectProvenance = b
 				} else {
@@ -215,7 +221,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.timestamp = b
 				} else {
@@ -227,7 +233,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.emitGoGenerate = b
 				} else {
@@ -241,7 +247,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.regenerationCommand = value
@@ -253,7 +259,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.provVersion = value
@@ -265,7 +271,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.provCommit = value
@@ -277,7 +283,7 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.provDate = value
@@ -289,12 +295,12 @@ func (c *Generate) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.configPath = value
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -308,7 +314,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				found := false
 
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -383,6 +389,10 @@ func (c *RootCmd) NewGenerate() *Generate {
 
 		err := go_subcommand.GenerateCLIConfiguredAction(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.regenerationCommand, c.provVersion, c.provCommit, c.provDate, c.configPath, c.explicit)
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -391,9 +401,8 @@ func (c *RootCmd) NewGenerate() *Generate {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("generate failed: %w", err)
 		}

@@ -1,42 +1,58 @@
 {{- define "cli_parser_plus-minus" }}
-	// The plus-minus grammar extends GNU-style parsing with +x to explicitly
-	// disable a short boolean flag. Normalise those toggles into the GNU parser
-	// form so ordinary long flags, value flags, -- termination, and diagnostics
-	// remain one well-tested grammar.
-	normalizedArgs := make([]string, 0, len(args))
-	plusMinusTerminated := false
-	for _, arg := range args {
-		if arg == "--" {
-			plusMinusTerminated = true
-			normalizedArgs = append(normalizedArgs, arg)
-			continue
-		}
-		if !plusMinusTerminated && strings.HasPrefix(arg, "+") && arg != "+" {
-			shorts := arg[1:]
-			for _, char := range shorts {
-				found := false
-				{{- range .Parameters }}
-				{{- if and .IsBool (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
-				{{$param := .}}
-				{{- $shorts := list }}
-				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
-				{{- range .FlagAliases }}{{ if eq (len .) 1 }}{{ $shorts = append $shorts . }}{{ end }}{{ end }}
-				{{- range $short := $shorts }}
-				if char == '{{ $short }}' {
-					found = true
-					normalizedArgs = append(normalizedArgs, "--{{$param.Name}}=false")
-				}
-				{{- end }}
-				{{- end }}
-				{{- end }}
-				if !found {
-					return fmt.Errorf("unknown plus flag: +%c", char)
-				}
-			}
-			continue
-		}
-		normalizedArgs = append(normalizedArgs, arg)
+	plusMinusOptions := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	"{{.Name}}": {Key: "{{.Name}}", Boolean: {{.IsBool}}, IO: {{or .IsWriter .IsReader}}, Set: func(value string) error {
+		{{- if or .IsWriter .IsReader }}
+		{{- template "acquire_io" (list . "value") }}
+		{{- else }}
+		{{- if and .IsString (not .HasCustomParser) }}
+		v := value
+		{{- else }}
+		v, err := {{.ParserCall "value"}}
+		if err != nil { return err }
+		{{- end }}
+		{{- if .HasPointer }}
+		val := {{.CastCode "v"}}
+		{{- if .IsSlice }}
+		c.{{.Name}} = append(c.{{.Name}}, &val)
+		{{- else }}
+		c.{{.Name}} = &val
+		{{- end }}
+		{{- else if .IsSlice }}
+		c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
+		{{- else }}
+		c.{{.Name}} = {{.CastCode "v"}}
+		{{- end }}
+		{{- end }}
+		return nil
+	}},
+	{{- end }}
+	{{- end }}
 	}
-	args = normalizedArgs
-{{- template "cli_parser_gnu" . }}
+	plusMinusShort := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Short }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	}
+	plusMinusLong := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Long }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	}
+	_ = plusMinusOptions
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	if err != nil { return err }
+	if plusMinusHelp { c.Usage(); return nil }
+	_ = seenFlags
 {{- end }}

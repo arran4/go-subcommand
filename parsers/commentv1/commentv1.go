@@ -54,6 +54,8 @@ func (sct *SubCommandTree) Find(sequence []string) *SubCommandTree {
 }
 
 type CommandTree struct {
+	Metadata    *model.CommandMetadata
+	ManSections []model.ManSection
 	CommandName string
 	*SubCommandTree
 	FunctionName       string
@@ -73,8 +75,9 @@ type CommandTree struct {
 }
 
 type CommandsTree struct {
-	Commands    map[string]*CommandTree
-	PackagePath string
+	Declarations []parsers.CommandDeclaration
+	Commands     map[string]*CommandTree
+	PackagePath  string
 }
 
 func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcommandSequence []string, s *model.SubCommand) {
@@ -205,6 +208,12 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		FileSet:     fset,
 		PackageName: "main",
 	}
+	if options != nil {
+		rootCommands.Declarations = append(rootCommands.Declarations, options.CommandDeclarations...)
+	}
+	if err := applyDeclarations(rootCommands); err != nil {
+		return nil, err
+	}
 
 	var commands []*model.Command
 	var cmdNames []string
@@ -221,6 +230,9 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			segments := strings.Fields(alias)
 			if len(segments) > 0 && cmdTree.FunctionName != "" {
 				existingNode := cmdTree.Find(segments)
+				if existingNode != nil && existingNode.SubCommand != nil && existingNode.Metadata != nil {
+					return nil, fmt.Errorf("%s:%d: command metadata %q addresses a root action alias rather than a canonical command", existingNode.Metadata.Filename, existingNode.Metadata.Line, existingNode.Metadata.Path)
+				}
 				if existingNode != nil && existingNode.SubCommand != nil && existingNode.SubCommandFunctionName != "" && existingNode.SubCommandFunctionName != cmdTree.FunctionName {
 					// Conflicting subcommand already exists! Do not overwrite,
 					// allow model.Validate() to report the collision.
@@ -270,6 +282,8 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		}
 
 		cmd := &model.Command{
+			Metadata:           cmdTree.Metadata,
+			ManSections:        cmdTree.ManSections,
 			DataModel:          d,
 			MainCmdName:        cmdName,
 			PackagePath:        rootCommands.PackagePath,
@@ -388,6 +402,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 	}
 	f, err := parser.ParseFile(fset, filename, src, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
+		return err
+	}
+	if err := collectGoMetadata(fset, f, cmdTree); err != nil {
 		return err
 	}
 
@@ -1157,7 +1174,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent", "flag presence"}
+	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1327,6 +1344,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
 			}
+		case AttributeRootContext, "constructor":
+			p.Generator.Type = model.SourceTypeConstructor
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
 			if val != "" {

@@ -3,7 +3,7 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
-		{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+		{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -117,7 +117,7 @@
 
 	{{- if gt $reqPosArgs 0 }}
 	if len(remainingArgs) < {{$reqPosArgs}} {
-		return fmt.Errorf("expected at least {{$reqPosArgs}} positional arguments, got %d", len(remainingArgs))
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least {{$reqPosArgs}} positional arguments, got %d", len(remainingArgs))
 	}
 	{{- end }}
 
@@ -133,12 +133,12 @@
 		varArgs := remainingArgs[varArgStart:]
 		{{- if gt .VarArgMin 0}}
 		if len(varArgs) < {{.VarArgMin}} {
-			return fmt.Errorf("expected at least {{.VarArgMin}} arguments for {{.Name}}, got %d", len(varArgs))
+			return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least {{.VarArgMin}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
 		{{- if gt .VarArgMax 0}}
 		if len(varArgs) > {{.VarArgMax}} {
-			return fmt.Errorf("expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
+			return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at most {{.VarArgMax}} arguments for {{.Name}}, got %d", len(varArgs))
 		}
 		{{- end }}
 		{{- if and .IsString (not .HasCustomParser) }}
@@ -151,7 +151,7 @@
 		for _, arg := range varArgs {
 			v, err := {{.ParserCall "arg"}}
 			if err != nil {
-				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}}: %s", arg)
+				return c.usageError(cmd.UsageInvalidValue, "", err, "invalid {{.TypeDescription}} argument for {{.Name}}: %s", arg)
 			}
 			c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
 		}
@@ -170,7 +170,7 @@
 			{{- else }}
 			v, err := {{.ParserCall "argVal"}}
 			if err != nil {
-				return fmt.Errorf("invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", argIndex, argVal)
+				return c.usageError(cmd.UsageInvalidValue, "", err, "invalid {{.TypeDescription}} argument for {{.Name}} at index %d: %s", argIndex, argVal)
 			}
 			c.{{.Name}} = {{.CastCode "v"}}
 			{{- end }}

@@ -4,7 +4,7 @@
 	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
 		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
-		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
+		{{- if and (not .Inherited) (not .HasConstructor) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -37,10 +37,10 @@
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+			{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 			{{$param := .}}
 			{{- $longs := list }}
-			{{- if .Name }}{{ $longs = append $longs .Name }}{{ end }}
+			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
 			{{- range .FlagAliases }}{{ if gt (len .) 1 }}{{ $longs = append $longs . }}{{ end }}{{ end }}
 			{{- $uniqueLongs := list }}
 			{{- range $l := $longs }}
@@ -57,7 +57,7 @@
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -95,7 +95,7 @@
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				{{- if and $param.IsString (not $param.HasCustomParser) }}
@@ -119,7 +119,7 @@
 				{{- else }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
-					return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
 				}
 				{{- if $param.IsSlice }}
 				{{- if $param.HasPointer }}
@@ -142,7 +142,7 @@
 			{{- end }}
 			{{- end }}
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -155,7 +155,7 @@
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+				{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -204,7 +204,7 @@
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					{{- if and $param.IsString (not $param.HasCustomParser) }}
@@ -228,7 +228,7 @@
 					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
-						return fmt.Errorf("invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
 					}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
@@ -252,7 +252,7 @@
 				{{- end }}
 				{{- end }}
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {

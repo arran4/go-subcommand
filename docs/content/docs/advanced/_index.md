@@ -9,6 +9,8 @@ See [Generator design principles](generator-design-principles/) for the function
 
 See [Project generation configuration](project-configuration/) for optional versioned generator settings and explicit CLI override precedence.
 
+See [Functionless command metadata](command-metadata/) for explicit root identity and help without an action, Go/config declarations, documentation and man appendices.
+
 ## Man Page Generation
 
 `go-subcommand` can generate standard Unix man pages.
@@ -17,12 +19,16 @@ See [Project generation configuration](project-configuration/) for optional vers
 gosubc generate --man-dir ./man
 ```
 
-This creates a `man1` directory inside `./man` containing gzipped man pages (e.g., `my-app.1.gz`, `my-app-subcmd.1.gz`).
+This writes root and child roff pages directly under `./man`, for example
+`my-app.1` and `my-app-subcmd.1`. Native config man appendices are included in the
+selected command's page.
 
 The content is derived from:
 *   The command description.
 *   The extended help text in comments.
 *   Flag descriptions and defaults.
+
+See [Generated errors and process boundary](generated-errors/) for typed usage failures, wrapped explicit exit statuses, and the generated runner.
 
 ## Architecture
 
@@ -31,11 +37,15 @@ The generator works by:
 2.  **Modeling**: It builds a tree of commands, handling implicit parent commands and resolving parameter details.
 3.  **Generating**: It uses Go templates (embedded in the tool) to generate:
     *   `root.go`: The entry point and root command logic.
+    *   `process.go`: Testable error rendering, exit selection, and process runner.
     *   `cmd.go`: Helper interfaces and shared logic.
     *   Subcommand files: `subcommand_xyz.go` for each command node.
     *   Usage templates: Text files for usage output.
 
 ## Runtime Logic
+
+The experimental [plus/minus parser proposal](plus-minus-parser/) documents its
+grammar, audit, command-scope architecture and compiled acceptance cases.
 
 The generated code uses a lightweight `Command` interface.
 *   **Flags**: It uses the standard `flag` package.

@@ -44,6 +44,12 @@ func (c *{{.SubCommandStructName}}) Usage() {
 	}
 }
 
+func (c *{{.SubCommandStructName}}) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...{{if minGoVersion "1.18" .GoVersion}}any{{else}}interface{}{{end}}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *{{.SubCommandStructName}}) commandPath() string { return "{{.ProgName}}" }
+
 func (c *{{.SubCommandStructName}}) UsageRecursive() {
 	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, true})
 	if err != nil {
@@ -97,9 +103,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	if !isHelpRequest {
 		{{- range .Parameters }}
-		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 		if !seenFlags["{{.Name}}"] {
-			return fmt.Errorf("required flag {{.PrimaryFlagName}} not provided")
+			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
 		}
 		{{- end }}
 		{{- end }}
@@ -112,7 +118,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		}
 		{{- if and .SubCommandFunctionName .SubCommands (not $needsRemainingArgs) (ne .ResolvedCLIParser "go-flag") }}
 		c.Usage()
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 		{{- end }}
 	}
 
@@ -120,7 +126,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
-	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.Inherited) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.HasConstructor) (not $param.Inherited) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
 	if !seenFlags["{{$param.Name}}"] {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
@@ -149,9 +155,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{else}}
 	c.Usage()
-	{{- if .SubCommands }}
+	{{- if or .SubCommands .Metadata }}
 	if len(remainingArgs) > 0 {
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 	{{- end }}
 	{{end}}
@@ -176,6 +182,8 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
     err := {{if and .CallPackage (ne .CallPackage "main")}}{{.CallPackage}}.{{else if and .ImportAlias (ne .ImportAlias "main")}}{{.ImportAlias}}.{{else if and .SubCommandPackageName (ne .SubCommandPackageName "main")}}{{.SubCommandPackageName}}.{{end}}{{.SubCommandFunctionName}}({{range $i, $p := .Parameters}}{{if $i}}, {{end}}c.{{$p.ValueFieldName}}{{if $p.IsVarArg}}...{{end}}{{end}})
 		{{- end }}
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) { return err }
       if errors.Is(err, cmd.ErrPrintHelp) {
         c.Usage()
         return nil
@@ -184,10 +192,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
         fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
-      }
+			if errors.Is(err, cmd.ErrUsage) { return err }
       return fmt.Errorf("{{.SubCommandName | lower}} failed: %w", err)
 		}
 		{{else}}
@@ -236,7 +241,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 						return sub().Execute(nextArgs)
 					}
 					v.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					v.UsageRecursive()
@@ -292,7 +297,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 						return sub().Execute(nextArgs)
 					}
 					v.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					v.UsageRecursive()
