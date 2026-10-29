@@ -593,6 +593,37 @@ dispatch`. A handwritten executable can import `your.module/cmd/yourapp`, call
 startup, error-rendering, and exit policy. This is a generation-time API only:
 the generated dispatcher has no runtime dependency on `go-subcommand`.
 
+### Generated executable policy
+
+When gosubc generates the executable `main.go`, it also exposes a deliberately
+small `MainPolicy` adapter. Add a handwritten, non-generated Go file beside the
+generated command files to customise process ownership without replacing the
+main template:
+
+```go
+package main
+
+func init() {
+	GeneratedMainPolicy = MainPolicy{
+		Initialize: func() error {
+			// Application-specific process setup.
+			return nil
+		},
+		NewRoot: func() (*RootCmd, error) {
+			return NewRoot("myapp", version, commit, date)
+			// Or call NewRootWithContext with typed root context.
+		},
+		ExitCode: func(err error) int { return 1 },
+	}
+}
+```
+
+`NewRoot` controls build/version values and constructor context. `RenderError`
+receives stderr and the selected error, while `Arguments` may provide arguments
+other than `os.Args[1:]`. Nil hooks retain the default error rendering,
+`ErrExitCode` handling, and startup behavior. This policy is only for generated
+executables; dispatcher-only output deliberately has no process entry point.
+
 ### `gosubc template`
 
 Manage generation templates.
