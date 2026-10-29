@@ -1365,6 +1365,61 @@ func GenerateCLICommand(dir string, manDir string, parserName string, cliParser 
 	})
 }
 
+// GenerateCLIOptions specifies configuration and explicit flag overrides for code generation.
+type GenerateCLIOptions struct {
+	Dir               string
+	ManDir            string
+	ParserName        string
+	CLIParser         string
+	Paths             []string
+	Recursive         bool
+	Force             bool
+	Clean             bool
+	ReplaceTemplates  []string
+	ProjectProvenance bool
+	Timestamp         bool
+	EmitGoGenerate    bool
+	ProvVersion       string
+	ProvCommit        string
+	ProvDate          string
+	ConfigPath        string
+	ExplicitFlags     map[string]bool
+	TemplateVariables map[string]any
+}
+
+// GenerateCLIConfiguredWithOptions performs code generation with typed options and explicit flag overrides.
+// It never reads ambient process arguments (os.Args).
+func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
+	values := generateCLIValues{
+		dir:               opts.Dir,
+		manDir:            opts.ManDir,
+		parserName:        opts.ParserName,
+		cliParser:         opts.CLIParser,
+		paths:             opts.Paths,
+		recursive:         opts.Recursive,
+		force:             opts.Force,
+		clean:             opts.Clean,
+		replaceTemplates:  opts.ReplaceTemplates,
+		projectProvenance: opts.ProjectProvenance,
+		timestamp:         opts.Timestamp,
+		emitGoGenerate:    opts.EmitGoGenerate,
+		provVersion:       opts.ProvVersion,
+		provCommit:        opts.ProvCommit,
+		provDate:          opts.ProvDate,
+	}
+	if opts.ConfigPath != "" {
+		config, err := LoadGenerateConfig(opts.ConfigPath)
+		if err != nil {
+			return err
+		}
+		values.applyConfig(config, opts.ExplicitFlags)
+	}
+	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
+		CLIParser:          values.cliParser,
+		SuppressGoGenerate: !values.emitGoGenerate,
+	})
+}
+
 // GenerateCLIConfiguredCommand is a subcommand `gosubc generate` generates the subcommand code
 // Aliases: gen
 //
@@ -1393,19 +1448,25 @@ func GenerateCLICommand(dir string, manDir string, parserName string, cliParser 
 //	provVersion:       --prov-version    (default: "") Overwrite provenance version
 //	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
-//	configPath:        --config (default: "") Optional version-one JSON generation configuration.
+//	configPath:        --config (default: "") Optional generation configuration file.
 func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
-	values := generateCLIValues{dir: dir, manDir: manDir, parserName: parserName, cliParser: cliParser, paths: paths, recursive: recursive, force: force, clean: clean, replaceTemplates: replaceTemplates, projectProvenance: projectProvenance, timestamp: timestamp, emitGoGenerate: emitGoGenerate, provVersion: provVersion, provCommit: provCommit, provDate: provDate}
-	if configPath != "" {
-		config, err := LoadGenerateConfig(configPath)
-		if err != nil {
-			return err
-		}
-		values.applyConfig(config, explicitGenerateFlags(os.Args[1:]))
-	}
-	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
-		CLIParser:          values.cliParser,
-		SuppressGoGenerate: !values.emitGoGenerate,
+	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
+		Dir:               dir,
+		ManDir:            manDir,
+		ParserName:        parserName,
+		CLIParser:         cliParser,
+		Paths:             paths,
+		Recursive:         recursive,
+		Force:             force,
+		Clean:             clean,
+		ReplaceTemplates:  replaceTemplates,
+		ProjectProvenance: projectProvenance,
+		Timestamp:         timestamp,
+		EmitGoGenerate:    emitGoGenerate,
+		ProvVersion:       provVersion,
+		ProvCommit:        provCommit,
+		ProvDate:          provDate,
+		ConfigPath:        configPath,
 	})
 }
 

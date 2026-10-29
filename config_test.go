@@ -33,11 +33,83 @@ func TestLoadGenerateConfigStrictAndApplyPrecedence(t *testing.T) {
 	}
 }
 
+func TestLoadGenerateConfigMarkdown(t *testing.T) {
+	dir := t.TempDir()
+
+	// Test .mdconf extension
+	mdconfPath := filepath.Join(dir, "gosubc.mdconf")
+	mdconfContent := `version: 1
+dir: configured_md
+cli-parser: go-flag
+recursive: false
+clean: true
+paths: cmd, pkg
+
+# Variables
+appName: mytool
+env: test
+`
+	if err := os.WriteFile(mdconfPath, []byte(mdconfContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadGenerateConfig(mdconfPath)
+	if err != nil {
+		t.Fatalf("LoadGenerateConfig(.mdconf) failed: %v", err)
+	}
+	if config.Dir == nil || *config.Dir != "configured_md" {
+		t.Errorf("expected dir 'configured_md', got %v", config.Dir)
+	}
+	if config.CLIParser == nil || *config.CLIParser != "go-flag" {
+		t.Errorf("expected cliParser 'go-flag', got %v", config.CLIParser)
+	}
+	if config.Recursive == nil || *config.Recursive != false {
+		t.Errorf("expected recursive false, got %v", config.Recursive)
+	}
+	if config.Clean == nil || *config.Clean != true {
+		t.Errorf("expected clean true, got %v", config.Clean)
+	}
+	if config.Paths == nil || len(*config.Paths) != 2 || (*config.Paths)[0] != "cmd" || (*config.Paths)[1] != "pkg" {
+		t.Errorf("expected paths [cmd, pkg], got %v", config.Paths)
+	}
+	if config.TemplateVariables == nil || config.TemplateVariables["appName"] != "mytool" || config.TemplateVariables["env"] != "test" {
+		t.Errorf("expected variables appName: mytool, env: test, got %v", config.TemplateVariables)
+	}
+
+	// Test .mdc extension with list items
+	mdcPath := filepath.Join(dir, "gosubc.mdc")
+	mdcContent := `version: 1
+dir: mdc_dir
+paths:
+- alpha
+- beta
+force: true
+`
+	if err := os.WriteFile(mdcPath, []byte(mdcContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config2, err := LoadGenerateConfig(mdcPath)
+	if err != nil {
+		t.Fatalf("LoadGenerateConfig(.mdc) failed: %v", err)
+	}
+	if config2.Dir == nil || *config2.Dir != "mdc_dir" {
+		t.Errorf("expected dir 'mdc_dir', got %v", config2.Dir)
+	}
+	if config2.Force == nil || *config2.Force != true {
+		t.Errorf("expected force true, got %v", config2.Force)
+	}
+	if config2.Paths == nil || len(*config2.Paths) != 2 || (*config2.Paths)[0] != "alpha" || (*config2.Paths)[1] != "beta" {
+		t.Errorf("expected paths [alpha, beta], got %v", config2.Paths)
+	}
+}
+
 func TestLoadGenerateConfigRejectsUnknownAndUnsupported(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
-		"unknown.json": `{"version":1,"typo":true}`,
-		"version.json": `{"version":2}`,
+		"unknown.json":   `{"version":1,"typo":true}`,
+		"version.json":   `{"version":2}`,
+		"unknown.mdconf": "version: 1\ntypo: true\n",
+		"version.mdconf": "version: 2\ndir: .\n",
+		"badext.xyz":     "version: 1\n",
 	} {
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -50,19 +122,93 @@ func TestLoadGenerateConfigRejectsUnknownAndUnsupported(t *testing.T) {
 }
 
 func TestExplicitGenerateFlags(t *testing.T) {
-	explicit := explicitGenerateFlags([]string{"generate", "--dir=explicit", "--clean", "--path", "commands"})
+	// After "generate" subcommand
+	explicit := ExplicitGenerateFlags([]string{"generate", "--dir=explicit", "--clean", "--path", "commands"})
 	for _, name := range []string{"dir", "clean", "path"} {
 		if !explicit[name] {
-			t.Errorf("%q not recorded", name)
+			t.Errorf("%q not recorded with generate prefix", name)
 		}
 	}
 
-	// Verify that programmatic calls without "generate" as the first argument return nil.
-	if explicit := explicitGenerateFlags([]string{"--clean", "--dir=foo"}); explicit != nil {
-		t.Errorf("expected nil for args without generate subcommand, got %#v", explicit)
+	// Directly passed args without "generate" prefix
+	direct := ExplicitGenerateFlags([]string{"--clean", "--dir=foo"})
+	for _, name := range []string{"clean", "dir"} {
+		if !direct[name] {
+			t.Errorf("%q not recorded in direct args", name)
+		}
 	}
-	if explicit := explicitGenerateFlags([]string{"-test.v", "-run", "TestSomething"}); explicit != nil {
-		t.Errorf("expected nil for test runner arguments, got %#v", explicit)
+
+	// Test runner flags (no leading --)
+	if explicit := ExplicitGenerateFlags([]string{"-test.v", "-run", "TestSomething"}); len(explicit) != 0 {
+		t.Errorf("expected empty map for test runner arguments, got %#v", explicit)
+	}
+}
+
+func TestGenerateCLIConfiguredCommand_IgnoresAmbientOsArgs(t *testing.T) {
+	// Programmatic callers must NOT be affected by ambient process arguments,
+	// even when os.Args starts with host binary and contains generate / conflicting flags.
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"host", "generate", "--recursive=false", "--dir=/nonexistent/unrelated/path", "--clean"}
+
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/ambient\n\ngo 1.22\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "app.go"), []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(project, "gosubc.json")
+	config := `{"version":1,"dir":"` + strings.ReplaceAll(project, `\`, `\\`) + `","clean":false}`
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Call GenerateCLIConfiguredCommand directly as an exported library function.
+	err := GenerateCLIConfiguredCommand(
+		project, "", "commentv1", "gnu", nil, true, false, false, nil, true, true, true, "", "", "", configPath,
+	)
+	if err != nil {
+		t.Fatalf("GenerateCLIConfiguredCommand failed: %v", err)
+	}
+
+	// Also verify with GenerateCLIConfiguredWithOptions.
+	err = GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
+		Dir:        project,
+		ParserName: "commentv1",
+		CLIParser:  "gnu",
+		Recursive:  true,
+		ConfigPath: configPath,
+	})
+	if err != nil {
+		t.Fatalf("GenerateCLIConfiguredWithOptions failed: %v", err)
+	}
+}
+
+func TestGenerateCLIConfiguredCommand_IgnoresAmbientOsArgsStartingWithGenerate(t *testing.T) {
+	// Verify that even if os.Args[0] == "generate", exported library calls do not inspect os.Args.
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"generate", "--clean", "--recursive=false", "--dir=/wrong/path"}
+
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/ambient2\n\ngo 1.22\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "app.go"), []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(project, "gosubc.mdconf")
+	config := "version: 1\ndir: " + project + "\nclean: false\nrecursive: true\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := GenerateCLIConfiguredCommand(
+		project, "", "commentv1", "gnu", nil, true, false, false, nil, true, true, true, "", "", "", configPath,
+	)
+	if err != nil {
+		t.Fatalf("GenerateCLIConfiguredCommand failed: %v", err)
 	}
 }
 
