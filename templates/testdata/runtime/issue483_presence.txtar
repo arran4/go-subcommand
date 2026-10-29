@@ -127,7 +127,7 @@ func TestConstructorAndPresence(t *testing.T) {
   {"args": ["child"], "stdout": "child version=\"\" enabled=true count=7 label=\"default\" seen={}\n"},
   {"args": ["child", "grandchild", "--enabled=false", "-n", "0", "-l", ""], "stdout": "grandchild version=\"\" enabled=false count=0 label=\"\" seen={\"count\":true,\"enabled\":true,\"label\":true}\n"},
   {"args": ["child", "grandchild", "--", "--info=fake"], "stdout": "grandchild version=\"\" enabled=true count=7 label=\"default\" seen={}\n"},
-  {"args": ["--info=fake"], "status": 1, "stderr": {"gnu": "Error: unknown flag: --info\n", "go-flag": "flag provided but not defined: -info\nUsage: app [flags...] <subcommand>\n\nReport root state.\n\nSubcommands:\n\n    child Report inherited context.\n    help  Print this help message\n    usage Print this usage message\n\n\nFlags:\n    --enabled, -e        (default: true)        Enable output.\n    --count, -n int      (default: 7)           Count.\n    --label, -l string   (default: \"default\")   Label.\nError: flag provided but not defined: -info\n"}},
+  {"args": ["--info=fake"], "status": 1, "stderr": {"gnu": "Error: unknown flag: --info\n", "go-flag": "Error: flag provided but not defined: -info\n"}},
   {"args": ["help"], "stderrFile": "root-help.stderr"},
   {"args": ["usage", "child", "grandchild"], "stderrFile": "nested-help.stderr"},
   {"args": ["child", "grandchild", "--help"], "stderrFile": "nested-help.stderr"},
