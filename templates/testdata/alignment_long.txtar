@@ -47,16 +47,134 @@ Usage: myapp align [flags...] <subcommand>
 Check alignment
 
 Subcommands:
-{{if .Recursive}}
-    align short-cmd                          Short description
-    align very-long-subcommand-name-here     Description for long subcommand
-{{else}}
-    short-cmd  Short description
-    very-long-subcommand-name-here Description for long subcommand
-{{end}}
+{{ $maxSize := 30 }}{{ if .Recursive }}{{ $maxSize = 36 }}{{ end }}
+    {{ $label := "short-cmd" }}{{ if .Recursive }}{{ $label = "align short-cmd" }}{{ end }}{{formatHelpRow $maxSize $label "Short description"}}
+    {{ $label := "very-long-subcommand-name-here" }}{{ if .Recursive }}{{ $label = "align very-long-subcommand-name-here" }}{{ end }}{{formatHelpRow $maxSize $label "Description for long subcommand"}}
+
+
+Flags:
+    {{formatFlagRow 15 18 "-s" "(default: false)" "Short flag"}}
+    {{formatFlagRow 15 18 "--long string" "" "This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long."}}
+    {{formatFlagRow 15 18 "--another int" "(default: 42)" "Another flag"}}
+-- rendered-40-shallow.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    short-cmd
+        Short description
+    very-long-subcommand-name-here
+        Description for long subcommand
+
+
+Flags:
+    -s (default: false)
+        Short flag
+    --long string
+        This is a very long flag
+        description to see how it wraps
+        or aligns in the output when the
+        flag name itself is quite long.
+    --another int (default: 42)
+        Another flag
+-- rendered-40-recursive.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    align short-cmd
+        Short description
+    align very-long-subcommand-name-here
+        Description for long subcommand
+
+
+Flags:
+    -s (default: false)
+        Short flag
+    --long string
+        This is a very long flag
+        description to see how it wraps
+        or aligns in the output when the
+        flag name itself is quite long.
+    --another int (default: 42)
+        Another flag
+-- rendered-60-shallow.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    short-cmd                      Short description
+    very-long-subcommand-name-here Description for long
+                                   subcommand
 
 
 Flags:
     -s              (default: false)   Short flag
-    --long string                      This is a very long flag description to see how it wraps or aligns in the output when the flag name itself is quite long.
+    --long string                      This is a very long
+                                       flag description to
+                                       see how it wraps or
+                                       aligns in the output
+                                       when the flag name
+                                       itself is quite long.
+    --another int   (default: 42)      Another flag
+-- rendered-60-recursive.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    align short-cmd                      Short description
+    align very-long-subcommand-name-here Description for
+                                         long subcommand
+
+
+Flags:
+    -s              (default: false)   Short flag
+    --long string                      This is a very long
+                                       flag description to
+                                       see how it wraps or
+                                       aligns in the output
+                                       when the flag name
+                                       itself is quite long.
+    --another int   (default: 42)      Another flag
+-- rendered-80-shallow.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    short-cmd                      Short description
+    very-long-subcommand-name-here Description for long subcommand
+
+
+Flags:
+    -s              (default: false)   Short flag
+    --long string                      This is a very long flag description to
+                                       see how it wraps or aligns in the output
+                                       when the flag name itself is quite long.
+    --another int   (default: 42)      Another flag
+-- rendered-80-recursive.txt --
+Usage: myapp align [flags...] <subcommand>
+
+Check alignment
+
+Subcommands:
+
+    align short-cmd                      Short description
+    align very-long-subcommand-name-here Description for long subcommand
+
+
+Flags:
+    -s              (default: false)   Short flag
+    --long string                      This is a very long flag description to
+                                       see how it wraps or aligns in the output
+                                       when the flag name itself is quite long.
     --another int   (default: 42)      Another flag

@@ -709,14 +709,23 @@ func initTemplates(fsys fs.FS) error {
 	return err
 }
 
+var usageTemplateDelimsReplacer = strings.NewReplacer(
+	"{{", `{{"{{"}}`,
+	"}}", `{{"}}"}}`,
+)
+
+func escapeUsageText(s string) string {
+	return usageTemplateDelimsReplacer.Replace(s)
+}
+
 func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	tmpl := template.New("").Funcs(template.FuncMap{
-		"lower":    strings.ToLower,
-		"title":    func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":    strings.ToUpper,
-		"replace":  strings.ReplaceAll,
-		"add":      func(a, b int) int { return a + b },
-		"wrapFlag": func(maxFlag, maxDef int, flagStr, defStr, descStr string) string { return descStr },
+		"lower":           strings.ToLower,
+		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":           strings.ToUpper,
+		"replace":         strings.ReplaceAll,
+		"escapeUsageText": escapeUsageText,
+		"add":             func(a, b int) int { return a + b },
 		"until": func(n int) []int {
 			res := make([]int, n)
 			for i := 0; i < n; i++ {
