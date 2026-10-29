@@ -67,13 +67,61 @@
 Usage: myapp foo [flags...] <subcommand>
 
 Subcommands:
-{{if .Recursive}}
-    foo bar                                  Bar command
-    foo baz                                  Baz command
-{{else}}
-    bar        Bar command
-    baz        Baz command
-{{end}}
+{{ $maxSize := 3 }}{{ if .Recursive }}{{ $maxSize = 7 }}{{ end }}
+    {{ $label := "bar" }}{{ if .Recursive }}{{ $label = "foo bar" }}{{ end }}{{formatHelpRow $maxSize $label "Bar command"}}
+    {{ $label := "baz" }}{{ if .Recursive }}{{ $label = "foo baz" }}{{ end }}{{formatHelpRow $maxSize $label "Baz command"}}
+
+
+Flags:
+    {{formatFlagRow 8 18 "-v" "(default: false)" "Enable verbose"}}
+    {{formatFlagRow 8 18 "-c int" "(default: 0)" "Count items"}}
+-- rendered-40-shallow.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    bar Bar command
+    baz Baz command
+
+
+Flags:
+    -v (default: false)
+        Enable verbose
+    -c int (default: 0)
+        Count items
+-- rendered-40-recursive.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    foo bar Bar command
+    foo baz Baz command
+
+
+Flags:
+    -v (default: false)
+        Enable verbose
+    -c int (default: 0)
+        Count items
+-- rendered-80-shallow.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    bar Bar command
+    baz Baz command
+
+
+Flags:
+    -v       (default: false)   Enable verbose
+    -c int   (default: 0)       Count items
+-- rendered-80-recursive.txt --
+Usage: myapp foo [flags...] <subcommand>
+
+Subcommands:
+
+    foo bar Bar command
+    foo baz Baz command
 
 
 Flags:

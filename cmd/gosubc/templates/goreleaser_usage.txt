@@ -4,12 +4,12 @@ Usage: gosubc goreleaser [flags...]
 generates goreleaser configuration and workflows
 
 Subcommands:
-    help         Print this help message
-    usage        Print this usage message
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 Flags:
-    --dir string                    (default: ".")     The project root directory
-    --go-releaser-github-workflow   (default: false)   Generate GitHub Actions release workflow
-    --verification-workflow         (default: false)   Generate verification workflow
-    --pr-creation-workflow          (default: false)   Generate PR creation workflow
+    {{formatFlagRow 31 18 "--dir string" "(default: \".\")" "The project root directory"}}
+    {{formatFlagRow 31 18 "--go-releaser-github-workflow" "(default: false)" "Generate GitHub Actions release workflow"}}
+    {{formatFlagRow 31 18 "--verification-workflow" "(default: false)" "Generate verification workflow"}}
+    {{formatFlagRow 31 18 "--pr-creation-workflow" "(default: false)" "Generate PR creation workflow"}}
