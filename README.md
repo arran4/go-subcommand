@@ -376,6 +376,12 @@ Each generated command owns a distinct usage resource. Commands with the same
 leaf name in different paths (for example, `app serve` and
 `app scenario serve`) retain separate help text and usage syntax.
 
+Subcommand and flag rows remain inline in each generated `*_usage.txt` template
+and are formatted at runtime with hanging-indent word wrapping to the active
+terminal width (`COLUMNS`). Recursive help displays full command paths while
+shallow help displays direct child names, aligning descriptions from each
+branch's displayed labels without fixed padding widths.
+
 ### Root Actions and Subcommand Dispatch
 
 When an application defines both a root action and subcommands, a recognized
