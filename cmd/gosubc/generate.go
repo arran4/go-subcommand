@@ -235,6 +235,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "regenerationCommand", "regenerate-command":
+				seenFlags["regenerationCommand"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
