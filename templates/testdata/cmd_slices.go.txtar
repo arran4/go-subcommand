@@ -54,6 +54,7 @@ import (
 	"time"
 
 	"example.com/mypkg"
+	"example.com/mypkg/cmd"
 )
 
 var _ Cmd = (*MySliceCmd)(nil)
@@ -80,6 +81,12 @@ func (c *MySliceCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *MySliceCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *MySliceCmd) commandPath() string { return "myslicecmd" }
 
 func (c *MySliceCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "myslicecmd_usage.txt", UsageDataMySliceCmd{c, true})

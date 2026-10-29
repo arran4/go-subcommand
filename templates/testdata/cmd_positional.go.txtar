@@ -1,5 +1,6 @@
 -- input.json --
 {
+  "PackagePath": "example.com/fixture",
   "PackageName": "main",
   "SubCommandName": "mycmd",
   "SubCommandStructName": "MyCmd",
@@ -39,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 
+	"example.com/fixture/cmd"
 	"example.com/mypkg"
 )
 
@@ -65,6 +67,12 @@ func (c *MyCmd) Usage() {
 	}
 }
 
+func (c *MyCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...interface{}) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *MyCmd) commandPath() string { return "mycmd" }
+
 func (c *MyCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataMyCmd{c, true})
 	if err != nil {
@@ -80,7 +88,7 @@ func (c *MyCmd) Execute(args []string) (err error) {
 		}
 	}
 	if len(remainingArgs) < 1 {
-		return fmt.Errorf("expected at least 1 positional arguments, got %d", len(remainingArgs))
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
 	}
 	// Handle positional argument filename
 	{

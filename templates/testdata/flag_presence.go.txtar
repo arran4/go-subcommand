@@ -219,6 +219,7 @@ import (
 	"strings"
 
 	app "example.com/presence"
+	"example.com/presence/cmd"
 )
 
 var _ Cmd = (*Child)(nil)
@@ -245,6 +246,12 @@ func (c *Child) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *Child) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Child) commandPath() string { return "child" }
 
 func (c *Child) UsageRecursive() {
 	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, true})
@@ -287,7 +294,7 @@ func (c *Child) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.enabled = b
 				} else {
@@ -301,12 +308,12 @@ func (c *Child) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				v, err := strconv.Atoi(value)
 				if err != nil {
-					return fmt.Errorf("invalid integer value for flag %s: %s", name, value)
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
 				}
 				c.count = v
 
@@ -317,12 +324,12 @@ func (c *Child) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.label = value
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -359,12 +366,12 @@ func (c *Child) Execute(args []string) (err error) {
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					v, err := strconv.Atoi(value)
 					if err != nil {
-						return fmt.Errorf("invalid integer value for flag -%s: %s", char, value)
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
 					}
 					c.count = v
 				}
@@ -387,13 +394,13 @@ func (c *Child) Execute(args []string) (err error) {
 							value = args[i+1]
 							i++
 						} else {
-							return fmt.Errorf("flag -%s requires a value", char)
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
 						}
 					}
 					c.label = value
 				}
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {

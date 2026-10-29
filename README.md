@@ -282,6 +282,33 @@ cleanup errors. Help, usage, version and a sibling without providers acquire non
 
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 
+#### Root constructor context
+
+Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
+
+Constructor context and `(flag presence)` are independent inputs. A root or nested
+action may receive both inherited typed context and its own `map[string]bool`
+presence parameter. Context is never an argv flag or an execution-time provider;
+explicit false, zero and empty flag values still appear in the presence map.
+`templates/testdata/runtime/issue483_presence.txtar` contains the complete annotated source,
+generated root/grandchild snapshots and compiled GNU/Go-flag examples. For example,
+`app child grandchild --enabled=false -n 0 -l ""` reports the same supplied context
+and `seen={"count":true,"enabled":true,"label":true}`. The ordinary `NewRoot`
+constructor supplies zero context, while `NewRootWithContext` accepts imported
+typed context without changing flag binding. Help, usage and version execute no
+actions, and a reused tree receives a fresh presence map for each invocation.
+
+```go
+// Root is a subcommand `app`.
+//
+// Flags:
+//
+//   buildInfo: (root context) Build metadata created by main
+func Root(buildInfo buildinfo.BuildInfo) {}
+```
+
+The existing `NewRoot(name, version, commit, date)` remains available for compatibility and supplies zero values for declared context. Applications that need the context must call the typed `NewRootWithContext` constructor (or use dispatcher-only generation).
+
 ### Supported Types
 
 The following Go types are supported for function parameters:
@@ -615,11 +642,11 @@ JSON uses lower-camel-case names and a required `version` field:
 The configuration file is only read by `gosubc generate --config`; generated
 applications do not read it at runtime. `--config` is also safe for pinned
 generation scripts because malformed input and unknown keys are rejected.
-This initial slice supports generator settings only. `min-gosubc`, typed template
-variables, command metadata, documentation/man-page appendices, external references,
-and multiple generation targets remain tracked in #63. Sections such as
-`# Variables` and `# Commands` are rejected until implemented; no placeholder
-template-variable API is exposed.
+Native files also support the command/documentation/man appendices described
+below. JSON remains a generator-settings compatibility reader. `min-gosubc`,
+typed template variables, multiple generation targets and setup questions remain
+tracked in #63. Unsupported sections such as `# Variables` are rejected; no
+placeholder template-variable API is exposed.
 
 Programmatic callers use `GenerateCLIConfiguredWithOptions(GenerateCLIOptions{...})`
 and set `ExplicitFlags` to preserve supplied options over file values. Keys may be
@@ -649,6 +676,157 @@ on that command. Flag-looking values and arguments after `--` do not mark flags.
 The map is not a CLI flag and does not appear in help. It cannot be positional,
 inherited, required, or combined with defaults, aliases, custom parsers or providers.
 
+#### Application metadata and root actions
+
+An ordinary annotated function registers an action. Functionless metadata uses
+the distinct `is a command` declaration on a package or standalone Go comment.
+Command paths must be enclosed in backticks; unquoted metadata paths are rejected.
+The same declaration describes roots and child commands.
+
+These shared actions are used in the three variants below:
+
+```go
+// Generate is a subcommand `app generate` -- Generate jobs.
+func Generate() { fmt.Println("generate") }
+
+// Show is a subcommand `app config show` -- Show settings.
+func Show() { fmt.Println("show") }
+```
+
+With just these functions in `package commands`, the root is implicit:
+
+```text
+app                 [implicit root: help/usage]
+├── generate        [Generate()]
+└── config          [implicit parent]
+    └── show        [Show()]
+```
+
+To give that root explicit metadata, place this comment above the package line:
+
+```go
+// App is a command `app` -- Manage jobs.
+// More application help.
+package commands
+```
+
+```text
+app                 [explicit metadata: help/usage; no root action]
+├── generate        [Generate()]
+└── config          [implicit parent]
+    └── show        [Show()]
+```
+
+To make bare invocation execute an action, declare a real function instead:
+
+```go
+// RootAction is a subcommand `app` -- A real root action.
+//
+// Flags:
+//
+//     name: --name (default: "root") Root label.
+func RootAction(name string) { fmt.Println("root:" + name) }
+```
+
+```text
+app                 [explicit root action: RootAction(name)]
+├── generate        [Generate()]
+└── config          [implicit parent]
+    └── show        [Show()]
+```
+
+The default GNU backend produces these results (help is written to stderr):
+
+| Invocation | Implicit root | Metadata-only root | Action-bearing root |
+| --- | --- | --- | --- |
+| `app` | Help, status 0 | Described help, status 0 | `root:root`, status 0 |
+| `app help` | Help, status 0 | Described help, status 0 | Help, status 0 |
+| `app unknown` | Unknown-command error, status 1 | Unknown-command error, status 1 | Unknown-command error, status 1 |
+| `app generate` | `generate`, status 0 | `generate`, status 0 | `generate`, status 0 |
+
+Go-flag retains its existing executable-root positional fallback; functionless
+roots reject unknown commands on both backends. Built-in help, usage and version
+remain available. A literal `app root` action (and its aliases) is a child; it is
+never the application metadata declaration or an implicit default action.
+
+One metadata declaration per canonical command is allowed across Go and config.
+If a real action also exists, it remains executable: a nonempty metadata short
+description overrides its short description, long help is appended, aliases are
+combined and validated, and conflicting parser/default-route declarations fail.
+Metadata does not create or remove the action. Root aliases still require a real
+action under the existing routing rules; metadata must address canonical paths.
+
+Metadata-only roots may select an existing `Default route: config show` or
+`Default route: help config show`; ordinary routing performs the dispatch.
+Metadata cannot declare flags, positionals or providers without a typed Go source;
+these forms fail during generation. Typed functionless root flags remain follow-up
+work under #63/#522. Do not add a dummy root action to attach metadata. The legacy
+`is a command` spelling on function comments remains ignored with a warning;
+action functions use `is a subcommand`.
+
+#### Native command and documentation appendices
+
+A native `.mdc` or `.mdconf` file can describe the same commands without Go comment
+markers. Generator settings come first, followed by optional sections:
+
+~~~text
+format-version: 1
+emit-go-generate: false
+
+# Commands
+
+```command: app
+Description: Manage jobs.
+More application help.
+```
+
+```command: app config
+Description: Inspect configuration.
+Aliases: c
+```
+
+# Documentation
+
+```markdown: app file=docs/overview.md
+```
+
+```text: app config
+Additional configuration help.
+```
+
+# Man content
+
+```man: app EXAMPLES
+app generate
+```
+~~~
+
+`gosubc generate --config gosubc.mdc --man-dir man` produces root and child man
+pages, including `man/app.1`. Native and Go declarations use the same normalized
+comment parser and generate identical command code and help. Description,
+aliases, `CLI-Parser` and default-route directives keep their command-scoped meaning.
+An otherwise empty metadata declaration is valid and does not imply an action.
+
+Documentation targets must already exist as actions, declared metadata or
+implicit parents. Text/Markdown is appended literally to help and descriptions
+in man pages; it is not a scripting/template language. Man appendix section names
+are uppercase, with underscores for spaces; standard sections cannot be replaced.
+Duplicate sections/declarations and malformed or mismatched fences are errors.
+Use a longer opening/closing backtick fence when the body contains shorter fences.
+
+External references resolve relative to the config file: `markdown` accepts
+`.md`/`.markdown`, and `text` or `man` accepts `.txt`/`.text`. Quote file paths
+containing spaces. Absolute/escaping paths, missing files, invalid UTF-8 and
+inline-plus-file combinations are rejected. The filesystem loader constrains
+external symlinks to the configuration directory. Referenced text is included
+once as literal content; it cannot recursively include other files.
+
+`LoadGenerateConfigFS` supports hermetic filesystem readers, and
+`GenerateOptions.CommandDeclarations` passes normalized source blocks to
+`commentv1` without file I/O. Generated applications neither read the config nor
+depend on go-subcommand at runtime. Parsing, validation and rendering finish
+before `--clean` removes owned old output, so invalid metadata preserves it.
+
 ### `gosubc template`
 
 Manage generation templates.
@@ -676,6 +854,56 @@ Generates release configuration.
 *   `--go-releaser-github-workflow`: Generate GitHub Action workflow for GoReleaser.
 
 ### Parser Backend Configuration
+
+### Generated parser and process errors
+
+Generated applications expose `ErrUsage` and `UsageError` in their own `cmd`
+package, with no go-subcommand runtime dependency. Callers can classify errors
+without inspecting their messages:
+
+```go
+var usage *cmd.UsageError
+if errors.Is(err, cmd.ErrUsage) && errors.As(err, &usage) {
+    fmt.Printf("%s: kind=%s flag=%s\n", usage.CommandPath, usage.Kind, usage.Flag)
+}
+```
+
+`UsageError.Kind` distinguishes unknown commands, unknown flags, missing flag
+values, invalid supplied values, invalid positional arguments, and missing
+required flags. `CommandPath` is the canonical command path; `Flag` is the
+supplied name without leading dashes where applicable. `Err` preserves the
+underlying parser cause, and `Message` controls presentation. Both `errors.Is`
+and `errors.As` work through ordinary wrapping. Application-supplied usage errors
+and explicit exit errors pass through dispatch with their wrappers intact.
+
+Generated `main.go` delegates to testable helpers in `process.go`. Only main calls
+`os.Exit`; rendering and status selection are separate. Status precedence is:
+
+1. An explicit `cmd.ErrExitCode`, detected with `errors.As`, including codes 0
+   and 1 and custom nonzero codes.
+2. The typed usage category's default status 1.
+3. The historical unclassified-error fallback status 1.
+
+An explicit status takes precedence even when its cause requests help. A nil
+inner cause suppresses error output, including through a wrapper; a nonnil inner
+cause prints `Error: <cause>` to stderr even when the explicit status is 0.
+Ordinary help and usage keep their existing successful behaviour and do not
+acquire business providers. Go-flag retains the standard library's parsing
+grammar and value implementations; its adapter classifies failures at their
+source and renders a parser diagnostic once.
+
+For example, an ordinary action can return
+`fmt.Errorf("validation: %w", &cmd.ErrExitCode{Code: 2, Err: err})` to select status
+2, while an internal error may select 3. This does not change the default fallback
+or install a global policy callback. The standalone source, generated error
+contract and exact invocation outputs are in
+`templates/testdata/issue523.go.txtar`.
+
+This supplies gogenmux's typed parser classification and wrapped explicit statuses.
+Removing its custom main template still requires declarative no-command policy,
+version/build metadata (including `builtBy` and propagation), version-output
+customization, and its validation/internal default classification and rendering
+contract. Those facilities remain separate work under #524 and #479/#503.
 
 ### Generated application Go compatibility
 

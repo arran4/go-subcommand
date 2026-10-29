@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/arran4/go-subcommand/cmd"
 	"github.com/arran4/go-subcommand/cmd/gosubc/templates"
 )
 
@@ -78,6 +79,12 @@ func (c *RootCmd) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "gosubc" }
 
 func (c *RootCmd) UsageRecursive() {
 	err := executeUsage(os.Stderr, "gosubc_usage.txt", UsageDataRootCmd{c, true})
@@ -185,7 +192,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -220,7 +227,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 						return sub().Execute(nextArgs)
 					}
 					c.Usage()
-					return fmt.Errorf("unknown command: %s", target[0])
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
 				}
 				if deep {
 					c.UsageRecursive()
@@ -274,7 +281,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -287,7 +294,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 				}
 				found := false
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -303,7 +310,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	c.Usage()
 	if len(remainingArgs) > 0 {
-		return fmt.Errorf("unknown command: %s", remainingArgs[0])
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}
 	return nil
 }

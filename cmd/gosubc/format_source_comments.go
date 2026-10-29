@@ -39,6 +39,12 @@ func (c *FormatSourceComments) Usage() {
 	}
 }
 
+func (c *FormatSourceComments) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *FormatSourceComments) commandPath() string { return "gosubc format-source-comments" }
+
 func (c *FormatSourceComments) UsageRecursive() {
 	err := executeUsage(os.Stderr, "format-source-comments_usage.txt", UsageDataFormatSourceComments{c, true})
 	if err != nil {
@@ -80,7 +86,7 @@ func (c *FormatSourceComments) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.dir = value
@@ -91,7 +97,7 @@ func (c *FormatSourceComments) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.paths = append(c.paths, value)
@@ -100,14 +106,14 @@ func (c *FormatSourceComments) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.recursive = b
 				} else {
 					c.recursive = true
 				}
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -121,7 +127,7 @@ func (c *FormatSourceComments) Execute(args []string) (err error) {
 				found := false
 
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -166,6 +172,10 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 
 		err := go_subcommand.FormatSourceComments(c.dir, c.paths, c.recursive)
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -174,9 +184,8 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("format-source-comments failed: %w", err)
 		}

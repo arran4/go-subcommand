@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	go_subcommand "github.com/arran4/go-subcommand"
+	"github.com/arran4/go-subcommand/cmd"
 )
 
 var _ Cmd = (*TemplateLayout)(nil)
@@ -32,6 +33,12 @@ func (c *TemplateLayout) Usage() {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
+
+func (c *TemplateLayout) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *TemplateLayout) commandPath() string { return "gosubc template layout" }
 
 func (c *TemplateLayout) UsageRecursive() {
 	err := executeUsage(os.Stderr, "layout_usage.txt", UsageDataTemplateLayout{c, true})
@@ -68,7 +75,7 @@ func (c *TemplateLayout) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -81,7 +88,7 @@ func (c *TemplateLayout) Execute(args []string) (err error) {
 				}
 				found := false
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {

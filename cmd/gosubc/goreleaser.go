@@ -40,6 +40,12 @@ func (c *Goreleaser) Usage() {
 	}
 }
 
+func (c *Goreleaser) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Goreleaser) commandPath() string { return "gosubc goreleaser" }
+
 func (c *Goreleaser) UsageRecursive() {
 	err := executeUsage(os.Stderr, "goreleaser_usage.txt", UsageDataGoreleaser{c, true})
 	if err != nil {
@@ -81,7 +87,7 @@ func (c *Goreleaser) Execute(args []string) (err error) {
 						value = args[i+1]
 						i++
 					} else {
-						return fmt.Errorf("flag %s requires a value", name)
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
 					}
 				}
 				c.dir = value
@@ -90,7 +96,7 @@ func (c *Goreleaser) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.githubWorkflow = b
 				} else {
@@ -101,7 +107,7 @@ func (c *Goreleaser) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.verificationWorkflow = b
 				} else {
@@ -112,14 +118,14 @@ func (c *Goreleaser) Execute(args []string) (err error) {
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
-						return fmt.Errorf("invalid boolean value for flag %s: %s", name, value)
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
 					}
 					c.prCreationWorkflow = b
 				} else {
 					c.prCreationWorkflow = true
 				}
 			default:
-				return fmt.Errorf("unknown flag: --%s", name)
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-" {
 			// Short flags
@@ -133,7 +139,7 @@ func (c *Goreleaser) Execute(args []string) (err error) {
 				found := false
 
 				if !found {
-					return fmt.Errorf("unknown flag: -%s", char)
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
 			}
 		} else {
@@ -180,6 +186,10 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 
 		err := go_subcommand.Goreleaser(c.dir, c.githubWorkflow, c.verificationWorkflow, c.prCreationWorkflow)
 		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()
 				return nil
@@ -188,9 +198,8 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
-			var exitCode *cmd.ErrExitCode
-			if errors.As(err, &exitCode) {
-				return exitCode
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
 			}
 			return fmt.Errorf("goreleaser failed: %w", err)
 		}

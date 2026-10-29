@@ -64,6 +64,10 @@ const (
 	// Usage: (generator: MyGeneratorFunc)
 	AttributeGenerator = "generator"
 
+	// AttributeRootContext marks a root parameter as constructor supplied.
+	// Usage: (root context)
+	AttributeRootContext = "root context"
+
 	// AttributeParser specifies a custom parser function for the parameter.
 	// Usage: (parser: MyParserFunc) or (parser: "pkg".MyParserFunc)
 	AttributeParser = "parser"
