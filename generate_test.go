@@ -171,6 +171,9 @@ var aliasIOSource string
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
 
+//go:embed testdata/issue483_root_context.go
+var issue483RootContextSource string
+
 // oldStyleFileWriter models an external implementation compiled against the
 // FileWriter interface before generated-file migration needed deletion.
 type oldStyleFileWriter struct {
@@ -764,6 +767,198 @@ func TestGenerate_DefaultExpressions(t *testing.T) {
 	}
 	if !strings.Contains(s, "math.MaxInt32") {
 		t.Errorf("Missing assignment for limit expression: %s", s)
+	}
+}
+
+//go:embed templates/testdata/runtime/issue483_presence.txtar
+var constructorPresenceFixture []byte
+
+func TestGenerateConstructorFlagPresence(t *testing.T) {
+	input, expected := splitInputExpected(txtar.Parse(constructorPresenceFixture))
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     json.RawMessage
+		StderrFile string
+		Status     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			if backend == "gnu" {
+				for _, name := range []string{"root.go", "child_grandchild.go"} {
+					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
+						t.Fatalf("generated %s differs from source-comment golden", name)
+					}
+				}
+			}
+			// Files are materialized only for the Go compiler and process boundary.
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/contract_test.go"), string(expected["contract_test.go"].Data))
+			command := exec.Command("go", "test", "./cmd/app", "-run", "TestConstructorAndPresence")
+			command.Dir = dir
+			if out, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("typed constructor contract: %v\n%s", err, out)
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				want := ""
+				if invocation.StderrFile != "" {
+					want = string(expected[invocation.StderrFile].Data)
+				}
+				if len(invocation.Stderr) > 0 {
+					if err := json.Unmarshal(invocation.Stderr, &want); err != nil {
+						var alternatives map[string]string
+						if err := json.Unmarshal(invocation.Stderr, &alternatives); err != nil {
+							t.Fatal(err)
+						}
+						want = alternatives[backend]
+					}
+				}
+				got := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || got != want {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), got, invocation.Status, invocation.Stdout, want)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerate_ConstructorInjectedRootContext(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/contextapp\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "application.go"), issue483RootContextSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "buildinfo", "buildinfo.go"), `package buildinfo
+
+type BuildInfo struct { Version string }
+`)
+
+	if err := Generate(dir, "", "commentv1", nil, true, true, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	rootSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "root.go"))
+	if err != nil {
+		t.Fatalf("read generated root: %v", err)
+	}
+	for _, want := range []string{
+		`"example.com/contextapp/buildinfo"`,
+		"buildInfo buildinfo.BuildInfo",
+		"func NewRootWithContext(name, version, commit, date string, buildInfo buildinfo.BuildInfo)",
+		"buildInfo: buildInfo,",
+	} {
+		if !strings.Contains(string(rootSource), want) {
+			t.Errorf("generated root missing %q:\n%s", want, rootSource)
+		}
+	}
+	childSource, err := os.ReadFile(filepath.Join(dir, "cmd", "contextapp", "child.go"))
+	if err != nil {
+		t.Fatalf("read generated child: %v", err)
+	}
+	if strings.Contains(string(childSource), "\n\tbuildInfo buildinfo.BuildInfo\n") {
+		t.Fatalf("child redeclared root context:\n%s", childSource)
+	}
+
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd", "contextapp", "context_test.go"), `package main
+
+import (
+    "testing"
+    "example.com/contextapp/buildinfo"
+)
+
+func TestConstructorContextIsInherited(t *testing.T) {
+    context := buildinfo.BuildInfo{Version: "v1"}
+    root, err := NewRootWithContext("contextapp", "", "", "", context)
+    if err != nil { t.Fatal(err) }
+    if root.buildInfo != context { t.Fatalf("root context = %#v", root.buildInfo) }
+    if err := root.Execute([]string{"child"}); err != nil { t.Fatalf("child: %v", err) }
+    if err := root.Execute([]string{"child", "grandchild"}); err != nil { t.Fatalf("grandchild: %v", err) }
+}
+`)
+
+	compile := exec.Command("go", "test", "./...")
+	compile.Dir = dir
+	if output, err := compile.CombinedOutput(); err != nil {
+		t.Fatalf("generated root-context module failed: %v\n%s", err, output)
+	}
+
+	mainSource := `package main
+
+import (
+	"fmt"
+	"os"
+
+	"example.com/contextapp/buildinfo"
+)
+
+func main() {
+	root, err := NewRootWithContext("contextapp", "1.0.0", "abc", "2026-10-29", buildinfo.BuildInfo{Version: "v1"})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize: %v\n", err)
+		os.Exit(1)
+	}
+	if err := root.Execute(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cmd", "contextapp", "main.go"), []byte(mainSource), 0644); err != nil {
+		t.Fatalf("write main: %v", err)
+	}
+	binPath := filepath.Join(dir, "contextapp")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/contextapp")
+	buildCmd.Dir = dir
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build executable failed: %v\n%s", err, output)
+	}
+	for _, args := range [][]string{
+		{"child"},
+		{"child", "grandchild"},
+	} {
+		cmd := exec.Command(binPath, args...)
+		cmd.Dir = dir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("run %v failed: %v\n%s", args, err, output)
+		}
 	}
 }
 

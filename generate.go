@@ -972,6 +972,11 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		imports = append(imports, templateImport{Alias: alias, Path: ref.ImportPath})
 	}
 	for _, p := range params {
+		// Constructor context is supplied through anonymous parent embedding. This
+		// generated file does not spell its type or provider directly.
+		if p.Inherited && p.HasConstructor() {
+			continue
+		}
 		if p.TypeImportPath != "" {
 			alias := ""
 			if !p.IsReader() && !p.IsWriter() {

@@ -267,6 +267,33 @@ Multiple parenthesized attributes can be combined with semicolons, for example `
 
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 
+#### Root constructor context
+
+Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
+
+Constructor context and `(flag presence)` are independent inputs. A root or nested
+action may receive both inherited typed context and its own `map[string]bool`
+presence parameter. Context is never an argv flag or an execution-time provider;
+explicit false, zero and empty flag values still appear in the presence map.
+`templates/testdata/runtime/issue483_presence.txtar` contains the complete annotated source,
+generated root/grandchild snapshots and compiled GNU/Go-flag examples. For example,
+`app child grandchild --enabled=false -n 0 -l ""` reports the same supplied context
+and `seen={"count":true,"enabled":true,"label":true}`. The ordinary `NewRoot`
+constructor supplies zero context, while `NewRootWithContext` accepts imported
+typed context without changing flag binding. Help, usage and version execute no
+actions, and a reused tree receives a fresh presence map for each invocation.
+
+```go
+// Root is a subcommand `app`.
+//
+// Flags:
+//
+//   buildInfo: (root context) Build metadata created by main
+func Root(buildInfo buildinfo.BuildInfo) {}
+```
+
+The existing `NewRoot(name, version, commit, date)` remains available for compatibility and supplies zero values for declared context. Applications that need the context must call the typed `NewRootWithContext` constructor (or use dispatcher-only generation).
+
 ### Supported Types
 
 The following Go types are supported for function parameters:
