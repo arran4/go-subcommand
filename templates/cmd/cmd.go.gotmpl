@@ -101,7 +101,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	if !isHelpRequest {
 		{{- range .Parameters }}
-		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 		if !seenFlags["{{.Name}}"] {
 			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
 		}
@@ -124,7 +124,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
-	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.Inherited) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
+	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.HasConstructor) (not $param.Inherited) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}
 	if !seenFlags["{{$param.Name}}"] {
 		{{- $default := $param.Default -}}
 		{{- template "acquire_io" (list $param (printf "%q" $default)) }}
@@ -132,7 +132,9 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- end }}
 	{{- end }}
 	{{- range .Parameters }}
-	{{- if .HasGenerator }}
+	{{- if .IsFlagPresence }}
+	c.{{.ValueFieldName}} = seenFlags
+	{{- else if .HasGenerator }}
 	{
 		v, err := {{.GeneratorCall}}
 		if err != nil {
@@ -151,7 +153,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{else}}
 	c.Usage()
-	{{- if .SubCommands }}
+	{{- if or .SubCommands .Metadata }}
 	if len(remainingArgs) > 0 {
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 	}

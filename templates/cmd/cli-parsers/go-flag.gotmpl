@@ -8,8 +8,10 @@
 
 
 	{{- $hasTrackedFlags := false }}
+	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
-		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
+		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
+		{{- if and (not .Inherited) (not .HasConstructor) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -22,7 +24,7 @@
 	fs.Usage = c.Usage
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 	{{$param := .}}
 	{{- $aliases := list }}
 	{{- $aliases = append $aliases .Name }}
@@ -201,10 +203,12 @@
 	}
 
 	{{- range .Parameters }}
-	{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 	{{$param := .}}
-	{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+	{{- if or $hasFlagPresence $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+	{{- if not $hasFlagPresence }}
 	seenFlags["{{$param.Name}}"] = false
+	{{- end }}
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "{{$param.Name}}" {
 			seenFlags["{{$param.Name}}"] = true

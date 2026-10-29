@@ -1,8 +1,10 @@
 {{- define "cli_parser_gnu" }}
 	var remainingArgs []string
 	{{- $hasTrackedFlags := false }}
+	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
-		{{- if and (not .Inherited) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
+		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
+		{{- if and (not .Inherited) (not .HasConstructor) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}
@@ -35,7 +37,7 @@
 			_ = hasValue
 			switch name {
 			{{- range .Parameters }}
-			{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+			{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 			{{$param := .}}
 			{{- $longs := list }}
 			{{- if gt (len .Name) 1 }}{{ $longs = append $longs .Name }}{{ end }}
@@ -48,7 +50,7 @@
 			{{- end }}
 			{{- if gt (len $uniqueLongs) 0 }}
 			case {{ range $i, $n := $uniqueLongs }}{{if $i}}, {{end}}"{{$n}}"{{ end }}:
-				{{- if or $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+				{{- if or $hasFlagPresence $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
 				{{- if $param.IsBool }}
@@ -153,7 +155,7 @@
 				}
 				found := false
 				{{- range .Parameters }}
-				{{- if and (not .IsPositional) (not .HasGenerator) (not .Inherited) }}
+				{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
 				{{$param := .}}
 				{{- $shorts := list }}
 				{{- if eq (len .Name) 1 }}{{ $shorts = append $shorts .Name }}{{ end }}
@@ -167,7 +169,7 @@
 				{{- if gt (len $uniqueShorts) 0 }}
 				if char == "{{index $uniqueShorts 0}}" {{ range slice $uniqueShorts 1 }}|| char == "{{.}}"{{ end }} {
 					found = true
-					{{- if or $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
+					{{- if or $hasFlagPresence $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
 					{{- if $param.IsBool }}

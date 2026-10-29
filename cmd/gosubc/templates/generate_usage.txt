@@ -30,6 +30,8 @@ Flags:
     {{formatFlagRow 33 24 "--project-provenance, --project" "(default: true)" "Include target Git metadata in provenance"}}
     {{formatFlagRow 33 24 "--timestamp" "(default: true)" "Include timestamp in provenance"}}
     {{formatFlagRow 33 24 "--emit-go-generate" "(default: true)" "Emit nested //go:generate directive in generated main.go"}}
+    {{formatFlagRow 33 24 "--regenerate-command string" "(default: \"\")" "Project pinned regeneration command for generated AGENTS.md"}}
     {{formatFlagRow 33 24 "--prov-version string" "(default: \"\")" "Overwrite provenance version"}}
     {{formatFlagRow 33 24 "--prov-commit string" "(default: \"\")" "Overwrite provenance commit"}}
     {{formatFlagRow 33 24 "--prov-date string" "(default: \"\")" "Overwrite provenance date"}}
+    {{formatFlagRow 33 24 "--config string" "(default: \"\")" "Optional generation configuration file."}}
