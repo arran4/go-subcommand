@@ -1,6 +1,7 @@
 -- input.json --
 {
   "PackageName": "main",
+  "PackagePath": "example.com/contextapp",
   "MainCmdName": "contextapp",
   "SubCommandName": "child",
   "SubCommandStructName": "Child",
@@ -17,6 +18,7 @@
     {
       "Name": "buildInfo",
       "Type": "buildinfo.BuildInfo",
+      "TypeImportPath": "example.com/contextapp/buildinfo",
       "Inherited": true,
       "Description": "Build metadata from the root constructor",
       "Generator": {
