@@ -1185,7 +1185,7 @@ func TestResolveCLIParser(t *testing.T) {
 		{name: "generator default go flag", fallback: "go-flag", want: "go-flag"},
 		{name: "explicit gnu overrides unsupported generator default", local: "gnu", fallback: "go-flag", want: "gnu"},
 		{name: "explicit go flag", local: "go-flag", fallback: "gnu", want: "go-flag"},
-		{name: "plus minus reserved", local: "plus-minus", wantErr: true},
+		{name: "plus minus", local: "plus-minus", want: "plus-minus"},
 		{name: "unknown", local: "unknown", wantErr: true},
 	}
 
@@ -1214,8 +1214,11 @@ func TestResolveCLIParsers(t *testing.T) {
 	legacyImport := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "import"}
 	modern := &model.SubCommand{Command: root, SubCommandName: "modern"}
 	gnuOverride := &model.SubCommand{Command: root, Parent: legacy, SubCommandName: "gnu-again", CLIParser: "gnu"}
+	plusMinus := &model.SubCommand{Command: root, SubCommandName: "toggle", CLIParser: "plus-minus"}
+	plusMinusChild := &model.SubCommand{Command: root, Parent: plusMinus, SubCommandName: "inherited"}
 	legacy.SubCommands = []*model.SubCommand{legacyImport, gnuOverride}
-	root.SubCommands = []*model.SubCommand{modern, legacy}
+	plusMinus.SubCommands = []*model.SubCommand{plusMinusChild}
+	root.SubCommands = []*model.SubCommand{modern, legacy, plusMinus}
 
 	if err := resolveCLIParsers([]*model.Command{root}, "gnu"); err != nil {
 		t.Fatalf("resolveCLIParsers: %v", err)
@@ -1231,6 +1234,8 @@ func TestResolveCLIParsers(t *testing.T) {
 		{name: "legacy override", got: legacy.ResolvedCLIParser, want: "go-flag"},
 		{name: "legacy child inherits nearest", got: legacyImport.ResolvedCLIParser, want: "go-flag"},
 		{name: "descendant overrides back", got: gnuOverride.ResolvedCLIParser, want: "gnu"},
+		{name: "plus minus override", got: plusMinus.ResolvedCLIParser, want: "plus-minus"},
+		{name: "plus minus descendant inherits nearest", got: plusMinusChild.ResolvedCLIParser, want: "plus-minus"},
 	}
 
 	for _, check := range checks {
@@ -1263,6 +1268,11 @@ func TestGenerateWithFSSucceedsImplementedCLIParser(t *testing.T) {
 			cliParser:    "gnu",
 			comment:      "// CLI-Parser: go-flag\n",
 			expectParser: "cli_parser_go-flag",
+		},
+		{
+			name:         "generation default plus minus",
+			cliParser:    "plus-minus",
+			expectParser: "cli_parser_plus-minus",
 		},
 	}
 
@@ -2726,24 +2736,37 @@ func TestGenerateWithFS_LegacyAPI_Compiles(t *testing.T) {
 }
 
 func TestGenerateCLI_ForwardsCLIParser(t *testing.T) {
-	// 1. Verify signature exists and matches compilation
 	accept := func(_ func(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string) error) {
 	}
 	accept(GenerateCLI)
-
-	// 2. Verify actual forwarding of --cli-parser to the internal system
-	// Using the reserved identifier "plus-minus" ensures we get the exact rejection error
-	// directly from resolveCLIParser to prove the string made it through GenerateCLI
+	input, expected := splitInputExpected(txtar.Parse(plusMinusFixture))
 	dir := t.TempDir()
-	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com\n\ngo 1.22\n")
-	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), "package app\n\n// Root is a subcommand `app`\nfunc Root() error { return nil }\n")
-
-	err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", "")
-	if err == nil {
-		t.Fatal("Expected GenerateCLI with 'plus-minus' to fail, but it succeeded")
+	for name, file := range input {
+		data := file.Data
+		if name == "app.go" {
+			data = bytes.Replace(data, []byte("// CLI-Parser: plus-minus\n"), nil, 1)
+		}
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("Expected 'not implemented' from CLIParser override forwarding, got: %v", err)
+	if err := GenerateCLI(dir, "", "commentv1", "plus-minus", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	var invocations []struct {
+		Args   []string
+		Stdout string
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, invocations[1].Args...)
+	if out, err := command.CombinedOutput(); err != nil || string(out) != invocations[1].Stdout {
+		t.Fatalf("forwarded parser: %v output=%q", err, out)
 	}
 }
 

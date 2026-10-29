@@ -1,0 +1,58 @@
+{{- define "cli_parser_plus-minus" }}
+	plusMinusOptions := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	"{{.Name}}": {Key: "{{.Name}}", Boolean: {{.IsBool}}, IO: {{or .IsWriter .IsReader}}, Set: func(value string) error {
+		{{- if or .IsWriter .IsReader }}
+		{{- template "acquire_io" (list . "value") }}
+		{{- else }}
+		{{- if and .IsString (not .HasCustomParser) }}
+		v := value
+		{{- else }}
+		v, err := {{.ParserCall "value"}}
+		if err != nil { return err }
+		{{- end }}
+		{{- if .HasPointer }}
+		val := {{.CastCode "v"}}
+		{{- if .IsSlice }}
+		c.{{.Name}} = append(c.{{.Name}}, &val)
+		{{- else }}
+		c.{{.Name}} = &val
+		{{- end }}
+		{{- else if .IsSlice }}
+		c.{{.Name}} = append(c.{{.Name}}, {{.CastCode "v"}})
+		{{- else }}
+		c.{{.Name}} = {{.CastCode "v"}}
+		{{- end }}
+		{{- end }}
+		return nil
+	}},
+	{{- end }}
+	{{- end }}
+	}
+	plusMinusShort := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Short }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	}
+	plusMinusLong := map[string]plusMinusOption{
+	{{- range .Parameters }}
+	{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Long }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	}
+	_ = plusMinusOptions
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	if err != nil { return err }
+	if plusMinusHelp { c.Usage(); return nil }
+	_ = seenFlags
+{{- end }}

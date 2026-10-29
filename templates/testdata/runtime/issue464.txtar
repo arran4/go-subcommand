@@ -1,0 +1,1492 @@
+Proposed plus-minus v1. The manifest is an independent grammar contract:
+complete source -> generated artifacts -> compiled executable stdout/stderr/status.
+-- input/go.mod --
+module example.com/plusminus
+
+go 1.22
+-- input/app.go --
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// Root is a subcommand `app` -- Toggle root options.
+// CLI-Parser: plus-minus
+//
+// Flags:
+//
+//	alpha: -a --alpha --enable (default: true) Alpha toggle.
+//	beta: -b --beta (default: false) Beta toggle.
+//	ab: --ab --both (default: false) One long option.
+//	count: --count (default: 7) Count.
+//	label: --label (default: "base") Label.
+//	seen: (flag presence) Explicit inputs.
+//	args: ... Literal positional tail.
+func Root(alpha, beta, ab bool, count int, label string, seen map[string]bool, args ...string) {
+	report("root", alpha, beta, ab, count, label, seen, args)
+}
+
+func report(path string, alpha, beta, ab bool, count int, label string, seen map[string]bool, args []string) {
+	presence, _ := json.Marshal(seen)
+	fmt.Printf("%s a=%t b=%t ab=%t count=%d label=%q args=%q seen=%s\n", path, alpha, beta, ab, count, label, args, presence)
+}
+
+// Gnu is a subcommand `app gnu` -- GNU scope.
+// CLI-Parser: gnu
+//
+// Flags:
+//
+//	a: -a (default: false) Canonical one-letter toggle.
+//	b: -b (default: false) Second toggle.
+//	ab: --ab (default: false) Long collision.
+//	seen: (flag presence) Explicit inputs.
+//	args: ... Literal tail.
+func Gnu(a, b, ab bool, seen map[string]bool, args ...string) { report("gnu", a, b, ab, 0, "", seen, args) }
+
+// Pm is a subcommand `app gnu pm` -- Child-owned plus-minus scope.
+// CLI-Parser: plus-minus
+// Aliases: toggle
+//
+// Flags:
+//
+//	child: -c --child (default: true) Child-only toggle.
+//	seen: (flag presence) Explicit inputs.
+//	args: ... Literal tail.
+func Pm(child bool, seen map[string]bool, args ...string) { report("gnu/pm", child, false, false, 0, "", seen, args) }
+
+// Deep is a subcommand `app gnu pm deep` -- Inherits nearest plus-minus ancestor.
+//
+// Flags:
+//
+//	deep: -d --deep (default: true) Deep-only toggle.
+//	seen: (flag presence) Explicit inputs.
+func Deep(deep bool, seen map[string]bool) { report("deep", deep, false, false, 0, "", seen, nil) }
+
+// Legacy is a subcommand `app legacy` -- Go-flag override.
+// CLI-Parser: go-flag
+//
+// Flags:
+//
+//	a: -a (default: false) Short toggle.
+//	b: -b (default: false) Short toggle.
+//	ab: --ab (default: false) Exact Go-flag name.
+//	seen: (flag presence) Explicit inputs.
+//	args: ... Literal tail.
+func Legacy(a, b, ab bool, seen map[string]bool, args ...string) { report("legacy", a, b, ab, 0, "", seen, args) }
+
+// Old is a subcommand `app gnu pm old` -- Deep override back to Go-flag.
+// CLI-Parser: go-flag
+//
+// Flags:
+//
+//	ab: --ab (default: false) Exact flag.
+//	seen: (flag presence) Explicit inputs.
+func Old(ab bool, seen map[string]bool) { report("old", false, false, ab, 0, "", seen, nil) }
+
+func ParseCustom(s string) (string, error) {
+	if s == "bad" { return "", fmt.Errorf("custom rejected") }
+	return s, nil
+}
+
+// Values is a subcommand `app values` -- Long values and conversion.
+//
+// Flags:
+//
+//	delay: --delay (default: "1s") Duration.
+//	custom: (parser: ParseCustom) --custom Custom parser.
+//	tags: --tag Repeated value.
+//	maybe: -m --maybe Pointer toggle.
+func Values(delay time.Duration, custom string, tags []string, maybe *bool) {
+	value := "nil"
+	if maybe != nil { value = fmt.Sprint(*maybe) }
+	fmt.Printf("delay=%s custom=%q tags=%q maybe=%s\n", delay, custom, tags, value)
+}
+
+func Build() (string, error) { fmt.Println("provider"); return "ready", nil }
+
+// Effect is a subcommand `app effect` -- Effectful provider.
+//
+// Flags:
+//
+//	value: (generator: Build) Prepared value.
+func Effect(value string) { fmt.Println(value) }
+
+// PlusMinus is a subcommand `app plus-minus` -- Helper filename collision.
+func PlusMinus() { fmt.Println("literal") }
+
+// Single is a subcommand `app single` -- Canonical one-letter toggle.
+//
+// Flags:
+//
+//	a: -q (default: true) Canonical short with an alias.
+//	seen: (flag presence) Explicit inputs.
+func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0, "", seen, nil) }
+-- expected/invocations.json --
+[
+  {
+    "args": [],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[] seen={}\n"
+  },
+  {
+    "args": [
+      "+ab"
+    ],
+    "stdout": "root a=false b=false ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true,\"beta\":true}\n"
+  },
+  {
+    "args": [
+      "-ab"
+    ],
+    "stdout": "root a=true b=true ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true,\"beta\":true}\n"
+  },
+  {
+    "args": [
+      "--ab"
+    ],
+    "stdout": "root a=true b=false ab=true count=7 label=\"base\" args=[] seen={\"ab\":true}\n"
+  },
+  {
+    "args": [
+      "--both"
+    ],
+    "stdout": "root a=true b=false ab=true count=7 label=\"base\" args=[] seen={\"ab\":true}\n"
+  },
+  {
+    "args": [
+      "-a"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true}\n"
+  },
+  {
+    "args": [
+      "+a"
+    ],
+    "stdout": "root a=false b=false ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true}\n"
+  },
+  {
+    "args": [
+      "+a",
+      "-a",
+      "+a"
+    ],
+    "stdout": "root a=false b=false ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true}\n"
+  },
+  {
+    "args": [
+      "+a",
+      "--enable=true"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[] seen={\"alpha\":true}\n"
+  },
+  {
+    "args": [
+      "--beta=1"
+    ],
+    "stdout": "root a=true b=true ab=false count=7 label=\"base\" args=[] seen={\"beta\":true}\n"
+  },
+  {
+    "args": [
+      "--count=0",
+      "--label="
+    ],
+    "stdout": "root a=true b=false ab=false count=0 label=\"\" args=[] seen={\"count\":true,\"label\":true}\n"
+  },
+  {
+    "args": [
+      "--label",
+      "+a"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"+a\" args=[] seen={\"label\":true}\n"
+  },
+  {
+    "args": [
+      "--label",
+      "--",
+      "+a"
+    ],
+    "stdout": "root a=false b=false ab=false count=7 label=\"--\" args=[] seen={\"alpha\":true,\"label\":true}\n"
+  },
+  {
+    "args": [
+      "--",
+      "-ab",
+      "+ab",
+      "--ab"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"-ab\" \"+ab\" \"--ab\"] seen={}\n"
+  },
+  {
+    "args": [
+      "word",
+      "+a"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"word\" \"+a\"] seen={}\n"
+  },
+  {
+    "args": [
+      "+",
+      "-ab"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"+\" \"-ab\"] seen={}\n"
+  },
+  {
+    "args": [
+      "-",
+      "+ab"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"-\" \"+ab\"] seen={}\n"
+  },
+  {
+    "args": [
+      "--",
+      "-3"
+    ],
+    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"-3\"] seen={}\n"
+  },
+  {
+    "args": [
+      "values",
+      "--delay=2s",
+      "--custom=good",
+      "--tag=one",
+      "--tag",
+      "two",
+      "-m",
+      "+m"
+    ],
+    "stdout": "delay=2s custom=\"good\" tags=[\"one\" \"two\"] maybe=false\n"
+  },
+  {
+    "args": [
+      "values"
+    ],
+    "stdout": "delay=1s custom=\"\" tags=[] maybe=nil\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "-ab"
+    ],
+    "stdout": "gnu a=true b=true ab=false count=0 label=\"\" args=[] seen={\"a\":true,\"b\":true}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "--ab"
+    ],
+    "stdout": "gnu a=false b=false ab=true count=0 label=\"\" args=[] seen={\"ab\":true}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "+ab"
+    ],
+    "stdout": "gnu a=false b=false ab=false count=0 label=\"\" args=[\"+ab\"] seen={}\n"
+  },
+  {
+    "args": [
+      "legacy",
+      "-ab"
+    ],
+    "stdout": "legacy a=false b=false ab=true count=0 label=\"\" args=[] seen={\"ab\":true}\n"
+  },
+  {
+    "args": [
+      "legacy",
+      "--a"
+    ],
+    "stdout": "legacy a=true b=false ab=false count=0 label=\"\" args=[] seen={\"a\":true}\n"
+  },
+  {
+    "args": [
+      "legacy",
+      "+a"
+    ],
+    "stdout": "legacy a=false b=false ab=false count=0 label=\"\" args=[\"+a\"] seen={}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "pm",
+      "+c"
+    ],
+    "stdout": "gnu/pm a=false b=false ab=false count=0 label=\"\" args=[] seen={\"child\":true}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "toggle",
+      "-c"
+    ],
+    "stdout": "gnu/pm a=true b=false ab=false count=0 label=\"\" args=[] seen={\"child\":true}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "pm",
+      "word",
+      "+c"
+    ],
+    "stdout": "gnu/pm a=true b=false ab=false count=0 label=\"\" args=[\"word\" \"+c\"] seen={}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "pm",
+      "deep",
+      "+d"
+    ],
+    "stdout": "deep a=false b=false ab=false count=0 label=\"\" args=[] seen={\"deep\":true}\n"
+  },
+  {
+    "args": [
+      "gnu",
+      "pm",
+      "old",
+      "-ab"
+    ],
+    "stdout": "old a=false b=false ab=true count=0 label=\"\" args=[] seen={\"ab\":true}\n"
+  },
+  {
+    "args": [
+      "effect"
+    ],
+    "stdout": "provider\nready\n"
+  },
+  {
+    "args": [
+      "plus-minus"
+    ],
+    "stdout": "literal\n"
+  },
+  {
+    "args": [
+      "version"
+    ],
+    "stdout": "Version: dev\nCommit: none\nDate: unknown\n"
+  },
+  {
+    "args": [
+      "--help"
+    ],
+    "stderrFile": "root-help.stderr"
+  },
+  {
+    "args": [
+      "-h"
+    ],
+    "stderrFile": "root-help.stderr"
+  },
+  {
+    "args": [
+      "help"
+    ],
+    "stderrFile": "root-help.stderr"
+  },
+  {
+    "args": [
+      "usage",
+      "effect"
+    ],
+    "stderrFile": "effect-help.stderr"
+  },
+  {
+    "args": [
+      "effect",
+      "--help"
+    ],
+    "stderrFile": "effect-help.stderr"
+  },
+  {
+    "args": [
+      "--help",
+      "+z"
+    ],
+    "stderrFile": "root-help.stderr"
+  },
+  {
+    "args": [
+      "gnu",
+      "pm",
+      "--help"
+    ],
+    "stderrFile": "pm-help.stderr"
+  },
+  {
+    "args": [
+      "--a"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: --a\n",
+    "kind": "unknown-flag",
+    "flag": "a",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "+z"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: +z\n",
+    "kind": "unknown-flag",
+    "flag": "z",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "+az"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: +z\n",
+    "kind": "unknown-flag",
+    "flag": "z",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "-az"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: -z\n",
+    "kind": "unknown-flag",
+    "flag": "z",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "++a"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid plus-minus option: ++a\n",
+    "kind": "invalid-arguments",
+    "flag": "",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "+ab=value"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid plus-minus option: +ab=value\n",
+    "kind": "invalid-arguments",
+    "flag": "",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "-a=false"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid plus-minus option: -a=false\n",
+    "kind": "invalid-arguments",
+    "flag": "",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "+h"
+    ],
+    "status": 1,
+    "stderr": "Error: help cannot be disabled or clustered: +h\n",
+    "kind": "invalid-arguments",
+    "flag": "h",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "-ah"
+    ],
+    "status": 1,
+    "stderr": "Error: help cannot be disabled or clustered: -ah\n",
+    "kind": "invalid-arguments",
+    "flag": "h",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "-3"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid short option syntax: -3\n",
+    "kind": "invalid-arguments",
+    "flag": "",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "+\u00e9"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid short option syntax: +\u00e9\n",
+    "kind": "invalid-arguments",
+    "flag": "",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "--unknown"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: --unknown\n",
+    "kind": "unknown-flag",
+    "flag": "unknown",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "--count"
+    ],
+    "status": 1,
+    "stderr": "Error: flag --count requires a value\n",
+    "kind": "missing-flag-value",
+    "flag": "count",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "--count=bad"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid value \"bad\" for flag count: strconv.Atoi: parsing \"bad\": invalid syntax\n",
+    "kind": "invalid-value",
+    "flag": "count",
+    "path": "app",
+    "cause": true
+  },
+  {
+    "args": [
+      "--beta=wrong"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid value \"wrong\" for flag beta: strconv.ParseBool: parsing \"wrong\": invalid syntax\n",
+    "kind": "invalid-value",
+    "flag": "beta",
+    "path": "app",
+    "cause": true
+  },
+  {
+    "args": [
+      "values",
+      "--custom=bad"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid value \"bad\" for flag custom: custom rejected\n",
+    "kind": "invalid-value",
+    "flag": "custom",
+    "path": "app values",
+    "cause": true
+  },
+  {
+    "args": [
+      "values",
+      "--delay=bad"
+    ],
+    "status": 1,
+    "stderr": "Error: invalid value \"bad\" for flag delay: time: invalid duration \"bad\"\n",
+    "kind": "invalid-value",
+    "flag": "delay",
+    "path": "app values",
+    "cause": true
+  },
+  {
+    "args": [
+      "gnu",
+      "--a"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: --a\n",
+    "kind": "unknown-flag",
+    "flag": "a",
+    "path": "app gnu",
+    "cause": false
+  },
+  {
+    "args": [
+      "single",
+      "+a"
+    ],
+    "stdout": "single a=false b=false ab=false count=0 label=\"\" args=[] seen={\"a\":true}\n"
+  },
+  {
+    "args": [
+      "single",
+      "+q"
+    ],
+    "stdout": "single a=false b=false ab=false count=0 label=\"\" args=[] seen={\"a\":true}\n"
+  },
+  {
+    "args": [
+      "single",
+      "+a",
+      "-q"
+    ],
+    "stdout": "single a=true b=false ab=false count=0 label=\"\" args=[] seen={\"a\":true}\n"
+  },
+  {
+    "args": [
+      "single",
+      "--a"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: --a\n",
+    "kind": "unknown-flag",
+    "flag": "a",
+    "path": "app single",
+    "cause": false
+  }
+]
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"sync"
+
+	app "example.com/plusminus"
+	"example.com/plusminus/cmd"
+	"example.com/plusminus/cmd/app/templates"
+)
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands      map[string]func() Cmd
+	Version       string
+	Commit        string
+	Date          string
+	alpha         bool
+	beta          bool
+	ab            bool
+	count         int
+	label         string
+	seen          map[string]bool
+	args          []string
+	CommandAction func(c *RootCmd) error
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+	}
+	c.FlagSet.Usage = c.Usage
+
+	c.BoolVar(&c.alpha, "enable", true, "Alpha toggle.")
+	c.BoolVar(&c.alpha, "alpha", true, "Alpha toggle.")
+	c.BoolVar(&c.alpha, "a", true, "Alpha toggle.")
+
+	c.BoolVar(&c.beta, "beta", false, "Beta toggle.")
+	c.BoolVar(&c.beta, "b", false, "Beta toggle.")
+
+	c.BoolVar(&c.ab, "both", false, "One long option.")
+	c.BoolVar(&c.ab, "ab", false, "One long option.")
+
+	c.IntVar(&c.count, "count", 7, "Count.")
+
+	c.StringVar(&c.label, "label", "base", "Label.")
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		app.Root(c.alpha, c.beta, c.ab, c.count, c.label, c.seen, c.args...)
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewEffect() })
+		c.Commands["effect"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewGnu() })
+		c.Commands["gnu"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewLegacy() })
+		c.Commands["legacy"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewPlusMinus() })
+		c.Commands["plus-minus"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSingle() })
+		c.Commands["single"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewValues() })
+		c.Commands["values"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"alpha": {Key: "alpha", Boolean: true, IO: false, Set: func(value string) error {
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			c.alpha = v
+			return nil
+		}},
+		"beta": {Key: "beta", Boolean: true, IO: false, Set: func(value string) error {
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			c.beta = v
+			return nil
+		}},
+		"ab": {Key: "ab", Boolean: true, IO: false, Set: func(value string) error {
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			c.ab = v
+			return nil
+		}},
+		"count": {Key: "count", Boolean: false, IO: false, Set: func(value string) error {
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return err
+			}
+			c.count = v
+			return nil
+		}},
+		"label": {Key: "label", Boolean: false, IO: false, Set: func(value string) error {
+			v := value
+			c.label = v
+			return nil
+		}},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["alpha"],
+		"b": plusMinusOptions["beta"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"alpha":  plusMinusOptions["alpha"],
+		"enable": plusMinusOptions["alpha"],
+		"beta":   plusMinusOptions["beta"],
+		"ab":     plusMinusOptions["ab"],
+		"both":   plusMinusOptions["ab"],
+		"count":  plusMinusOptions["count"],
+		"label":  plusMinusOptions["label"],
+	}
+	_ = plusMinusOptions
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	if err != nil {
+		return err
+	}
+	if plusMinusHelp {
+		c.Usage()
+		return nil
+	}
+	_ = seenFlags
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	// Handle vararg args
+	{
+		varArgStart := 0
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		c.args = varArgs
+	}
+	c.seen = seenFlags
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/plus_minus.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"strings"
+
+	"example.com/plusminus/cmd"
+)
+
+type plusMinusOption struct {
+	Key     string
+	Boolean bool
+	IO      bool
+	Set     func(string) error
+}
+
+type plusMinusValue struct {
+	Name   string
+	Option plusMinusOption
+	Value  string
+}
+
+type plusMinusToken struct {
+	Boundary, Terminated, Help, NeedsValue bool
+	Values                                 []plusMinusValue
+}
+
+// Tokenization validates a complete cluster before any setter runs.
+func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOption) (plusMinusToken, error) {
+	var result plusMinusToken
+	if token == "--" {
+		result.Terminated = true
+		return result, nil
+	}
+	if token == "-h" || token == "--help" {
+		result.Help = true
+		return result, nil
+	}
+	if len(token) < 2 || token[0] != '-' && token[0] != '+' {
+		result.Boundary = true
+		return result, nil
+	}
+	if strings.HasPrefix(token, "--") {
+		name, value, assigned := token[2:], "", false
+		if at := strings.IndexByte(name, '='); at >= 0 {
+			name, value, assigned = name[:at], name[at+1:], true
+		}
+		option, found := long[name]
+		if len(name) < 2 || !found {
+			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+		}
+		if option.Boolean && !assigned {
+			value = "true"
+		}
+		result.NeedsValue = !option.Boolean && !assigned
+		result.Values = []plusMinusValue{{Name: name, Option: option, Value: value}}
+		return result, nil
+	}
+	if token[1] == '+' || strings.ContainsAny(token[1:], "=+-") {
+		return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
+	}
+	for i := 1; i < len(token); i++ {
+		name := token[i : i+1]
+		if !(token[i] >= 'a' && token[i] <= 'z' || token[i] >= 'A' && token[i] <= 'Z') {
+			return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid short option syntax: %s", token)
+		}
+		if name == "h" {
+			return result, newUsageError(path, cmd.UsageInvalidArguments, name, nil, "help cannot be disabled or clustered: %s", token)
+		}
+		option, found := short[name]
+		if !found {
+			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", token[:1], name)
+		}
+		if !option.Boolean {
+			return result, newUsageError(path, cmd.UsageInvalidArguments, name, nil, "short option %s requires a long value form", name)
+		}
+		value := "true"
+		if token[0] == '+' {
+			value = "false"
+		}
+		result.Values = append(result.Values, plusMinusValue{Name: name, Option: option, Value: value})
+	}
+	return result, nil
+}
+
+// Stop at this scope's first command/positional boundary. The remaining slice
+// retains its original bytes and is never inspected or rewritten by this parser.
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption) (remaining []string, seen map[string]bool, terminated, help bool, err error) {
+	seen = make(map[string]bool)
+	for i := 0; i < len(args); i++ {
+		token, tokenErr := tokenizePlusMinus(args[i], path, short, long)
+		if tokenErr != nil {
+			return nil, seen, false, false, tokenErr
+		}
+		if token.Boundary {
+			return args[i:], seen, false, false, nil
+		}
+		if token.Terminated {
+			return args[i+1:], seen, true, false, nil
+		}
+		if token.Help {
+			return nil, seen, false, true, nil
+		}
+		if token.NeedsValue {
+			if i+1 == len(args) {
+				return nil, seen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, token.Values[0].Name, nil, "flag --%s requires a value", token.Values[0].Name)
+			}
+			i++
+			token.Values[0].Value = args[i]
+		}
+		for _, operation := range token.Values {
+			if setErr := operation.Option.Set(operation.Value); setErr != nil {
+				if operation.Option.IO {
+					return nil, seen, false, false, setErr
+				}
+				return nil, seen, false, false, newUsageError(path, cmd.UsageInvalidValue, operation.Name, setErr, "invalid value %q for flag %s: %v", operation.Value, operation.Name, setErr)
+			}
+			seen[operation.Option.Key] = true
+		}
+	}
+	return nil, seen, false, false, nil
+}
+-- expected/gnu_pm.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+
+	app "example.com/plusminus"
+	"example.com/plusminus/cmd"
+)
+
+var _ Cmd = (*GnuPm)(nil)
+
+type GnuPm struct {
+	*Gnu
+	Flags         *flag.FlagSet
+	child         bool
+	seen          map[string]bool
+	args          []string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *GnuPm) error
+}
+
+type UsageDataGnuPm struct {
+	*GnuPm
+	Recursive bool
+}
+
+func (c *GnuPm) Usage() {
+	err := executeUsage(os.Stderr, "pm_usage.txt", UsageDataGnuPm{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GnuPm) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *GnuPm) commandPath() string { return "app gnu pm" }
+
+func (c *GnuPm) UsageRecursive() {
+	err := executeUsage(os.Stderr, "pm_usage.txt", UsageDataGnuPm{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GnuPm) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"child": {Key: "child", Boolean: true, IO: false, Set: func(value string) error {
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			c.child = v
+			return nil
+		}},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"c": plusMinusOptions["child"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"child": plusMinusOptions["child"],
+	}
+	_ = plusMinusOptions
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	if err != nil {
+		return err
+	}
+	if plusMinusHelp {
+		c.Usage()
+		return nil
+	}
+	_ = seenFlags
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	// Handle vararg args
+	{
+		varArgStart := 0
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		c.args = varArgs
+	}
+
+	c.seen = seenFlags
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Gnu) NewGnuPm() *GnuPm {
+	set := flag.NewFlagSet("pm", flag.ContinueOnError)
+	v := &GnuPm{
+		Gnu:         c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.BoolVar(&v.child, "child", true, "Child-only toggle.")
+	set.BoolVar(&v.child, "c", true, "Child-only toggle.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *GnuPm) error {
+
+		app.Pm(c.child, c.seen, c.args...)
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewGnuPmDeep() })
+		v.SubCommands["deep"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewGnuPmOld() })
+		v.SubCommands["old"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/templates/app_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] [args...] <subcommand>
+
+Toggle root options.
+
+Subcommands:
+{{ $maxSize := 10 }}{{ if .Recursive }}{{ $maxSize = 11 }}{{ end }}
+    {{formatHelpRow $maxSize "effect" "Effectful provider."}}
+    {{formatHelpRow $maxSize "gnu" "GNU scope."}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "gnu pm" "Child-owned plus-minus scope."}}
+    {{formatHelpRow $maxSize "gnu pm deep" "Inherits nearest plus-minus ancestor."}}
+    {{formatHelpRow $maxSize "gnu pm old" "Deep override back to Go-flag."}}
+{{- end}}
+    {{formatHelpRow $maxSize "legacy" "Go-flag override."}}
+    {{formatHelpRow $maxSize "plus-minus" "Helper filename collision."}}
+    {{formatHelpRow $maxSize "single" "Canonical one-letter toggle."}}
+    {{formatHelpRow $maxSize "values" "Long values and conversion."}}
+    {{formatHelpRow $maxSize "help" "Print this help message"}}
+    {{formatHelpRow $maxSize "usage" "Print this usage message"}}
+
+
+Flags:
+    {{formatFlagRow 23 19 "--enable, --alpha, -a" "(default: true)" "Alpha toggle."}}
+    {{formatFlagRow 23 19 "--beta, -b" "(default: false)" "Beta toggle."}}
+    {{formatFlagRow 23 19 "--both, --ab" "(default: false)" "One long option."}}
+    {{formatFlagRow 23 19 "--count int" "(default: 7)" "Count."}}
+    {{formatFlagRow 23 19 "--label string" "(default: \"base\")" "Label."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+
+Positional Arguments:
+    {{formatHelpRow 9 "[args...]" "Literal positional tail."}}
+-- expected/root-help.stderr --
+Usage: app [flags...] [args...] <subcommand>
+
+Toggle root options.
+
+Subcommands:
+
+    effect     Effectful provider.
+    gnu        GNU scope.
+    legacy     Go-flag override.
+    plus-minus Helper filename collision.
+    single     Canonical one-letter toggle.
+    values     Long values and conversion.
+    help       Print this help message
+    usage      Print this usage message
+
+
+Flags:
+    --enable, --alpha, -a   (default: true)     Alpha toggle.
+    --beta, -b              (default: false)    Beta toggle.
+    --both, --ab            (default: false)    One long option.
+    --count int             (default: 7)        Count.
+    --label string          (default: "base")   Label.
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+
+Positional Arguments:
+    [args...] Literal positional tail.
+-- expected/effect-help.stderr --
+Usage: app [flags...] effect
+
+Effectful provider.
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    --enable, --alpha, -a   (default: true)     Alpha toggle.
+    --beta, -b              (default: false)    Beta toggle.
+    --both, --ab            (default: false)    One long option.
+    --count int             (default: 7)        Count.
+    --label string          (default: "base")   Label.
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/pm-help.stderr --
+Usage: app [flags...] gnu [flags...] pm [flags...] [args...] <subcommand>
+
+Child-owned plus-minus scope.
+
+Subcommands:
+
+    deep  Inherits nearest plus-minus ancestor.
+    old   Deep override back to Go-flag.
+    help  Print this help message
+    usage Print this usage message
+
+
+
+`app` Flags:
+    --enable, --alpha, -a   (default: true)     Alpha toggle.
+    --beta, -b              (default: false)    Beta toggle.
+    --count int             (default: 7)        Count.
+    --label string          (default: "base")   Label.
+
+`gnu` Flags:
+    -a                      (default: false)    Canonical one-letter toggle.
+    -b                      (default: false)    Second toggle.
+    --ab                    (default: false)    Long collision.
+
+`pm` Flags:
+    --child, -c             (default: true)     Child-only toggle.
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+
+Positional Arguments:
+    [args...] Literal tail.
+-- expected/app.1 --
+.\" Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+.TH APP 1 "Unknown" "Unknown" "User Commands"
+.SH NAME
+app \- Toggle root options.
+.SH SYNOPSIS
+.B app
+[alpha] [beta] [ab] [count] [label] [seen] [args]
+.SH DESCRIPTION
+Toggle root options.
+.PP
+Short boolean toggles use -x to enable and +x to disable. Long options use --name.
+
+
+
+.SH OPTIONS
+
+.TP
+.BR \-enable, \-alpha, \-a
+(bool) Alpha toggle. (default: true)
+
+.TP
+.BR \-beta, \-b
+(bool) Beta toggle. (default: false)
+
+.TP
+.BR \-both, \-ab
+(bool) One long option. (default: false)
+
+.TP
+.BR \-count
+(int) Count. (default: 7)
+
+.TP
+.BR \-label
+(string) Label. (default: base)
+
+.TP
+.BR \-seen
+(map[string]bool) Explicit inputs.
+
+.TP
+.BR \-args
+(string) Literal positional tail.
+
+
+
+.SH SEE ALSO
+.BR app (1)

@@ -44,6 +44,9 @@ The generator works by:
 
 ## Runtime Logic
 
+The experimental [plus/minus parser proposal](plus-minus-parser/) documents its
+grammar, audit, command-scope architecture and compiled acceptance cases.
+
 The generated code uses a lightweight `Command` interface.
 *   **Flags**: It uses the standard `flag` package.
 *   **Dispatch**: Commands are organized in a map/tree structure. `Execute` methods dispatch to subcommands or run the bound function.

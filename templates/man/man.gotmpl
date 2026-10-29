@@ -8,7 +8,10 @@
 .B {{ .MainCmdName }}{{ if .SubCommandSequence }} {{ .SubCommandSequence }}{{ end }}
 {{ range $i, $p := .Parameters }}{{ if $i }} {{ end }}[{{ $p.Name }}]{{ end }}
 .SH DESCRIPTION
-{{ .SubCommandDescription }}
+{{ .SubCommandDescription }}{{ if eq .ResolvedCLIParser "plus-minus" }}
+.PP
+Short boolean toggles use -x to enable and +x to disable. Long options use --name.
+{{ end }}
 {{ if .SubCommandExtendedHelp }}
 {{ .SubCommandExtendedHelp }}
 {{ end }}

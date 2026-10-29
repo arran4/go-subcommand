@@ -499,7 +499,7 @@ func resolveCLIParser(local, fallback string) (string, error) {
 	case "go-flag":
 		return backend, nil
 	case "plus-minus":
-		return "", fmt.Errorf("cli-parser %q is reserved for issue #464 and is not implemented", backend)
+		return backend, nil
 	default:
 		return "", fmt.Errorf("unsupported cli-parser %q", backend)
 	}
@@ -512,6 +512,11 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
 		}
 		cmd.ResolvedCLIParser = resolved
+		if resolved == "plus-minus" {
+			if err := validatePlusMinusParameters(cmd.MainCmdName, cmd.Parameters); err != nil {
+				return err
+			}
+		}
 		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -526,6 +531,11 @@ func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited stri
 			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
 		}
 		subCommand.ResolvedCLIParser = resolved
+		if resolved == "plus-minus" {
+			if err := validatePlusMinusParameters(subCommand.ProgName(), subCommand.Parameters); err != nil {
+				return err
+			}
+		}
 		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -624,6 +634,11 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		if commandUsesPlusMinus(cmd) {
+			if err := generateFile(collector, cmdOutDir, "plus_minus.go", "plus_minus.go.gotmpl", cmd, true); err != nil {
+				return err
+			}
+		}
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "AGENTS.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
@@ -649,6 +664,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 			SubCommandPackageName:  cmd.CommandPackageName,
 			SubCommandStructName:   "RootCmd",
 			SubCommandName:         "",
+			ResolvedCLIParser:      cmd.ResolvedCLIParser,
 		}
 		if err := generateFile(collector, cmdTemplatesDir, rootUsage.UsageFileName, "usage.txt.gotmpl", rootUsage, false); err != nil {
 			return err
@@ -802,6 +818,10 @@ func subCommandFileBaseName(subCmd *model.SubCommand) string {
 		switch fileName {
 		case "root", "main", "process", "flag_helpers", "errors":
 			return fileName + "2"
+		case "plus_minus":
+			if subCmd.Command != nil && commandUsesPlusMinus(subCmd.Command) {
+				return fileName + "2"
+			}
 		}
 	}
 	return fileName
@@ -870,6 +890,7 @@ func escapeUsageText(s string) string {
 
 func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	tmpl := template.New("").Funcs(template.FuncMap{
+		"plusMinusNames":  plusMinusParameterNames,
 		"lower":           strings.ToLower,
 		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":           strings.ToUpper,
@@ -1233,6 +1254,12 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 }
 
 func runtimeParserImports(parser string, params []*model.FunctionParameter) []templateImport {
+	if parser == "plus-minus" {
+		if plusMinusConversionNeedsStrconv(params) {
+			return []templateImport{{Path: "strconv"}}
+		}
+		return nil
+	}
 	imports := []templateImport{}
 
 	needsStrconv := false
@@ -1541,8 +1568,8 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 // GenerateCLICommand generates code using the compatible command API.
 func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser          : cliParser,
-		SuppressGoGenerate : !emitGoGenerate,
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
 	})
 }
 
@@ -1577,8 +1604,8 @@ func GenerateCLICommand(dir string, manDir string, parserName string, cliParser 
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
 func GenerateCLICommandWithGuidance(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser          : cliParser,
-		SuppressGoGenerate : !emitGoGenerate,
+		CLIParser:           cliParser,
+		SuppressGoGenerate:  !emitGoGenerate,
 		RegenerationCommand: regenerationCommand,
 	})
 }
@@ -1675,24 +1702,24 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 //	explicit:          (flag presence) Explicitly supplied parameters, keyed by Go parameter name.
 func GenerateCLIConfiguredAction(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string, configPath string, explicit map[string]bool) error {
 	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
-		Dir:               dir,
-		ManDir:            manDir,
-		ParserName:        parserName,
-		CLIParser          : cliParser,
-		Paths:             paths,
-		Recursive:         recursive,
-		Force:             force,
-		Clean:             clean,
-		ReplaceTemplates:  replaceTemplates,
-		ProjectProvenance: projectProvenance,
-		Timestamp:         timestamp,
-		EmitGoGenerate:    emitGoGenerate,
+		Dir:                 dir,
+		ManDir:              manDir,
+		ParserName:          parserName,
+		CLIParser:           cliParser,
+		Paths:               paths,
+		Recursive:           recursive,
+		Force:               force,
+		Clean:               clean,
+		ReplaceTemplates:    replaceTemplates,
+		ProjectProvenance:   projectProvenance,
+		Timestamp:           timestamp,
+		EmitGoGenerate:      emitGoGenerate,
 		RegenerationCommand: regenerationCommand,
-		ProvVersion:       provVersion,
-		ProvCommit:        provCommit,
-		ProvDate:          provDate,
-		ConfigPath:        configPath,
-		ExplicitFlags:     explicit,
+		ProvVersion:         provVersion,
+		ProvCommit:          provCommit,
+		ProvDate:            provDate,
+		ConfigPath:          configPath,
+		ExplicitFlags:       explicit,
 	})
 }
 

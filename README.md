@@ -932,6 +932,39 @@ mixture of mutually exclusive platform implementations. Compile or package the
 result using the same target values. Empty target fields retain the generator
 host defaults.
 
+#### `plus-minus` runtime parser
+
+Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
+This experimental backend remains Draft pending grammar review in #464/#505.
+Its proposed v1 uses a dedicated command-scoped parser:
+
+| Token | Meaning |
+| --- | --- |
+| `-a`, `+a` | Enable/disable short boolean a. |
+| `-ab`, `+ab` | Enable/disable short booleans a and b. |
+| `--ab` | One long option named ab, independent of the cluster. |
+| `--count=3`, `--count 3` | Value-taking long option. |
+| `--` | Preserve the rest literally, including plus/minus-looking text. |
+| first positional or child | Stop this scope; remaining argv is untouched. |
+
+Scalar toggles are last-wins, preserve absent defaults, and track explicit
+presence for both polarities and all aliases. A long boolean may take an explicit
+Go boolean value such as `--enabled=false`. `--label +a` passes the literal value
+`+a`; `word +a` keeps both positional tokens. `-h`/`--help` print help when reached;
+ordinary help, usage and version dispatch still bypass business providers.
+
+V1 rejects `--a`, nonboolean short declarations/attached values, boolean slices or custom boolean parsers,
+Unicode option names, numeric short names, help disabling/clustering, `++a` and
+assignments to clusters. Signed numeric positionals need `--` or an earlier
+ordinary positional. Duplicate aliases across parameters in one namespace are
+generation errors; short a/b and long ab deliberately coexist.
+
+See the [grammar, audit and architecture decision](docs/content/docs/advanced/plus-minus-parser.md).
+`templates/testdata/runtime/issue464.txtar` records source comments, complete
+generated artifacts/help and exact compiled invocations, including mixed-backend
+subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
+remain separate work and are not implied by this backend.
+
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 
@@ -959,7 +992,7 @@ A parent parsing its argv according to its own backend scopes the argv entirely 
 The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it strictly ignores GNU-style clustered short options. A flag invoked as `-abc` evaluates specifically as the exact declared flag named `abc` if it exists. If `abc` is undeclared, it strictly returns an unknown flag error rather than being parsed as `-a -b -c`. It handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
 All arguments preceding an explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` return FlagSet help behavior if undeclared, but explicitly declared `h` / `help` are treated as ordinary registered flags.
 
-`plus-minus` is a reserved parser name for tracking future `+x`/`-x` style toggle parser additions (tracked via #464).
+The optional `plus-minus` proposal is described above and tracked under #464.
 
 
 #### Replace CLI-Parser Backends
