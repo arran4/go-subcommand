@@ -31,13 +31,62 @@ Usage: myapp root <subcommand>
 Root command
 
 Subcommands:
-{{if .Recursive}}
-    root child1                              First child
-    root child1 grandchild                   Grandchild
-    root child2                              Second child
-{{else}}
-    child1     First child
-    child2     Second child
-{{end}}
-    help         Print this help message
-    usage        Print this usage message
+{{ $maxSize := 6 }}{{ if .Recursive }}{{ $maxSize = 22 }}{{ end }}
+    {{ $label := "child1" }}{{ if .Recursive }}{{ $label = "root child1" }}{{ end }}{{formatHelpRow $maxSize $label "First child"}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "root child1 grandchild" "Grandchild"}}
+{{- end}}
+    {{ $label := "child2" }}{{ if .Recursive }}{{ $label = "root child2" }}{{ end }}{{formatHelpRow $maxSize $label "Second child"}}
+    {{formatHelpRow $maxSize "help" "Print this help message"}}
+    {{formatHelpRow $maxSize "usage" "Print this usage message"}}
+-- rendered-40-shallow.txt --
+Usage: myapp root <subcommand>
+
+Root command
+
+Subcommands:
+
+    child1 First child
+    child2 Second child
+    help   Print this help message
+    usage  Print this usage message
+-- rendered-40-recursive.txt --
+Usage: myapp root <subcommand>
+
+Root command
+
+Subcommands:
+
+    root child1
+        First child
+    root child1 grandchild
+        Grandchild
+    root child2
+        Second child
+    help
+        Print this help message
+    usage
+        Print this usage message
+-- rendered-80-shallow.txt --
+Usage: myapp root <subcommand>
+
+Root command
+
+Subcommands:
+
+    child1 First child
+    child2 Second child
+    help   Print this help message
+    usage  Print this usage message
+-- rendered-80-recursive.txt --
+Usage: myapp root <subcommand>
+
+Root command
+
+Subcommands:
+
+    root child1            First child
+    root child1 grandchild Grandchild
+    root child2            Second child
+    help                   Print this help message
+    usage                  Print this usage message

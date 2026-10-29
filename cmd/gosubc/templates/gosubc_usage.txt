@@ -2,33 +2,25 @@
 Usage: gosubc <subcommand>
 
 Subcommands:
-{{if .Recursive}}
-    format                                   formats the subcommand definitions
-    format-source-comments                   formats source comments to match gofmt style
-    generate                                 generates the subcommand code
-    goreleaser                               generates goreleaser configuration and workflows
-    list                                     lists the subcommands
-    scan                                     lists all available subcommands and their flags
-    skill
-    skill inspect                            inspects an AI agent skill.
-    skill install                            installs an AI agent skill.
-    skill list                               lists installed AI agent skills.
-    skill remove                             removes an AI agent skill.
-    skill update                             updates an AI agent skill.
-    syntax                                   prints the available forms of function comments
-    template                                 Manage generation templates
-    template export                          Exports the built-in templates
-    template layout                          Displays the generation template layout
-    validate                                 validates the subcommand code
-{{else}}
-    format     formats the subcommand definitions
-    format-source-comments formats source comments to match gofmt style
-    generate   generates the subcommand code
-    goreleaser generates goreleaser configuration and workflows
-    list       lists the subcommands
-    scan       lists all available subcommands and their flags
-    skill
-    syntax     prints the available forms of function comments
-    template   Manage generation templates
-    validate   validates the subcommand code
-{{end}}
+{{ $maxSize := 22 }}{{ if .Recursive }}{{ $maxSize = 22 }}{{ end }}
+    {{formatHelpRow $maxSize "format" "formats the subcommand definitions"}}
+    {{formatHelpRow $maxSize "format-source-comments" "formats source comments to match gofmt style"}}
+    {{formatHelpRow $maxSize "generate" "generates the subcommand code"}}
+    {{formatHelpRow $maxSize "goreleaser" "generates goreleaser configuration and workflows"}}
+    {{formatHelpRow $maxSize "list" "lists the subcommands"}}
+    {{formatHelpRow $maxSize "scan" "lists all available subcommands and their flags"}}
+    {{formatHelpRow $maxSize "skill" ""}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "skill inspect" "inspects an AI agent skill."}}
+    {{formatHelpRow $maxSize "skill install" "installs an AI agent skill."}}
+    {{formatHelpRow $maxSize "skill list" "lists installed AI agent skills."}}
+    {{formatHelpRow $maxSize "skill remove" "removes an AI agent skill."}}
+    {{formatHelpRow $maxSize "skill update" "updates an AI agent skill."}}
+{{- end}}
+    {{formatHelpRow $maxSize "syntax" "prints the available forms of function comments"}}
+    {{formatHelpRow $maxSize "template" "Manage generation templates"}}
+{{- if .Recursive}}
+    {{formatHelpRow $maxSize "template export" "Exports the built-in templates"}}
+    {{formatHelpRow $maxSize "template layout" "Displays the generation template layout"}}
+{{- end}}
+    {{formatHelpRow $maxSize "validate" "validates the subcommand code"}}
