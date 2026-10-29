@@ -3,6 +3,7 @@ package go_subcommand
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -17,7 +18,142 @@ import (
 
 	"github.com/arran4/go-subcommand/model"
 	"github.com/arran4/go-subcommand/parsers"
+	"golang.org/x/tools/txtar"
 )
+
+//go:embed templates/testdata/flag_presence.go.txtar
+var flagPresenceFixture []byte
+
+func TestGenerateFlagPresence(t *testing.T) {
+	archive := txtar.Parse(flagPresenceFixture)
+	input := fstest.MapFS{}
+	var templateGolden []byte
+	var invocations []struct {
+		Args          []string
+		Stdout        string
+		Status        int
+		ErrorContains string
+		Help          bool
+		GNUOnly       bool
+	}
+	for _, f := range archive.Files {
+		if f.Name == "output.go" {
+			templateGolden = f.Data
+		}
+		if name, ok := strings.CutPrefix(f.Name, "input/"); ok {
+			input[name] = &fstest.MapFile{Data: f.Data}
+		}
+		if f.Name == "expected/invocations.json" {
+			if err := json.Unmarshal(f.Data, &invocations); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(input) == 0 || len(invocations) == 0 {
+		t.Fatal("incomplete runtime fixture")
+	}
+	config, err := loadGenerateConfigMarkdown("gosubc.mdc", input["gosubc.mdc"].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"gnu", "go-flag", "gnu-template-golden"} {
+		t.Run(backend, func(t *testing.T) {
+			parserBackend := strings.TrimSuffix(backend, "-template-golden")
+			values := generateCLIValues{cliParser: parserBackend, emitGoGenerate: true}
+			values.applyConfig(config, map[string]bool{"cliParser": true})
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: values.recursive}, false, false, nil, values.projectProvenance, values.timestamp, "", "", "", input, GenerateOptions{CLIParser: values.cliParser, SuppressGoGenerate: !values.emitGoGenerate}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if bytes.Contains(files["cmd/app/main.go"], []byte("//go:generate")) {
+				t.Fatal("configuration did not suppress nested generation")
+			}
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("generation is nondeterministic")
+			}
+			if backend == "gnu-template-golden" {
+				files["cmd/app/child.go"] = templateGolden
+			}
+			for _, name := range []string{"cmd/app/root.go", "cmd/app/child.go"} {
+				code := string(files[name])
+				if !strings.Contains(code, "c.seen = seenFlags") || strings.Contains(code, `set.Func("seen"`) {
+					t.Fatalf("presence was not supplied by parser in %s", name)
+				}
+			}
+			// Materialize only for the actual Go compiler and executable boundary.
+			dir := t.TempDir()
+			for name, f := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(f.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				if invocation.GNUOnly && parserBackend != "gnu" {
+					continue
+				}
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				if status != invocation.Status || stdout.String() != invocation.Stdout {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), stderr.String())
+				}
+				if invocation.Help {
+					if !strings.Contains(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "--seen") {
+						t.Errorf("help: %q", stderr.String())
+					}
+				} else if invocation.ErrorContains != "" {
+					if !strings.Contains(stderr.String(), invocation.ErrorContains) {
+						t.Errorf("%v: stderr=%q", invocation.Args, stderr.String())
+					}
+				} else if stderr.Len() != 0 {
+					t.Errorf("%v: unexpected stderr=%q", invocation.Args, stderr.String())
+				}
+			}
+		})
+	}
+	for _, tc := range []struct{ name, from, to string }{
+		{"wrong type", "seen map[string]bool", "seen string"},
+		{"alias", "(flag presence)", "--seen (flag presence)"},
+		{"required", "(flag presence)", "(flag presence; required)"},
+		{"default", "(flag presence)", "(flag presence; default: nil)"},
+		{"inherited", "(flag presence)", "(flag presence; inherited)"},
+		{"provider first", "(flag presence)", "(generator: Build; flag presence)"},
+		{"provider last", "(flag presence)", "(flag presence; generator: Build)"},
+		{"parser", "(flag presence)", "(flag presence; parser: Parse)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := fstest.MapFS{
+				"go.mod": input["go.mod"],
+				"app.go": &fstest.MapFile{Data: []byte(strings.ReplaceAll(string(input["app.go"].Data), tc.from, tc.to))},
+			}
+			err := GenerateWithFS(invalid, NewCollectingFileWriter(), ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", invalid)
+			if err == nil {
+				t.Fatal("accepted invalid flag presence annotation")
+			}
+		})
+	}
+}
 
 //go:embed testdata/issue_runtime.go
 var issueRuntimeSource string
@@ -33,6 +169,46 @@ var aliasIOSource string
 
 //go:embed testdata/alias_root_io.go
 var aliasRootIOSource string
+
+// oldStyleFileWriter models an external implementation compiled against the
+// FileWriter interface before generated-file migration needed deletion.
+type oldStyleFileWriter struct {
+	delegate *CollectingFileWriter
+}
+
+func (w oldStyleFileWriter) WriteFile(path string, content []byte, perm os.FileMode) error {
+	return w.delegate.WriteFile(path, content, perm)
+}
+
+func (w oldStyleFileWriter) MkdirAll(path string, perm os.FileMode) error {
+	return w.delegate.MkdirAll(path, perm)
+}
+
+func (w oldStyleFileWriter) ReadFile(path string) ([]byte, error) {
+	return w.delegate.ReadFile(path)
+}
+
+func (w oldStyleFileWriter) ReadDir(path string, ops ...any) ([]fs.DirEntry, error) {
+	return w.delegate.ReadDir(path, ops...)
+}
+
+var _ FileWriter = oldStyleFileWriter{}
+
+// caseAliasWriter simulates the identity behaviour of a case-insensitive
+// filesystem while retaining the operation log supplied by CollectingFileWriter.
+type caseAliasWriter struct {
+	*CollectingFileWriter
+	renamed bool
+}
+
+func (w *caseAliasWriter) SameFile(path1, path2 string) (bool, error) {
+	return strings.EqualFold(path1, path2), nil
+}
+
+func (w *caseAliasWriter) Rename(oldPath, newPath string) error {
+	w.renamed = true
+	return w.CollectingFileWriter.Rename(oldPath, newPath)
+}
 
 //go:embed testdata/issue464_plus_minus.go
 var issue464PlusMinusSource string
@@ -110,6 +286,68 @@ func TestGenerate_Recursive(t *testing.T) {
 	}
 	if _, ok := writer.Files["cmd/app/sub.go"]; ok {
 		t.Errorf("Expected sub.go NOT to be generated with recursive=false")
+	}
+}
+
+func TestGenerateAgentGuidanceMigration(t *testing.T) {
+	input := fstest.MapFS{
+		"go.mod": &fstest.MapFile{Data: []byte("module example.com/guidance\n\ngo 1.22\n")},
+		"app.go": &fstest.MapFile{Data: []byte("package app\n\n// Root is a subcommand `app`\nfunc Root() {}\n")},
+	}
+	writer := NewCollectingFileWriter()
+	writer.Files["cmd/agents.md"] = []byte(generatedAgentGuidanceHeader + "\nlegacy generated guidance\n")
+	if err := GenerateWithFS(input, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", GenerateOptions{RegenerationCommand: "./scripts/generate-cli.sh"}); err != nil {
+		t.Fatalf("GenerateWithFS: %v", err)
+	}
+	guidance, ok := writer.Files["cmd/AGENTS.md"]
+	if !ok {
+		t.Fatal("AGENTS.md was not generated")
+	}
+	if strings.Contains(string(guidance), "@latest") || !strings.Contains(string(guidance), "./scripts/generate-cli.sh") {
+		t.Fatalf("generated guidance did not contain safe pinned advice:\n%s", guidance)
+	}
+	if _, ok := writer.Files["cmd/agents.md"]; ok {
+		t.Fatal("generated legacy agents.md was not removed")
+	}
+
+	customWriter := NewCollectingFileWriter()
+	customWriter.Files["cmd/agents.md"] = []byte("custom agent guidance")
+	err := GenerateWithFS(input, customWriter, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "not generated by gosubc") {
+		t.Fatalf("custom legacy guidance error = %v, want ownership diagnostic", err)
+	}
+
+	mentionedMarkerWriter := NewCollectingFileWriter()
+	mentionedMarkerWriter.Files["cmd/agents.md"] = []byte("This hand-written guide mentions " + generatedAgentGuidanceHeader + ".")
+	err = GenerateWithFS(input, mentionedMarkerWriter, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "not generated by gosubc") {
+		t.Fatalf("marker mentioned in custom guidance error = %v, want ownership diagnostic", err)
+	}
+
+	oldWriterData := NewCollectingFileWriter()
+	oldWriterData.Files["cmd/agents.md"] = []byte(generatedAgentGuidanceHeader + "\nlegacy generated guidance\n")
+	err = GenerateWithFS(input, oldStyleFileWriter{delegate: oldWriterData}, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "does not implement FileRemover") {
+		t.Fatalf("old FileWriter migration error = %v, want FileRemover diagnostic", err)
+	}
+	if _, ok := oldWriterData.Files["cmd/AGENTS.md"]; ok {
+		t.Fatal("old FileWriter migration wrote output before rejecting unsupported cleanup")
+	}
+
+	caseAliasData := NewCollectingFileWriter()
+	caseAliasData.Files["cmd/agents.md"] = []byte(generatedAgentGuidanceHeader + "\nlegacy generated guidance\n")
+	caseAlias := &caseAliasWriter{CollectingFileWriter: caseAliasData}
+	if err := GenerateWithFS(input, caseAlias, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("case-only migration: %v", err)
+	}
+	if !caseAlias.renamed {
+		t.Fatal("case-only migration did not rename the legacy file")
+	}
+	if _, ok := caseAlias.Files["cmd/agents.md"]; ok {
+		t.Fatal("case-only migration left the legacy spelling behind")
+	}
+	if _, ok := caseAlias.Files["cmd/AGENTS.md"]; !ok {
+		t.Fatal("case-only migration removed canonical AGENTS.md")
 	}
 }
 
@@ -1156,7 +1394,7 @@ func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
 	first := NewCollectingFileWriter()
 	generate(first)
 	want := []string{
-		"cmd/agents.md",
+		"cmd/AGENTS.md",
 		"cmd/app/child.go",
 		"cmd/app/child_test.go",
 		"cmd/app/flag_helpers.go",

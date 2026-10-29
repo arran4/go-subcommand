@@ -366,7 +366,9 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	{{- end }}
 	{{- range .Parameters }}
-	{{- if .HasGenerator }}
+	{{- if .IsFlagPresence }}
+	c.{{.Name}} = seenFlags
+	{{- else if .HasGenerator }}
 	{
 		v, err := {{.GeneratorCall}}
 		if err != nil {

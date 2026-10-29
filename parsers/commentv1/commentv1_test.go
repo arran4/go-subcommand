@@ -243,3 +243,58 @@ func TestParseGoFilesCliParserMetadata(t *testing.T) {
 		t.Fatalf("child.CLIParser = %q, want go-flag", got)
 	}
 }
+
+func TestParseSubCommandCommentsHyphenatedProseDoesNotCreateFlags(t *testing.T) {
+	text := `Generate is a subcommand ` + "`gosubc generate`" + `
+Flags:
+	configPath: --config (default: "") Optional version-one JSON generation configuration.
+	timeout: --timeout (default: 30) Wait for a zero-value or non-negative timeout.
+	format: -f --format (default: "raw") Uses built-in formats with 0-based indexing.
+`
+	_, _, _, _, _, params, ok := ParseSubCommandComments(text)
+	if !ok {
+		t.Fatal("ParseSubCommandComments returned !ok")
+	}
+
+	configParam, ok := params["configPath"]
+	if !ok {
+		t.Fatal("missing configPath parameter")
+	}
+	for _, flag := range configParam.Flags {
+		if flag == "one" {
+			t.Fatalf("configPath has unintended flag alias 'one': flags = %v", configParam.Flags)
+		}
+	}
+	if len(configParam.Flags) != 1 || configParam.Flags[0] != "config" {
+		t.Fatalf("configPath flags = %v, want ['config']", configParam.Flags)
+	}
+	if !strings.Contains(configParam.Description, "version-one") {
+		t.Fatalf("configPath description lost 'version-one': got %q", configParam.Description)
+	}
+
+	timeoutParam, ok := params["timeout"]
+	if !ok {
+		t.Fatal("missing timeout parameter")
+	}
+	for _, flag := range timeoutParam.Flags {
+		if flag == "value" || flag == "negative" {
+			t.Fatalf("timeout has unintended flag alias %q: flags = %v", flag, timeoutParam.Flags)
+		}
+	}
+	if !strings.Contains(timeoutParam.Description, "zero-value") {
+		t.Fatalf("timeout description lost 'zero-value': got %q", timeoutParam.Description)
+	}
+
+	formatParam, ok := params["format"]
+	if !ok {
+		t.Fatal("missing format parameter")
+	}
+	for _, flag := range formatParam.Flags {
+		if flag == "in" || flag == "based" {
+			t.Fatalf("format has unintended flag alias %q: flags = %v", flag, formatParam.Flags)
+		}
+	}
+	if !strings.Contains(formatParam.Description, "built-in") || !strings.Contains(formatParam.Description, "0-based") {
+		t.Fatalf("format description lost prose: got %q", formatParam.Description)
+	}
+}

@@ -723,7 +723,17 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
-						if len(fp.FlagAliases) == 0 {
+						if strings.Contains(fp.Type, "map[") && !fp.IsFlagPresence() {
+							return fmt.Errorf("parameter %s: unsupported type %s without (flag presence)", fp.Name, fp.Type)
+						}
+						for _, candidate := range candidates {
+							if candidate.FlagPresence {
+								if fp.Generator.Type != model.SourceTypeFlagPresence || fp.Generator.Func != nil {
+									return fmt.Errorf("parameter %s: flag presence cannot be combined with a provider", fp.Name)
+								}
+							}
+						}
+						if len(fp.FlagAliases) == 0 && !fp.IsFlagPresence() {
 							kebab := parsers.ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
@@ -864,15 +874,15 @@ func resolveDefaultExpressionImport(value string, imports []*ast.ImportSpec) *mo
 }
 
 var (
-	reParamDefinition = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
-	reImplicitCheck   = regexp.MustCompile(`@\d+|\.\.\.`)
-	reImplicitFormat  = regexp.MustCompile(`^(\w+):\s+(.*)$`)
-	reAlias           = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
-	reDefaultValue    = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?|[^),]+))`)
-	rePositionalArg   = regexp.MustCompile(`@(\d+)`)
-	reVarArgRange     = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
-	reFlag            = regexp.MustCompile(`-[\w-]+`)
-	reCliParser       = regexp.MustCompile(`(?i)^CLI-Parser:\s*([A-Za-z0-9][A-Za-z0-9-]*)\s*$`)
+	reParamDefinition       = regexp.MustCompile(`^([\w]+)(?:[:\s])\s*(.*)$`)
+	reImplicitCheck         = regexp.MustCompile(`@\d+|\.\.\.`)
+	reImplicitFormat        = regexp.MustCompile(`^(\w+):\s+(.*)$`)
+	reAlias                 = regexp.MustCompile(`\((?i:aliases|alias|aka):\s*([^)]+)\)`)
+	reDefaultValue          = regexp.MustCompile(`(?:default:\s*)((?:"[^"]*"|[a-zA-Z_][a-zA-Z0-9_.]*(?:\([^)]*\))?|[^),]+))`)
+	rePositionalArg         = regexp.MustCompile(`@(\d+)`)
+	reVarArgRange           = regexp.MustCompile(`(\d+)\.\.\.(\d+)|(\.\.\.)`)
+	reFlag                  = regexp.MustCompile(`(^|[\s,;:(])(--?[a-zA-Z0-9][\w-]*)`)
+	reCliParser             = regexp.MustCompile(`(?i)^CLI-Parser:\s*([A-Za-z0-9][A-Za-z0-9-]*)\s*$`)
 	reDefaultRouteDirective = regexp.MustCompile(`(?i)^(?:default\s+route|default\s+command):\s*(.+)$`)
 	reDefaultDirective      = regexp.MustCompile(`(?i)^default:\s*(.+)$`)
 	reDefaultRouteInline    = regexp.MustCompile(`\((?i:default\s+route|default\s+command):\s*([^)]+)\)`)
@@ -880,6 +890,7 @@ var (
 )
 
 type ParsedParam struct {
+	FlagPresence       bool
 	Flags              []string
 	Default            string
 	HasDefaultValue    bool
@@ -1146,7 +1157,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent"}
+	knownSingles := []string{"required", "inherited", "from parent", "flag presence"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1297,6 +1308,9 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		}
 
 		switch key {
+		case "flag presence":
+			p.FlagPresence = true
+			p.Generator.Type = model.SourceTypeFlagPresence
 		case AttributeRequired:
 			p.Required = true
 		case AttributeGenerator:
@@ -1417,11 +1431,12 @@ func parseParamDetails(text string) ParsedParam {
 		text = reVarArgRange.ReplaceAllString(text, "")
 	}
 
-	flagMatches := reFlag.FindAllString(text, -1)
+	flagMatches := reFlag.FindAllStringSubmatch(text, -1)
 
 	seenFlags := make(map[string]bool)
-	for _, f := range flagMatches {
-		stripped := strings.TrimLeft(f, "-")
+	for _, match := range flagMatches {
+		flag := match[2]
+		stripped := strings.TrimLeft(flag, "-")
 		if !seenFlags[stripped] {
 			p.Flags = append(p.Flags, stripped)
 			seenFlags[stripped] = true
@@ -1435,7 +1450,7 @@ func parseParamDetails(text string) ParsedParam {
 		return p.Flags[i] < p.Flags[j]
 	})
 
-	clean := reFlag.ReplaceAllString(text, "")
+	clean := reFlag.ReplaceAllString(text, "$1")
 
 	clean = strings.ReplaceAll(clean, "()", "")
 	clean = strings.TrimSpace(clean)
@@ -1458,6 +1473,16 @@ func formatType(expr ast.Expr) (string, error) {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name, nil
+	case *ast.MapType:
+		key, err := formatType(t.Key)
+		if err != nil {
+			return "", err
+		}
+		value, err := formatType(t.Value)
+		if err != nil {
+			return "", err
+		}
+		return "map[" + key + "]" + value, nil
 	case *ast.StarExpr:
 		s, err := formatType(t.X)
 		if err != nil {

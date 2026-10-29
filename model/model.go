@@ -55,6 +55,8 @@ type SourceType string
 const (
 	SourceTypeFlag      SourceType = "flag"
 	SourceTypeGenerator SourceType = "generator"
+	// SourceTypeFlagPresence supplies the parser's per-invocation presence map.
+	SourceTypeFlagPresence SourceType = "flag-presence"
 )
 
 type ParserType string
@@ -124,6 +126,8 @@ type Command struct {
 	// SuppressGoGenerate omits the nested regeneration directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
+	// RegenerationCommand is the documented project-owned generation command.
+	RegenerationCommand string
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
@@ -413,6 +417,9 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	var hasOptionalPos bool
 	var hasVarArg bool
 	for _, p := range params {
+		if p.IsFlagPresence() && (p.Type != "map[string]bool" || p.IsPositional || p.IsVarArg || p.Required || p.HasDefaultValue || p.Inherited || len(p.FlagAliases) != 0 || p.Parser.Type != "" || p.Generator.Func != nil) {
+			return fmt.Errorf("parameter %q: flag presence requires map[string]bool without positional, inherited, required, default, parser or provider options", p.Name)
+		}
 		if !p.IsPositional {
 			continue
 		}
@@ -1276,7 +1283,11 @@ func (sc *SubCommand) MaxUsageDefaultLength() int {
 }
 
 func (p *FunctionParameter) HasGenerator() bool {
-	return p.Generator.Type == SourceTypeGenerator
+	return p.Generator.Type == SourceTypeGenerator || p.IsFlagPresence()
+}
+
+func (p *FunctionParameter) IsFlagPresence() bool {
+	return p.Generator.Type == SourceTypeFlagPresence
 }
 
 func (p *FunctionParameter) GeneratorCall() string {
