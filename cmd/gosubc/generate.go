@@ -36,6 +36,8 @@ type Generate struct {
 	provVersion         string
 	provCommit          string
 	provDate            string
+	configPath          string
+	explicit            map[string]bool
 	SubCommands         map[string]func() Cmd
 	CommandAction       func(c *Generate) error
 }
@@ -61,6 +63,7 @@ func (c *Generate) UsageRecursive() {
 
 func (c *Generate) Execute(args []string) (err error) {
 	var remainingArgs []string
+	seenFlags := make(map[string]bool)
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -88,6 +91,7 @@ func (c *Generate) Execute(args []string) (err error) {
 			switch name {
 
 			case "dir":
+				seenFlags["dir"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -99,6 +103,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.dir = value
 
 			case "manDir", "man-dir":
+				seenFlags["manDir"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -110,6 +115,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.manDir = value
 
 			case "parserName", "parser-name":
+				seenFlags["parserName"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -121,6 +127,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.parserName = value
 
 			case "cliParser", "cli-parser":
+				seenFlags["cliParser"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -132,6 +139,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.cliParser = value
 
 			case "paths", "path":
+				seenFlags["paths"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -143,6 +151,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.paths = append(c.paths, value)
 
 			case "recursive":
+				seenFlags["recursive"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -154,6 +163,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "force":
+				seenFlags["force"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -165,6 +175,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "clean":
+				seenFlags["clean"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -176,6 +187,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "replaceTemplates", "replace-template":
+				seenFlags["replaceTemplates"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -187,6 +199,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.replaceTemplates = append(c.replaceTemplates, value)
 
 			case "projectProvenance", "project-provenance", "project":
+				seenFlags["projectProvenance"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -198,6 +211,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "timestamp":
+				seenFlags["timestamp"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -209,6 +223,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "emitGoGenerate", "emit-go-generate":
+				seenFlags["emitGoGenerate"] = true
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -220,6 +235,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				}
 
 			case "regenerationCommand", "regenerate-command":
+				seenFlags["regenerationCommand"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -231,6 +247,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.regenerationCommand = value
 
 			case "provVersion", "prov-version":
+				seenFlags["provVersion"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -242,6 +259,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.provVersion = value
 
 			case "provCommit", "prov-commit":
+				seenFlags["provCommit"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -253,6 +271,7 @@ func (c *Generate) Execute(args []string) (err error) {
 				c.provCommit = value
 
 			case "provDate", "prov-date":
+				seenFlags["provDate"] = true
 				if !hasValue {
 					if i+1 < len(args) {
 						value = args[i+1]
@@ -262,6 +281,18 @@ func (c *Generate) Execute(args []string) (err error) {
 					}
 				}
 				c.provDate = value
+
+			case "configPath", "config":
+				seenFlags["configPath"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return fmt.Errorf("flag %s requires a value", name)
+					}
+				}
+				c.configPath = value
 			default:
 				return fmt.Errorf("unknown flag: --%s", name)
 			}
@@ -292,6 +323,7 @@ func (c *Generate) Execute(args []string) (err error) {
 		}
 	}
 
+	c.explicit = seenFlags
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
 			return err
@@ -343,11 +375,13 @@ func (c *RootCmd) NewGenerate() *Generate {
 	set.StringVar(&v.provCommit, "prov-commit", "", "Overwrite provenance commit")
 
 	set.StringVar(&v.provDate, "prov-date", "", "Overwrite provenance date")
+
+	set.StringVar(&v.configPath, "config", "", "Optional generation configuration file.")
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Generate) error {
 
-		err := go_subcommand.GenerateCLICommandWithGuidance(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.regenerationCommand, c.provVersion, c.provCommit, c.provDate)
+		err := go_subcommand.GenerateCLIConfiguredAction(c.dir, c.manDir, c.parserName, c.cliParser, c.paths, c.recursive, c.force, c.clean, c.replaceTemplates, c.projectProvenance, c.timestamp, c.emitGoGenerate, c.regenerationCommand, c.provVersion, c.provCommit, c.provDate, c.configPath, c.explicit)
 		if err != nil {
 			if errors.Is(err, cmd.ErrPrintHelp) {
 				c.Usage()

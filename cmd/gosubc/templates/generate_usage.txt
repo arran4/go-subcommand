@@ -34,3 +34,4 @@ Flags:
     {{formatFlagRow 33 24 "--prov-version string" "(default: \"\")" "Overwrite provenance version"}}
     {{formatFlagRow 33 24 "--prov-commit string" "(default: \"\")" "Overwrite provenance commit"}}
     {{formatFlagRow 33 24 "--prov-date string" "(default: \"\")" "Overwrite provenance date"}}
+    {{formatFlagRow 33 24 "--config string" "(default: \"\")" "Optional generation configuration file."}}

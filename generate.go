@@ -1494,12 +1494,12 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 // GenerateCLICommand generates code using the compatible command API.
 func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser:          cliParser,
-		SuppressGoGenerate: !emitGoGenerate,
+		CLIParser          : cliParser,
+		SuppressGoGenerate : !emitGoGenerate,
 	})
 }
 
-// GenerateCLICommandWithGuidance is a subcommand `gosubc generate` generates the subcommand code
+// GenerateCLICommandWithGuidance is the backwards-compatible explicit guidance entry point.
 // Aliases: gen
 //
 // This command supports customizing templates via the --replace-template flag.
@@ -1530,10 +1530,127 @@ func GenerateCLICommand(dir string, manDir string, parserName string, cliParser 
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
 func GenerateCLICommandWithGuidance(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser:           cliParser,
-		SuppressGoGenerate:  !emitGoGenerate,
+		CLIParser          : cliParser,
+		SuppressGoGenerate : !emitGoGenerate,
 		RegenerationCommand: regenerationCommand,
 	})
+}
+
+// GenerateCLIOptions specifies configuration and explicit flag overrides for code generation.
+type GenerateCLIOptions struct {
+	Dir                 string
+	ManDir              string
+	ParserName          string
+	CLIParser           string
+	Paths               []string
+	Recursive           bool
+	Force               bool
+	Clean               bool
+	ReplaceTemplates    []string
+	ProjectProvenance   bool
+	Timestamp           bool
+	EmitGoGenerate      bool
+	ProvVersion         string
+	ProvCommit          string
+	ProvDate            string
+	ConfigPath          string
+	RegenerationCommand string
+	ExplicitFlags       map[string]bool
+}
+
+// GenerateCLIConfiguredWithOptions performs code generation with typed options and explicit flag overrides.
+// It never reads ambient process arguments (os.Args).
+func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
+	values := generateCLIValues{
+		dir:               opts.Dir,
+		manDir:            opts.ManDir,
+		parserName:        opts.ParserName,
+		cliParser:         opts.CLIParser,
+		paths:             opts.Paths,
+		recursive:         opts.Recursive,
+		force:             opts.Force,
+		clean:             opts.Clean,
+		replaceTemplates:  opts.ReplaceTemplates,
+		projectProvenance: opts.ProjectProvenance,
+		timestamp:         opts.Timestamp,
+		emitGoGenerate:    opts.EmitGoGenerate,
+		provVersion:       opts.ProvVersion,
+		provCommit:        opts.ProvCommit,
+		provDate:          opts.ProvDate,
+	}
+	if opts.ConfigPath != "" {
+		config, err := LoadGenerateConfig(opts.ConfigPath)
+		if err != nil {
+			return err
+		}
+		values.applyConfig(config, opts.ExplicitFlags)
+	}
+	return generateCLIWithOptions(values.dir, values.manDir, values.parserName, values.paths, values.recursive, values.force, values.clean, values.replaceTemplates, values.projectProvenance, values.timestamp, values.provVersion, values.provCommit, values.provDate, GenerateOptions{
+		CLIParser          : values.cliParser,
+		SuppressGoGenerate : !values.emitGoGenerate,
+		RegenerationCommand: opts.RegenerationCommand,
+	})
+}
+
+// GenerateCLIConfiguredAction is a subcommand `gosubc generate` generates the subcommand code
+// Aliases: gen
+//
+// This command supports customizing templates via the --replace-template flag.
+// You can provide multiple replacements in the following formats:
+//
+//	--replace-template <alias>=<file>    Replace a specific template by its alias (e.g., usage=myusage.gotmpl)
+//	--replace-template <folder>          Overlay a folder containing templates onto the default templates
+//	--replace-template <txtar>           Overlay a txtar archive containing templates
+//
+// Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
+// Flags:
+//
+//	dir:		--dir		(default: ".")		Project root directory containing go.mod
+//	manDir:		--man-dir	(default: "")		Directory to generate man pages in optional
+//	parserName:	--parser-name	(default: "commentv1")	Name of the parser to use
+//	cliParser:	--cli-parser	(default: "gnu")	Name of the runtime CLI parser backend to use
+//	paths:		--path		(default: nil)		Paths to search for subcommands (relative to dir)
+//	recursive:	--recursive	(default: true)		Search recursively
+//	force:		--force		(default: false)	Force overwrite of files not generated by gosubc
+//	clean:		--clean		(default: false)	Clean/remove generated files before generating
+//	replaceTemplates:	--replace-template			Replace templates. Formats: <alias>=<file>, <folder>, <txtar>.
+//	projectProvenance: --project-provenance, --project (default: true) Include target Git metadata in provenance
+//	timestamp:         --timestamp (default: true) Include timestamp in provenance
+//	emitGoGenerate:    --emit-go-generate (default: true) Emit nested //go:generate directive in generated main.go
+//	provVersion:       --prov-version    (default: "") Overwrite provenance version
+//	provCommit:        --prov-commit     (default: "") Overwrite provenance commit
+//	provDate:          --prov-date       (default: "") Overwrite provenance date
+//	regenerationCommand: --regenerate-command (default: "") Project pinned regeneration command for generated AGENTS.md
+//	configPath:        --config (default: "") Optional generation configuration file.
+//	explicit:          (flag presence) Explicitly supplied parameters, keyed by Go parameter name.
+func GenerateCLIConfiguredAction(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string, configPath string, explicit map[string]bool) error {
+	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
+		Dir:               dir,
+		ManDir:            manDir,
+		ParserName:        parserName,
+		CLIParser          : cliParser,
+		Paths:             paths,
+		Recursive:         recursive,
+		Force:             force,
+		Clean:             clean,
+		ReplaceTemplates:  replaceTemplates,
+		ProjectProvenance: projectProvenance,
+		Timestamp:         timestamp,
+		EmitGoGenerate:    emitGoGenerate,
+		RegenerationCommand: regenerationCommand,
+		ProvVersion:       provVersion,
+		ProvCommit:        provCommit,
+		ProvDate:          provDate,
+		ConfigPath:        configPath,
+		ExplicitFlags:     explicit,
+	})
+}
+
+// GenerateCLIConfiguredCommand generates with configuration overriding the supplied
+// fallback values. It never reads process arguments. To explicitly override file
+// settings, use GenerateCLIConfiguredWithOptions and its ExplicitFlags field.
+func GenerateCLIConfiguredCommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string, configPath string) error {
+	return GenerateCLIConfiguredAction(dir, manDir, parserName, cliParser, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, emitGoGenerate, "", provVersion, provCommit, provDate, configPath, nil)
 }
 
 func generateCLIWithOptions(dir string, manDir string, parserName string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, provVersion string, provCommit string, provDate string, options GenerateOptions) error {
