@@ -600,9 +600,7 @@ The generator reads the target module's `go` directive and adapts its output:
 | Go 1.21+ | `any` and `slices.Contains` |
 
 Generation fails before writing output when a target module declares Go 1.15 or
-older. The compatibility forms are regression-tested as generated source; the
-local campaign environment currently has a Go 1.25.0 compiler, so it does not
-claim binary compilation with unavailable historical toolchains.
+older. The compatibility forms are regression-tested as generated source.
 * `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
 * `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
 * parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
