@@ -893,6 +893,7 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"paramImportsExcept": parameterImportsExcept,
 		"commandImports":     commandImports,
 		"subCommandImports":  subCommandImports,
+		"orderedGenerators":  model.OrderedGenerators,
 		"minGoVersion": func(min, current string) bool {
 			return semver.Compare("v"+current, "v"+min) >= 0
 		},
@@ -1184,6 +1185,9 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	}
 
 	for _, p := range cmd.Parameters {
+		if p.HasGenerator() && !p.IsFlagPresence() {
+			imports = append(imports, templateImport{Path: "io"})
+		}
 		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
 			imports = append(imports, templateImport{Path: "time"})
 		}
@@ -1541,8 +1545,8 @@ func GenerateCLI(dir string, manDir string, parserName string, cliParser string,
 // GenerateCLICommand generates code using the compatible command API.
 func GenerateCLICommand(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser          : cliParser,
-		SuppressGoGenerate : !emitGoGenerate,
+		CLIParser:          cliParser,
+		SuppressGoGenerate: !emitGoGenerate,
 	})
 }
 
@@ -1577,8 +1581,8 @@ func GenerateCLICommand(dir string, manDir string, parserName string, cliParser 
 //	provDate:          --prov-date       (default: "") Overwrite provenance date
 func GenerateCLICommandWithGuidance(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string) error {
 	return generateCLIWithOptions(dir, manDir, parserName, paths, recursive, force, clean, replaceTemplates, projectProvenance, timestamp, provVersion, provCommit, provDate, GenerateOptions{
-		CLIParser          : cliParser,
-		SuppressGoGenerate : !emitGoGenerate,
+		CLIParser:           cliParser,
+		SuppressGoGenerate:  !emitGoGenerate,
 		RegenerationCommand: regenerationCommand,
 	})
 }
@@ -1675,24 +1679,24 @@ func GenerateCLIConfiguredWithOptions(opts GenerateCLIOptions) error {
 //	explicit:          (flag presence) Explicitly supplied parameters, keyed by Go parameter name.
 func GenerateCLIConfiguredAction(dir string, manDir string, parserName string, cliParser string, paths []string, recursive bool, force bool, clean bool, replaceTemplates []string, projectProvenance bool, timestamp bool, emitGoGenerate bool, regenerationCommand string, provVersion string, provCommit string, provDate string, configPath string, explicit map[string]bool) error {
 	return GenerateCLIConfiguredWithOptions(GenerateCLIOptions{
-		Dir:               dir,
-		ManDir:            manDir,
-		ParserName:        parserName,
-		CLIParser          : cliParser,
-		Paths:             paths,
-		Recursive:         recursive,
-		Force:             force,
-		Clean:             clean,
-		ReplaceTemplates:  replaceTemplates,
-		ProjectProvenance: projectProvenance,
-		Timestamp:         timestamp,
-		EmitGoGenerate:    emitGoGenerate,
+		Dir:                 dir,
+		ManDir:              manDir,
+		ParserName:          parserName,
+		CLIParser:           cliParser,
+		Paths:               paths,
+		Recursive:           recursive,
+		Force:               force,
+		Clean:               clean,
+		ReplaceTemplates:    replaceTemplates,
+		ProjectProvenance:   projectProvenance,
+		Timestamp:           timestamp,
+		EmitGoGenerate:      emitGoGenerate,
 		RegenerationCommand: regenerationCommand,
-		ProvVersion:       provVersion,
-		ProvCommit:        provCommit,
-		ProvDate:          provDate,
-		ConfigPath:        configPath,
-		ExplicitFlags:     explicit,
+		ProvVersion:         provVersion,
+		ProvCommit:          provCommit,
+		ProvDate:            provDate,
+		ConfigPath:          configPath,
+		ExplicitFlags:       explicit,
 	})
 }
 

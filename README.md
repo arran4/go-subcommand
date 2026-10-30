@@ -258,12 +258,27 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
 *   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
 *   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
-*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag.
+*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag. Providers may name parameter dependencies, for example `generator: BuildClient(endpoint, token)`. Dependencies are bound first, providers run once per command execution in deterministic dependency order, and unknown dependencies or cycles fail generation with diagnostics.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
+
+Providers can depend on `(flag presence)` parameters, just like other bound
+command values. Presence maps bind before any effectful provider, regardless of
+parameter declaration order, and are never acquired or closed as providers.
+The map describes flags consumed by that command's parser; inherited ordinary
+values remain available through `(from parent)`.
+`templates/testdata/runtime/issue403_presence.txtar` shows complete source,
+generated root/nested code and compiled GNU/Go-flag invocations. For example,
+`app --enabled=false -n 0 --label=` passes false/zero/empty values and
+`seen={"count":true,"enabled":true,"label":true}` to a local provider followed
+by an imported dependent provider. Output records `open:first`, `open:second`,
+the action, then `close:second` and `close:first`, once each. Nested commands also
+exercise inherited flags and a positional provider input. Partial acquisition
+failure closes only acquired resources; action errors retain precedence over
+cleanup errors. Help, usage, version and a sibling without providers acquire none.
 
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 

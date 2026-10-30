@@ -174,6 +174,15 @@ var aliasRootIOSource string
 //go:embed testdata/issue483_root_context.go
 var issue483RootContextSource string
 
+//go:embed testdata/provider_di.go
+var providerDISource string
+
+//go:embed testdata/provider_di_closable.go
+var providerDIClosableSource string
+
+//go:embed testdata/provider_di_imported.go
+var providerDIImportedSource string
+
 // oldStyleFileWriter models an external implementation compiled against the
 // FileWriter interface before generated-file migration needed deletion.
 type oldStyleFileWriter struct {
@@ -1555,6 +1564,247 @@ func TestGenerate_GoFlagRuntimeFeatures(t *testing.T) {
 
 	runTest("action error propagation", []string{"-req", "provided", "-fail-action", "true"}, true, "", "action sentinel error")
 	runTest("mixed boundary", []string{"-req", "parent", "child", "--slc=c"}, false, "child_req=parent\nchild_slc=[c]", "")
+}
+
+//go:embed templates/testdata/runtime/issue403_presence.txtar
+var providerPresenceFixture []byte
+
+func TestGenerateProviderFlagPresence(t *testing.T) {
+	input, expected := splitInputExpected(txtar.Parse(providerPresenceFixture))
+	var invocations []struct {
+		Args                       []string
+		Stdout, Stderr, StderrFile string
+		Status                     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			if backend == "gnu" {
+				for _, name := range []string{"root.go", "group_run.go"} {
+					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
+						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+			// Materialize only at the actual compiler/executable boundary.
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				want := invocation.Stderr
+				if invocation.StderrFile != "" {
+					want = string(expected[invocation.StderrFile].Data)
+				}
+				got := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || got != want {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), got, invocation.Status, invocation.Stdout, want)
+				}
+			}
+		})
+	}
+	for _, tc := range []struct{ name, from, to, want string }{
+		{"missing dependency", "OpenFirst(enabled, label, seen, mode)", "OpenFirst(missing, label, seen, mode)", "command app: generator first references unknown dependency missing"},
+		{"cycle", "OpenFirst(enabled, label, seen, mode)", "OpenFirst(second, label, seen, mode)", "command app: generator dependency cycle includes second"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invalid := fstest.MapFS{}
+			for name, file := range input {
+				invalid[name] = file
+			}
+			invalid["app.go"] = &fstest.MapFile{Data: bytes.ReplaceAll(input["app.go"].Data, []byte(tc.from), []byte(tc.to))}
+			writer := NewCollectingFileWriter()
+			err := GenerateWithFS(invalid, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "")
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("error=%v want %q", err, tc.want)
+			}
+			if len(writer.Files) != 0 || len(writer.Dirs) != 0 {
+				t.Fatal("invalid dependencies wrote output")
+			}
+		})
+	}
+}
+
+func TestGenerateProviderDependenciesRunAfterFlags(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/providers\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), providerDISource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	run := exec.Command(bin, "--prefix", "value")
+	if output, err := run.CombinedOutput(); err != nil || strings.TrimSpace(string(output)) != "value-generated" {
+		t.Fatalf("run provider graph = %q, %v", output, err)
+	}
+}
+
+func TestGenerateImportedProviderDependencies(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/providersimport\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), providerDIImportedSource)
+	writeRuntimeFixture(t, filepath.Join(dir, "deps", "provider.go"), "package deps\n\nfunc BuildLabel(prefix string) (string, error) { return prefix + \"-imported\", nil }\n")
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+	run := exec.Command(bin, "--prefix", "value")
+	if output, err := run.CombinedOutput(); err != nil || strings.TrimSpace(string(output)) != "value-imported" {
+		t.Fatalf("run imported provider graph = %q, %v", output, err)
+	}
+}
+
+func TestGenerate_ClosableProviderReverseCleanupAndErrorPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/closable\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), providerDIClosableSource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, output)
+	}
+
+	runCase := func(t *testing.T, env map[string]string, args ...string) (string, []string, error) {
+		t.Helper()
+		marker := filepath.Join(t.TempDir(), "markers.txt")
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "CLEANUP_MARKER_FILE="+marker)
+		for k, v := range env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		output, err := cmd.CombinedOutput()
+		var markers []string
+		if data, readErr := os.ReadFile(marker); readErr == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				if line != "" {
+					markers = append(markers, line)
+				}
+			}
+		}
+		return string(output), markers, err
+	}
+
+	t.Run("normal execution runs cleanups once in reverse order", func(t *testing.T) {
+		output, markers, err := runCase(t, nil, "run")
+		if err != nil {
+			t.Fatalf("expected success, got err: %v\noutput: %s", err, output)
+		}
+		if !strings.Contains(output, "action executed") {
+			t.Errorf("output missing 'action executed': %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want reverse order %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("partial acquisition failure only cleans up already acquired providers", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{"FAIL_ACQUIRE_SECOND": "1"}, "run")
+		if err == nil {
+			t.Fatal("expected failure on second acquisition")
+		}
+		if !strings.Contains(output, "failed to generate r2: failed to acquire second") {
+			t.Errorf("expected failure message for r2, got: %s", output)
+		}
+		wantMarkers := []string{"close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want only first cleaned up: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("action error takes precedence over cleanup error", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{
+			"FAIL_ACTION":       "1",
+			"FAIL_CLOSE_second": "1",
+		}, "run")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(output, "action error") {
+			t.Errorf("expected action error to take precedence, got: %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want all cleanups attempted: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("cleanup error returned when action succeeds", func(t *testing.T) {
+		output, markers, err := runCase(t, map[string]string{
+			"FAIL_CLOSE_second": "1",
+		}, "run")
+		if err == nil {
+			t.Fatal("expected cleanup error")
+		}
+		if !strings.Contains(output, "cleanup failed for second") {
+			t.Errorf("expected cleanup error in output, got: %s", output)
+		}
+		wantMarkers := []string{"close:second", "close:first"}
+		if !reflect.DeepEqual(markers, wantMarkers) {
+			t.Fatalf("got markers %v, want reverse order: %v", markers, wantMarkers)
+		}
+	})
+
+	t.Run("help request has zero provider side effects", func(t *testing.T) {
+		output, markers, err := runCase(t, nil, "run", "--help")
+		if err != nil {
+			t.Fatalf("help failed: %v\noutput: %s", err, output)
+		}
+		if len(markers) > 0 {
+			t.Fatalf("expected 0 cleanup markers for help, got: %v", markers)
+		}
+	})
 }
 
 func TestGenerate_OutputInventoryIsParseableAndDeterministic(t *testing.T) {
