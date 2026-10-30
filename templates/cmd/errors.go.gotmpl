@@ -16,6 +16,7 @@ var ErrUsage = errors.New("invalid command usage")
 type UsageErrorKind string
 
 const (
+	UsageNoCommand UsageErrorKind = "no-command"
 	UsageUnknownCommand UsageErrorKind = "unknown-command"
 	UsageUnknownFlag UsageErrorKind = "unknown-flag"
 	UsageMissingFlagValue UsageErrorKind = "missing-flag-value"

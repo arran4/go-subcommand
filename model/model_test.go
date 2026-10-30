@@ -366,6 +366,26 @@ func TestEffectiveCLIParser(t *testing.T) {
 	}
 }
 
+func TestCommandValidateNoCommand(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		command Command
+		valid   bool
+	}{
+		{"default", Command{MainCmdName: "app"}, true},
+		{"error", Command{MainCmdName: "app", NoCommand: NoCommandError}, true},
+		{"unknown", Command{MainCmdName: "app", NoCommand: "unknown"}, false},
+		{"action", Command{MainCmdName: "app", NoCommand: NoCommandError, FunctionName: "Run"}, false},
+		{"route", Command{MainCmdName: "app", NoCommand: NoCommandError, DefaultRoute: "help"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.command.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("error=%v valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
 	t.Run("aliases without action rejected", func(t *testing.T) {
 		cmd := &Command{

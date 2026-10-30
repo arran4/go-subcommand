@@ -3263,6 +3263,189 @@ func TestGenerate_ManWhitespace(t *testing.T) {
 	}
 }
 
+//go:embed templates/testdata/issue524.go.txtar
+var noCommandFixture []byte
+
+//go:embed testdata/issue524_process_test.go
+var noCommandProcessTests string
+
+func TestGenerateNoCommandPolicy(t *testing.T) {
+	archive := txtar.Parse(noCommandFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args                       []string
+		Stdout, Stderr, StderrFile string
+		Status                     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+	var golden []byte
+	for _, file := range archive.Files {
+		if file.Name == "output.go" {
+			golden = file.Data
+		}
+	}
+	for _, backend := range []string{"gnu", "go-flag"} {
+		var equivalent, emptyEquivalent map[string][]byte
+		for _, variant := range []string{"go", "config", "empty-go", "empty-config", "omitted"} {
+			t.Run(backend+"/"+variant, func(t *testing.T) {
+				empty := strings.HasPrefix(variant, "empty-")
+				configured := strings.HasSuffix(variant, "config")
+				scenario := fstest.MapFS{"go.mod": input["go.mod"]}
+				if !empty {
+					scenario["commands.go"] = input["commands.go"]
+				}
+				options := GenerateOptions{CLIParser: backend}
+				if configured {
+					config, err := LoadGenerateConfigFS(input, "gosubc.mdc")
+					if err != nil {
+						t.Fatal(err)
+					}
+					options.CommandDeclarations = config.CommandDeclarations
+				} else {
+					data := input["metadata.go"].Data
+					if variant == "omitted" {
+						data = bytes.ReplaceAll(data, []byte("// No command: error\n"), nil)
+					}
+					scenario["metadata.go"] = &fstest.MapFile{Data: data}
+				}
+				generate := func() map[string][]byte {
+					writer := NewCollectingFileWriter()
+					if err := GenerateWithFS(scenario, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", options); err != nil {
+						t.Fatal(err)
+					}
+					return writer.Files
+				}
+				files := generate()
+				if !reflect.DeepEqual(files, generate()) {
+					t.Fatal("nondeterministic generation")
+				}
+				if variant == "go" {
+					equivalent = files
+				}
+				if variant == "empty-go" {
+					emptyEquivalent = files
+				}
+				if configured {
+					want := equivalent
+					if empty {
+						want = emptyEquivalent
+					}
+					if !reflect.DeepEqual(files, want) {
+						t.Fatal("Go and native policy generated different output")
+					}
+				}
+				if empty && backend == "gnu" && !bytes.Equal(files["cmd/app/root.go"], golden) {
+					t.Fatal("real empty policy root differs from template golden")
+				}
+				for name, data := range files {
+					if bytes.Contains(data, []byte(`"github.com/arran4/go-subcommand"`)) {
+						t.Fatalf("runtime dependency in %s", name)
+					}
+				}
+				// Materialize only for the compiler and executable boundary.
+				dir := t.TempDir()
+				for name, file := range scenario {
+					writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+				}
+				for name, data := range files {
+					writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+				}
+				if !empty && variant != "omitted" {
+					writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/process_test.go"), noCommandProcessTests)
+					command := exec.Command("go", "test", "./cmd/app", "-run", "TestNoCommandErrors")
+					command.Dir = dir
+					if out, err := command.CombinedOutput(); err != nil {
+						t.Fatalf("API tests: %v\n%s", err, out)
+					}
+				}
+				binary := filepath.Join(dir, "app")
+				build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+				build.Dir = dir
+				if out, err := build.CombinedOutput(); err != nil {
+					t.Fatalf("build: %v\n%s", err, out)
+				}
+				for _, invocation := range invocations {
+					if empty && len(invocation.Args) != 0 {
+						continue
+					}
+					if variant == "omitted" && len(invocation.Args) != 0 {
+						continue
+					}
+					wantStatus, wantStderr := invocation.Status, invocation.Stderr
+					if variant == "omitted" {
+						wantStatus = 0
+						wantStderr = string(expected["root-help.stderr"].Data)
+					}
+					if invocation.StderrFile != "" {
+						file := expected[invocation.StderrFile]
+						if file == nil {
+							t.Fatalf("missing snapshot %s", invocation.StderrFile)
+						}
+						wantStderr = string(file.Data)
+					}
+					command := exec.Command(binary, invocation.Args...)
+					command.Dir = dir
+					command.Env = append(os.Environ(), "COLUMNS=80")
+					var stdout, stderr bytes.Buffer
+					command.Stdout, command.Stderr = &stdout, &stderr
+					err := command.Run()
+					status := 0
+					if err != nil {
+						if exit, ok := err.(*exec.ExitError); ok {
+							status = exit.ExitCode()
+						} else {
+							t.Fatal(err)
+						}
+					}
+					gotStderr := strings.ReplaceAll(stderr.String(), binary, "app")
+					if status != wantStatus || stdout.String() != invocation.Stdout || gotStderr != wantStderr {
+						t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q", invocation.Args, status, stdout.String(), gotStderr, wantStatus, invocation.Stdout, wantStderr)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestGenerateNoCommandConflicts(t *testing.T) {
+	input, _ := splitInputExpected(txtar.Parse(noCommandFixture))
+	for _, tc := range []struct{ name, text, source, want string }{
+		{"action", "No command: error", "root-action.go", "conflicts with a root action"},
+		{"action annotation", "", "action-policy.go", "conflicts with an executable action"},
+		{"route", "No command: error\nDefault route: run", "", "conflicts with a root action or Default route"},
+		{"help route", "No command: error\nDefault route: help run", "", "conflicts with a root action or Default route"},
+		{"default child", "No command: error", "default-child.go", "conflicts with a root action or Default route"},
+		{"unknown policy", "No command: ignore", "", "unsupported No command policy"},
+		{"empty policy", "No command:", "", "empty metadata directive"},
+		{"duplicate", "No command: error\nNo command: error", "", "duplicate metadata directive"},
+		{"untyped root flag", "No command: error\nFlags:\n  name: --name", "", "cannot declare flags"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scenario := fstest.MapFS{"go.mod": input["go.mod"], "commands.go": input["commands.go"]}
+			if tc.source != "" {
+				scenario[tc.source] = input[tc.source]
+			}
+			var declarations []parsers.CommandDeclaration
+			if tc.text != "" {
+				declarations = []parsers.CommandDeclaration{{Kind: "command", Path: "app", Text: tc.text, Filename: "gosubc.mdc", Line: 7}}
+			}
+			writer := NewCollectingFileWriter()
+			err := GenerateWithFS(scenario, writer, ".", "", "commentv1", nil, false, false, nil, false, false, "", "", "", GenerateOptions{CommandDeclarations: declarations})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v want %q", err, tc.want)
+			}
+			if !strings.Contains(err.Error(), ":") {
+				t.Fatalf("missing source diagnostic: %v", err)
+			}
+			if len(writer.Files) != 0 || len(writer.Dirs) != 0 {
+				t.Fatal("invalid policy wrote output")
+			}
+		})
+	}
+}
+
 //go:embed templates/testdata/issue516.go.txtar
 var metadataFixture []byte
 

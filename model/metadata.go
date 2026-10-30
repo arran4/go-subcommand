@@ -2,6 +2,14 @@ package model
 
 import "fmt"
 
+// NoCommandPolicy controls a root invocation without a selected command.
+type NoCommandPolicy string
+
+const (
+	NoCommandDefault NoCommandPolicy = ""
+	NoCommandError   NoCommandPolicy = "error"
+)
+
 // CommandMetadata describes a command without registering an executable action.
 // Metadata may enrich an action discovered independently from Go source.
 type CommandMetadata struct {
@@ -10,6 +18,7 @@ type CommandMetadata struct {
 	ExtendedHelp string
 	Aliases      []string
 	DefaultRoute string
+	NoCommand    NoCommandPolicy
 	CLIParser    string
 	Filename     string
 	Line         int
