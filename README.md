@@ -258,14 +258,56 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
 *   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
 *   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
-*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag.
+*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag. Providers may name parameter dependencies, for example `generator: BuildClient(endpoint, token)`. Dependencies are bound first, providers run once per command execution in deterministic dependency order, and unknown dependencies or cycles fail generation with diagnostics.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+Providers can depend on `(flag presence)` parameters, just like other bound
+command values. Presence maps bind before any effectful provider, regardless of
+parameter declaration order, and are never acquired or closed as providers.
+The map describes flags consumed by that command's parser; inherited ordinary
+values remain available through `(from parent)`.
+`templates/testdata/runtime/issue403_presence.txtar` shows complete source,
+generated root/nested code and compiled GNU/Go-flag invocations. For example,
+`app --enabled=false -n 0 --label=` passes false/zero/empty values and
+`seen={"count":true,"enabled":true,"label":true}` to a local provider followed
+by an imported dependent provider. Output records `open:first`, `open:second`,
+the action, then `close:second` and `close:first`, once each. Nested commands also
+exercise inherited flags and a positional provider input. Partial acquisition
+failure closes only acquired resources; action errors retain precedence over
+cleanup errors. Help, usage, version and a sibling without providers acquire none.
+
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
+
+#### Root constructor context
+
+Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
+
+Constructor context and `(flag presence)` are independent inputs. A root or nested
+action may receive both inherited typed context and its own `map[string]bool`
+presence parameter. Context is never an argv flag or an execution-time provider;
+explicit false, zero and empty flag values still appear in the presence map.
+`templates/testdata/runtime/issue483_presence.txtar` contains the complete annotated source,
+generated root/grandchild snapshots and compiled GNU/Go-flag examples. For example,
+`app child grandchild --enabled=false -n 0 -l ""` reports the same supplied context
+and `seen={"count":true,"enabled":true,"label":true}`. The ordinary `NewRoot`
+constructor supplies zero context, while `NewRootWithContext` accepts imported
+typed context without changing flag binding. Help, usage and version execute no
+actions, and a reused tree receives a fresh presence map for each invocation.
+
+```go
+// Root is a subcommand `app`.
+//
+// Flags:
+//
+//   buildInfo: (root context) Build metadata created by main
+func Root(buildInfo buildinfo.BuildInfo) {}
+```
+
+The existing `NewRoot(name, version, commit, date)` remains available for compatibility and supplies zero values for declared context. Applications that need the context must call the typed `NewRootWithContext` constructor (or use dispatcher-only generation).
 
 ### Supported Types
 
@@ -556,6 +598,7 @@ Generates the Go code for your CLI.
 *   `--man-dir <path>`: Directory to write man pages to.
 *   `--replace-template <alias>=<file>|<dir>|<txtar>`: Overlays custom templates onto built-in generation templates.
 *   `--emit-go-generate=false`: Do not add a nested `//go:generate` directive to the generated executable. The default is `true` for compatibility; use this when the project owns one canonical, pinned generation command.
+*   `--regenerate-command <command>`: Record the project's pinned canonical regeneration command in generated `cmd/AGENTS.md`.
 *   `--config <path>`: Read an optional version-one project configuration (`.mdconf`, `.mdc`, or `.json`). Explicit command-line flags override configuration values, and configuration values override built-in defaults. Unknown keys and unsupported versions fail before generation.
 
 #### Generation configuration

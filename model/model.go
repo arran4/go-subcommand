@@ -55,6 +55,9 @@ type SourceType string
 const (
 	SourceTypeFlag      SourceType = "flag"
 	SourceTypeGenerator SourceType = "generator"
+	// SourceTypeConstructor is supplied once when the generated root is
+	// constructed. It is neither parsed from argv nor acquired at execution.
+	SourceTypeConstructor SourceType = "constructor"
 	// SourceTypeFlagPresence supplies the parser's per-invocation presence map.
 	SourceTypeFlagPresence SourceType = "flag-presence"
 )
@@ -77,6 +80,9 @@ type FuncRef struct {
 type GeneratorConfig struct {
 	Type SourceType
 	Func *FuncRef
+	// Inputs names parameters made available to a provider. They are resolved
+	// within the command's generated field graph, not through globals.
+	Inputs []string
 }
 
 type ParserConfig struct {
@@ -131,6 +137,8 @@ type Command struct {
 	// SuppressGoGenerate omits the nested regeneration directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
+	// RegenerationCommand is the documented project-owned generation command.
+	RegenerationCommand string
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
@@ -248,6 +256,11 @@ func (cmd *Command) Validate() (err error) {
 	if err := validateParameters(cmd.Parameters, cmd.MainCmdName); err != nil {
 		return err
 	}
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && (parameter.IsPositional || parameter.Inherited) {
+			return fmt.Errorf("root context parameter %q in command %q cannot be positional or inherited", parameter.Name, cmd.MainCmdName)
+		}
+	}
 	if err := validateSubCommandCollisions(cmd.MainCmdName, true, cmd.SubCommands); err != nil {
 		return err
 	}
@@ -341,6 +354,11 @@ func (sc *SubCommand) Validate() (err error) {
 	if err := validateParameters(sc.Parameters, sc.SubCommandName); err != nil {
 		return err
 	}
+	for _, parameter := range sc.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			return fmt.Errorf("constructor context parameter %q is only supported on the root command", parameter.Name)
+		}
+	}
 	if err := validateSubCommandCollisions(sc.ProgName(), false, sc.SubCommands); err != nil {
 		return err
 	}
@@ -366,6 +384,22 @@ func (cmd *Command) HasIOParameters() bool {
 		}
 	}
 	return false
+}
+
+// ConstructorParameters are root-owned values supplied by the caller when it
+// creates a generated command tree.
+func (cmd *Command) ConstructorParameters() []*FunctionParameter {
+	var result []*FunctionParameter
+	for _, parameter := range cmd.Parameters {
+		if parameter.HasConstructor() && !parameter.Inherited {
+			result = append(result, parameter)
+		}
+	}
+	return result
+}
+
+func (cmd *Command) HasConstructorParameters() bool {
+	return len(cmd.ConstructorParameters()) > 0
 }
 
 // HasIOParameters reports whether this subcommand tree needs generated file
@@ -459,6 +493,50 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	for _, p := range params {
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
+		}
+	}
+	return validateGeneratorDependencies(params, cmdName)
+}
+
+func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) error {
+	all := make(map[string]*FunctionParameter)
+	providers := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		all[param.Name] = param
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			providers[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var visit func(*FunctionParameter) error
+	visit = func(provider *FunctionParameter) error {
+		switch state[provider.Name] {
+		case 1:
+			return fmt.Errorf("command %s: generator dependency cycle includes %s", cmdName, provider.Name)
+		case 2:
+			return nil
+		}
+		state[provider.Name] = 1
+		for _, input := range provider.Generator.Inputs {
+			param, ok := all[input]
+			if !ok {
+				return fmt.Errorf("command %s: generator %s references unknown dependency %s", cmdName, provider.Name, input)
+			}
+			if dependency := providers[param.Name]; dependency != nil {
+				if err := visit(dependency); err != nil {
+					return err
+				}
+			}
+		}
+		state[provider.Name] = 2
+		return nil
+	}
+	for _, provider := range params {
+		if providers[provider.Name] == nil {
+			continue
+		}
+		if err := visit(provider); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -983,7 +1061,7 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.HasGenerator() {
+		if p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := displayWidth(p.FlagString())
@@ -996,7 +1074,7 @@ func (sc *SubCommand) MaxFlagLength() int {
 
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			return true
 		}
 	}
@@ -1054,6 +1132,12 @@ func (sc *SubCommand) ResolveInheritance() {
 						}
 						if len(p.FlagAliases) == 0 {
 							p.FlagAliases = pp.FlagAliases
+						}
+						if p.Generator.Type == "" && pp.Generator.Type != "" {
+							p.Generator = pp.Generator
+						}
+						if p.Parser.Type == "" && pp.Parser.Type != "" {
+							p.Parser = pp.Parser
 						}
 						break
 					}
@@ -1125,7 +1209,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	allParams := sc.AllParameters()
 	grouped := make(map[string][]*FunctionParameter)
 	for _, p := range allParams {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
@@ -1190,7 +1274,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 func appendFlagsUsage(parts *[]string, params []*FunctionParameter) {
 	hasFlags := false
 	for _, p := range params {
-		if !p.IsPositional && !p.HasGenerator() {
+		if !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
 			hasFlags = true
 			break
 		}
@@ -1271,7 +1355,7 @@ func (sc *SubCommand) MaxPositionalLength() int {
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
 			continue
 		}
 		l := displayWidth(p.DefaultString())
@@ -1306,12 +1390,66 @@ func (p *FunctionParameter) IsFlagPresence() bool {
 	return p.Generator.Type == SourceTypeFlagPresence
 }
 
+// HasConstructor reports whether this value is supplied to the generated root
+// constructor instead of the command-line parser or an execution-time provider.
+func (p *FunctionParameter) HasConstructor() bool {
+	return p.Generator.Type == SourceTypeConstructor
+}
+
 func (p *FunctionParameter) GeneratorCall() string {
+	return p.GeneratorCallFor("", false)
+}
+
+// GeneratorCallFor renders a provider invocation using fields owned by receiver.
+// Validation resolves and orders Inputs before templates use this method.
+func (p *FunctionParameter) GeneratorCallFor(receiver string, fields bool) string {
 	if p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
-		if p.Generator.Func.CommandPackageName != "" {
-			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
+		args := make([]string, 0, len(p.Generator.Inputs))
+		for _, input := range p.Generator.Inputs {
+			if fields && receiver != "" {
+				args = append(args, receiver+"."+input)
+			} else {
+				args = append(args, input)
+			}
 		}
-		return fmt.Sprintf("%s()", p.Generator.Func.FunctionName)
+		argumentList := strings.Join(args, ", ")
+		if p.Generator.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName, argumentList)
+		}
+		return fmt.Sprintf("%s(%s)", p.Generator.Func.FunctionName, argumentList)
 	}
 	return ""
+}
+
+// OrderedGenerators returns provider-backed local parameters in deterministic
+// dependency order. Command validation must be called first.
+func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
+	byName := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			byName[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var ordered []*FunctionParameter
+	var visit func(*FunctionParameter)
+	visit = func(param *FunctionParameter) {
+		if state[param.Name] == 2 {
+			return
+		}
+		state[param.Name] = 1
+		for _, input := range param.Generator.Inputs {
+			if dependency := byName[input]; dependency != nil {
+				visit(dependency)
+			}
+		}
+		state[param.Name] = 2
+		ordered = append(ordered, param)
+	}
+	for _, param := range params {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			visit(param)
+		}
+	}
+	return ordered
 }

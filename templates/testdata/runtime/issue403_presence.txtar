@@ -1,0 +1,924 @@
+Real source-comment provider dependencies plus explicit flag presence.
+TestGenerateProviderFlagPresence compares generated artifacts, compiles the
+application, and replays exact provider/action/cleanup stdout and process results.
+-- input/go.mod --
+module example.com/providerpresence
+
+go 1.22
+-- input/resources/resources.go --
+package resources
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+)
+
+type Resource struct { Name, Mode string }
+
+func (r *Resource) Close() error {
+	fmt.Println("close:" + r.Name)
+	if r.Mode == "close" || r.Mode == "action-close" { return fmt.Errorf("%s cleanup", r.Name) }
+	return nil
+}
+
+func OpenSecond(first io.Closer, mode string, count int, seen map[string]bool, item string) (io.Closer, error) {
+	if r, ok := first.(*Resource); !ok || r.Name != "first" { return nil, fmt.Errorf("first dependency not bound") }
+	flags, _ := json.Marshal(seen)
+	fmt.Printf("open:second count=%d item=%q seen=%s\n", count, item, flags)
+	if mode == "second" { return nil, fmt.Errorf("second acquisition") }
+	return &Resource{Name: "second", Mode: mode}, nil
+}
+-- input/app.go --
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+
+	"example.com/providerpresence/resources"
+)
+
+func OpenFirst(enabled bool, label string, seen map[string]bool, mode string) (io.Closer, error) {
+	flags, _ := json.Marshal(seen)
+	fmt.Printf("open:first enabled=%t label=%q seen=%s\n", enabled, label, flags)
+	if mode == "first" { return nil, fmt.Errorf("first acquisition") }
+	return &resources.Resource{Name: "first", Mode: mode}, nil
+}
+
+// Root is a subcommand `app` -- Run root providers.
+//
+// Flags:
+//
+//	second: (generator: "example.com/providerpresence/resources".OpenSecond(first, mode, count, seen, item)) Imported dependent provider.
+//	first: (generator: OpenFirst(enabled, label, seen, mode)) Local initial provider.
+//	mode: --mode (default: "ok") Failure mode.
+//	enabled: --enabled -e (default: true) Enable output.
+//	count: --count -n (default: 7) Count.
+//	label: --label -l (default: "default") Inherited label.
+//	item: --item (default: "item") Item.
+//	seen: (flag presence) Explicit parser inputs, not a provider.
+func Root(second, first io.Closer, mode string, enabled bool, count int, label, item string, seen map[string]bool) error {
+	return action("root", mode)
+}
+
+// Run is a subcommand `app group run` -- Run nested providers.
+//
+// Flags:
+//
+//	second: (generator: "example.com/providerpresence/resources".OpenSecond(first, mode, count, seen, item)) Imported dependent provider.
+//	first: (generator: OpenFirst(enabled, label, seen, mode)) Local initial provider.
+//	mode: (from parent) Inherited failure mode.
+//	label: (from parent) Inherited label.
+//	enabled: --enabled -e (default: true) Enable output.
+//	count: --count -n (default: 7) Count.
+//	item: @1 (default: "item") Positional item.
+//	seen: (flag presence) Explicit inputs at this command.
+func Run(second, first io.Closer, mode, label string, enabled bool, count int, item string, seen map[string]bool) error {
+	return action("nested", mode)
+}
+
+func action(path, mode string) error {
+	fmt.Println("action:" + path)
+	if mode == "action" || mode == "action-close" { return fmt.Errorf("action failure") }
+	return nil
+}
+
+// Plain is a subcommand `app plain` -- Presence without providers.
+//
+// Flags:
+//
+//	seen: (flag presence) Explicit inputs.
+//	enabled: --enabled -e (default: true) Enable output.
+func Plain(seen map[string]bool, enabled bool) {
+	flags, _ := json.Marshal(seen)
+	fmt.Printf("plain enabled=%t seen=%s\n", enabled, flags)
+}
+-- expected/invocations.json --
+[
+  {"args": [], "stdout": "open:first enabled=true label=\"default\" seen={}\nopen:second count=7 item=\"item\" seen={}\naction:root\nclose:second\nclose:first\n"},
+  {"args": ["--enabled=false", "-n", "0", "--label="], "stdout": "open:first enabled=false label=\"\" seen={\"count\":true,\"enabled\":true,\"label\":true}\nopen:second count=0 item=\"item\" seen={\"count\":true,\"enabled\":true,\"label\":true}\naction:root\nclose:second\nclose:first\n"},
+  {"args": ["--label=inherited", "group", "run", "--enabled=false", "-n", "0", "payload"], "stdout": "open:first enabled=false label=\"inherited\" seen={\"count\":true,\"enabled\":true}\nopen:second count=0 item=\"payload\" seen={\"count\":true,\"enabled\":true}\naction:nested\nclose:second\nclose:first\n"},
+  {"args": ["--mode=first"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={\"mode\":true}\n", "stderr": "Error: failed to generate first: first acquisition\n"},
+  {"args": ["--mode=second"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={\"mode\":true}\nopen:second count=7 item=\"item\" seen={\"mode\":true}\nclose:first\n", "stderr": "Error: failed to generate second: second acquisition\n"},
+  {"args": ["--mode=close"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={\"mode\":true}\nopen:second count=7 item=\"item\" seen={\"mode\":true}\naction:root\nclose:second\nclose:first\n", "stderr": "Error: second cleanup\n"},
+  {"args": ["--mode=action-close"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={\"mode\":true}\nopen:second count=7 item=\"item\" seen={\"mode\":true}\naction:root\nclose:second\nclose:first\n", "stderr": "Error: app failed: action failure\n"},
+  {"args": ["--mode=second", "group", "run", "--count=0", "item"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={\"count\":true}\nopen:second count=0 item=\"item\" seen={\"count\":true}\nclose:first\n", "stderr": "Error: failed to generate second: second acquisition\n"},
+  {"args": ["--mode=action-close", "group", "run"], "status": 1, "stdout": "open:first enabled=true label=\"default\" seen={}\nopen:second count=7 item=\"item\" seen={}\naction:nested\nclose:second\nclose:first\n", "stderr": "Error: run failed: action failure\n"},
+  {"args": ["plain", "--enabled=false"], "stdout": "plain enabled=false seen={\"enabled\":true}\n"},
+  {"args": ["--help"], "stderrFile": "root-help.stderr"},
+  {"args": ["help"], "stderrFile": "root-help.stderr"},
+  {"args": ["usage", "group", "run"], "stderrFile": "nested-help.stderr"},
+  {"args": ["help", "group", "run"], "stderrFile": "nested-help.stderr"},
+  {"args": ["group", "run", "--help"], "stderrFile": "nested-help.stderr"},
+  {"args": ["version"], "stdout": "Version: dev\nCommit: none\nDate: unknown\n"}
+]
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	app "example.com/providerpresence"
+	"example.com/providerpresence/cmd"
+	"example.com/providerpresence/cmd/app/templates"
+	"example.com/providerpresence/resources"
+)
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands      map[string]func() Cmd
+	Version       string
+	Commit        string
+	Date          string
+	second        io.Closer
+	first         io.Closer
+	mode          string
+	enabled       bool
+	count         int
+	label         string
+	item          string
+	seen          map[string]bool
+	CommandAction func(c *RootCmd) error
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+	}
+	c.FlagSet.Usage = c.Usage
+
+	c.StringVar(&c.mode, "mode", "ok", "Failure mode.")
+
+	c.BoolVar(&c.enabled, "enabled", true, "Enable output.")
+	c.BoolVar(&c.enabled, "e", true, "Enable output.")
+
+	c.IntVar(&c.count, "count", 7, "Count.")
+	c.IntVar(&c.count, "n", 7, "Count.")
+
+	c.StringVar(&c.label, "label", "default", "Inherited label.")
+	c.StringVar(&c.label, "l", "default", "Inherited label.")
+
+	c.StringVar(&c.item, "item", "item", "Item.")
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		err := app.Root(c.second, c.first, c.mode, c.enabled, c.count, c.label, c.item, c.seen)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("app failed: %w", err)
+		}
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewGroup() })
+		c.Commands["group"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewPlain() })
+		c.Commands["plain"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	seenFlags := make(map[string]bool)
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "mode":
+				seenFlags["mode"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.mode = value
+
+			case "enabled":
+				seenFlags["enabled"] = true
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.enabled = b
+				} else {
+					c.enabled = true
+				}
+
+			case "count":
+				seenFlags["count"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+				}
+				c.count = v
+
+			case "label":
+				seenFlags["label"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.label = value
+
+			case "item":
+				seenFlags["item"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.item = value
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "e" {
+					found = true
+					seenFlags["enabled"] = true
+					c.enabled = true
+				}
+
+				if char == "n" {
+					found = true
+					seenFlags["count"] = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+					}
+					c.count = v
+				}
+
+				if char == "l" {
+					found = true
+					seenFlags["label"] = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					c.label = value
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		c.Usage()
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+	c.seen = seenFlags
+	{
+		v, err := app.OpenFirst(c.enabled, c.label, c.seen, c.mode)
+		if err != nil {
+			return fmt.Errorf("failed to generate first: %w", err)
+		}
+		c.first = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	{
+		v, err := resources.OpenSecond(c.first, c.mode, c.count, c.seen, c.item)
+		if err != nil {
+			return fmt.Errorf("failed to generate second: %w", err)
+		}
+		c.second = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/group_run.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+
+	app "example.com/providerpresence"
+	"example.com/providerpresence/cmd"
+	"example.com/providerpresence/resources"
+)
+
+var _ Cmd = (*GroupRun)(nil)
+
+type GroupRun struct {
+	*Group
+	Flags         *flag.FlagSet
+	second        io.Closer
+	first         io.Closer
+	enabled       bool
+	count         int
+	item          string
+	seen          map[string]bool
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *GroupRun) error
+}
+
+type UsageDataGroupRun struct {
+	*GroupRun
+	Recursive bool
+}
+
+func (c *GroupRun) Usage() {
+	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataGroupRun{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GroupRun) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *GroupRun) commandPath() string { return "app group run" }
+
+func (c *GroupRun) UsageRecursive() {
+	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataGroupRun{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GroupRun) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	seenFlags := make(map[string]bool)
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "enabled":
+				seenFlags["enabled"] = true
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.enabled = b
+				} else {
+					c.enabled = true
+				}
+
+			case "count":
+				seenFlags["count"] = true
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+				}
+				c.count = v
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "e" {
+					found = true
+					seenFlags["enabled"] = true
+					c.enabled = true
+				}
+
+				if char == "n" {
+					found = true
+					seenFlags["count"] = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+					}
+					c.count = v
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	// Handle positional argument item
+	{
+		argIndex := 0
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			c.item = argVal
+		} else {
+			c.item = "item"
+		}
+	}
+
+	c.seen = seenFlags
+	{
+		v, err := app.OpenFirst(c.enabled, c.label, c.seen, c.mode)
+		if err != nil {
+			return fmt.Errorf("failed to generate first: %w", err)
+		}
+		c.first = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	{
+		v, err := resources.OpenSecond(c.first, c.mode, c.count, c.seen, c.item)
+		if err != nil {
+			return fmt.Errorf("failed to generate second: %w", err)
+		}
+		c.second = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Group) NewGroupRun() *GroupRun {
+	set := flag.NewFlagSet("run", flag.ContinueOnError)
+	v := &GroupRun{
+		Group:       c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.BoolVar(&v.enabled, "enabled", true, "Enable output.")
+	set.BoolVar(&v.enabled, "e", true, "Enable output.")
+
+	set.IntVar(&v.count, "count", 7, "Count.")
+	set.IntVar(&v.count, "n", 7, "Count.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *GroupRun) error {
+
+		err := app.Run(c.second, c.first, c.mode, c.label, c.enabled, c.count, c.item, c.seen)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("run failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/root-help.stderr --
+Usage: app [flags...] <subcommand>
+
+Run root providers.
+
+Subcommands:
+
+    group
+    plain Presence without providers.
+    help  Print this help message
+    usage Print this usage message
+
+
+Flags:
+    --mode string        (default: "ok")        Failure mode.
+    --enabled, -e        (default: true)        Enable output.
+    --count, -n int      (default: 7)           Count.
+    --label, -l string   (default: "default")   Inherited label.
+    --item string        (default: "item")      Item.
+-- expected/nested-help.stderr --
+Usage: app [flags...] group run [flags...] [item]
+
+Run nested providers.
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+
+`group` Flags:
+    --mode string                       Inherited failure mode.
+    --label string                      Inherited label.
+
+`run` Flags:
+    --enabled, -e     (default: true)   Enable output.
+    --count, -n int   (default: 7)      Count.
+
+Positional Arguments:
+    [item] Positional item.

@@ -6,12 +6,6 @@ package main
 
 import "os"
 
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 // Provenance
 var (
 	GeneratorVersion = "(devel)"

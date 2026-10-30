@@ -144,6 +144,36 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	}
 }
 
+func TestGeneratorDependenciesRejectUnknownAndCycles(t *testing.T) {
+	provider := func(name string, inputs ...string) *FunctionParameter {
+		return &FunctionParameter{Name: name, Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: inputs}}
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "missing")}, "app"); err == nil {
+		t.Fatal("unknown dependency accepted")
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "b"), provider("b", "a")}, "app"); err == nil {
+		t.Fatal("cycle accepted")
+	}
+	ordered := OrderedGenerators([]*FunctionParameter{provider("label", "prefix"), provider("prefix")})
+	if len(ordered) != 2 || ordered[0].Name != "prefix" || ordered[1].Name != "label" {
+		t.Fatalf("ordered providers = %#v", ordered)
+	}
+}
+
+func TestOrderedGeneratorsExcludeFlagPresence(t *testing.T) {
+	seen := &FunctionParameter{Name: "seen", Type: "map[string]bool", Generator: GeneratorConfig{Type: SourceTypeFlagPresence}}
+	first := &FunctionParameter{Name: "first", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"seen"}}}
+	second := &FunctionParameter{Name: "second", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"first", "seen"}}}
+	parameters := []*FunctionParameter{second, first, seen}
+	if err := validateParameters(parameters, "app"); err != nil {
+		t.Fatal(err)
+	}
+	ordered := OrderedGenerators(parameters)
+	if len(ordered) != 2 || ordered[0] != first || ordered[1] != second {
+		t.Fatalf("providers=%v", ordered)
+	}
+}
+
 func TestFunctionParameterUsageStreamHelp(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -10,6 +10,12 @@ import (
 	"github.com/arran4/go-subcommand/cmd"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func generatedRun(args []string, stderr io.Writer) int {
 	root, err := NewRoot("gosubc", version, commit, date)
 	if err == nil {
