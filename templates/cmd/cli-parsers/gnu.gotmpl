@@ -53,7 +53,16 @@
 				{{- if or $hasFlagPresence $param.Required (and (not $param.IsPositional) (not $param.HasGenerator) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
-				{{- if $param.IsBool }}
+				{{- if $param.OptionalValue }}
+				{{- if and $param.HasPointer (not $param.IsSlice) }}
+				if c.{{$param.Name}} == nil {
+					c.{{$param.Name}} = new({{$param.NonPointerGeneratedType}})
+				}
+				{{- end }}
+				if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
+					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+				}
+				{{- else if $param.IsBool }}
 				if hasValue {
 					b, err := strconv.ParseBool(value)
 					if err != nil {
@@ -172,7 +181,26 @@
 					{{- if or $hasFlagPresence $param.Required (and (or $param.IsWriter $param.IsReader) $param.HasDefaultValue) }}
 					seenFlags["{{$param.Name}}"] = true
 					{{- end }}
-					{{- if $param.IsBool }}
+					{{- if $param.OptionalValue }}
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					{{- if and $param.HasPointer (not $param.IsSlice) }}
+					if c.{{$param.Name}} == nil {
+						c.{{$param.Name}} = new({{$param.NonPointerGeneratedType}})
+					}
+					{{- end }}
+					if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
+						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					}
+					{{- else if $param.IsBool }}
 					{{- if $param.IsSlice }}
 					{{- if $param.HasPointer }}
 					b := true

@@ -265,6 +265,24 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+#### Optional-value flags
+
+`(optional value)` is an explicit three-state flag contract: omitted, present
+without a value, and present with an assigned value (including `""`). Its
+parameter type is consumer-owned and must provide:
+
+```go
+SetOptionalValue(present bool, hasValue bool, value string) error
+```
+
+For the GNU parser, `--label` supplies `present=true, hasValue=false`;
+`--label=value` supplies `present=true, hasValue=true`; and `-lvalue` or `-l=value`
+is the short attached-value spelling. A following positional token is never
+consumed as the optional value. This keeps `--` and positional parsing
+unambiguous. The Go-flag backend rejects optional-value parameters because its
+native bare-flag callback cannot distinguish a bare flag from an explicit
+boolean-looking value.
+
 Providers can depend on `(flag presence)` parameters, just like other bound
 command values. Presence maps bind before any effectful provider, regardless of
 parameter declaration order, and are never acquired or closed as providers.

@@ -512,6 +512,9 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
 		}
 		cmd.ResolvedCLIParser = resolved
+		if err := validateOptionalValueParser(cmd.Parameters, resolved, cmd.MainCmdName); err != nil {
+			return err
+		}
 		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -526,8 +529,20 @@ func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited stri
 			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
 		}
 		subCommand.ResolvedCLIParser = resolved
+		if err := validateOptionalValueParser(subCommand.Parameters, resolved, subCommand.SubCommandName); err != nil {
+			return err
+		}
 		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateOptionalValueParser(params []*model.FunctionParameter, backend, command string) error {
+	for _, param := range params {
+		if param.OptionalValue && backend != "gnu" {
+			return fmt.Errorf("command %q: optional-value flag %q is unsupported by %s; select gnu", command, param.Name, backend)
 		}
 	}
 	return nil
@@ -984,7 +999,9 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		}
 		if p.TypeImportPath != "" {
 			alias := ""
-			if !p.IsReader() && !p.IsWriter() {
+			if p.OptionalValue && p.TypePackageName != "" {
+				alias = p.TypePackageName
+			} else if !p.IsReader() && !p.IsWriter() {
 				qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
 				if qualifier != path.Base(p.TypeImportPath) {
 					alias = qualifier
