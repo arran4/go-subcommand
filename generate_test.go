@@ -3882,11 +3882,11 @@ func TestGenerateOptionalValueDirect(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "present=false value=false label=\"\""},
-		{[]string{"--label"}, "present=true value=false label=\"\""},
-		{[]string{"--label="}, "present=true value=true label=\"\""},
-		{[]string{"--label=zero"}, "present=true value=true label=\"zero\""},
-		{[]string{"-lblue"}, "present=true value=true label=\"blue\""},
+		{nil, "label=\"\" verbose=false"},
+		{[]string{"--label"}, "label=\"\" verbose=false"},
+		{[]string{"--label="}, "label=\"\" verbose=false"},
+		{[]string{"--label=zero"}, "label=\"zero\" verbose=false"},
+		{[]string{"-lblue"}, "label=\"blue\" verbose=false"},
 	} {
 		run := exec.Command(bin, test.args...)
 		output, err := run.CombinedOutput()
@@ -3946,7 +3946,7 @@ func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
 				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
 			}
 		}
-		for _, name := range []string{"root.go", "pointers.go", "validate.go", "ptr.go", "scope.go"} {
+		for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go"} {
 			buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
 				Name: "expected/" + name,
 				Data: files["cmd/app/"+name],
@@ -3984,7 +3984,7 @@ func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
 	}
 
 	// 4. Verify golden files in expected/
-	for _, name := range []string{"root.go", "pointers.go", "validate.go", "ptr.go", "scope.go"} {
+	for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go"} {
 		golden, ok := expected[name]
 		if !ok {
 			t.Fatalf("missing expected golden %s", name)
@@ -4067,16 +4067,17 @@ func TestOptionalValueInvalidConfigurations(t *testing.T) {
 	}{
 		{"positional", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsPositional: true}},
 		{"vararg", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsVarArg: true}},
-		{"default", &model.FunctionParameter{Name: "opt", OptionalValue: true, HasDefaultValue: true, Default: "foo"}},
 		{"generator", &model.FunctionParameter{Name: "opt", OptionalValue: true, Generator: model.GeneratorConfig{Type: model.SourceTypeGenerator}}},
-		{"inherited", &model.FunctionParameter{Name: "opt", OptionalValue: true, Inherited: true}},
+		{"triple_pointer", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "***string"}},
+		{"slice_pointer_slice", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "[]*[]string"}},
+		{"map", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "map[string]string"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{tc.param}}
 			dm := &model.DataModel{Commands: []*model.Command{cmd}}
 			err := dm.Validate()
-			if err == nil || !strings.Contains(err.Error(), "must be a local flag without a default or generator") {
-				t.Fatalf("expected validation error, got: %v", err)
+			if err == nil {
+				t.Fatalf("expected validation error, got nil")
 			}
 		})
 	}

@@ -15,14 +15,14 @@
   "Parameters": [
     {
       "Name": "label",
-      "Type": "OptionalLabel",
+      "Type": "string",
       "OptionalValue": true,
       "FlagAliases": ["l"],
-      "Description": "Optional value consumer-owned label"
+      "Description": "Optional string flag"
     },
     {
       "Name": "items",
-      "Type": "OptionalPointers",
+      "Type": "[]*string",
       "OptionalValue": true,
       "FlagAliases": ["i"],
       "Description": "Repeated optional pointers"
@@ -51,8 +51,8 @@ var _ Cmd = (*ConfigCmd)(nil)
 type ConfigCmd struct {
 	*RootCmd
 	Flags         *flag.FlagSet
-	label         OptionalLabel
-	items         OptionalPointers
+	label         string
+	items         []*string
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *ConfigCmd) error
 }
@@ -111,13 +111,19 @@ func (c *ConfigCmd) Execute(args []string) (err error) {
 			switch name {
 
 			case "label":
-				if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+				if !hasValue {
+					c.label = ""
+				} else {
+					s := value
+					c.label = s
 				}
 
 			case "items":
-				if err := c.items.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+				if !hasValue {
+					c.items = append(c.items, nil)
+				} else {
+					s := value
+					c.items = append(c.items, &s)
 				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
@@ -145,8 +151,11 @@ func (c *ConfigCmd) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						c.label = ""
+					} else {
+						s := value
+						c.label = s
 					}
 				}
 
@@ -162,8 +171,11 @@ func (c *ConfigCmd) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.items.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						c.items = append(c.items, nil)
+					} else {
+						s := value
+						c.items = append(c.items, &s)
 					}
 				}
 				if !found {

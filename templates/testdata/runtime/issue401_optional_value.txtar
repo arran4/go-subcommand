@@ -1,5 +1,5 @@
-Inspectable optional-value flags: omitted, bare, explicit assignment, short attached,
-repeated values, pointers, errors, and positional non-consumption.
+Inspectable optional-value flags: ordinary Go primitive types, pointers,
+slices, lossless pointer slices, generator conversion, and positional non-consumption.
 -- input/go.mod --
 module example.com/optionalvalue
 
@@ -8,137 +8,202 @@ go 1.22
 package app
 
 import (
-	"errors"
 	"fmt"
 )
-
-// OptionalLabel is a consumer-owned value type. It deliberately has no
-// dependency on gosubc.
-type OptionalLabel struct {
-	Present  bool
-	HasValue bool
-	Value    string
-}
-
-func (o *OptionalLabel) SetOptionalValue(present, hasValue bool, value string) error {
-	o.Present, o.HasValue, o.Value = present, hasValue, value
-	return nil
-}
 
 // Root is a subcommand `app` - Root optional value command.
 //
 // Flags:
 //
-//	label: (optional value) --label -l A consumer-owned three-state label.
-func Root(label OptionalLabel) {
-	fmt.Printf("present=%t value=%t label=%q\n", label.Present, label.HasValue, label.Value)
+//	label: (optional value) --label -l Optional string label.
+//	verbose: (optional value) --verbose -v Optional boolean flag.
+func Root(label string, verbose bool) {
+	fmt.Printf("label=%q verbose=%t\n", label, verbose)
 }
 
-// OptionalPointers proves that consumers may use pointers and repeated values
-// in their own durable optional-value representation.
-type OptionalPointers struct {
-	Bare   int
-	Values []*string
-}
-
-func (o *OptionalPointers) SetOptionalValue(_ bool, hasValue bool, value string) error {
-	if !hasValue {
-		o.Bare++
-		return nil
-	}
-	val := value
-	o.Values = append(o.Values, &val)
-	return nil
-}
-
-// Pointers is a subcommand `app pointers` - Repeated optional pointer values.
+// Scalar is a subcommand `app scalar` - Scalar optional values with defaults.
 //
 // Flags:
 //
-//	items: (optional value) --items -i Repeated optional pointer values.
-func Pointers(items OptionalPointers) {
-	values := make([]string, 0, len(items.Values))
-	for _, value := range items.Values {
-		values = append(values, *value)
-	}
-	fmt.Printf("bare=%d values=%q\n", items.Bare, values)
+//	str: (optional value) --str -s String scalar.
+//	num: (optional value) --num -n Integer scalar.
+//	def: (optional value; default: "fallback") --def Defaulted string scalar.
+func Scalar(str string, num int, def string) {
+	fmt.Printf("str=%q num=%d def=%q\n", str, num, def)
 }
 
-// OptionalValidation validates values and returns an error on invalid input.
-type OptionalValidation struct {
-	Present  bool
-	HasValue bool
-	Value    string
-}
-
-func (o *OptionalValidation) SetOptionalValue(present, hasValue bool, value string) error {
-	if hasValue && value == "invalid" {
-		return errors.New("invalid parameter payload")
-	}
-	o.Present, o.HasValue, o.Value = present, hasValue, value
-	return nil
-}
-
-// Validate is a subcommand `app validate` - Validated optional flag.
+// Pointers is a subcommand `app pointers` - Pointer and double-pointer optional values.
 //
 // Flags:
 //
-//	strict: (optional value) --strict -s Validated optional flag.
-func Validate(strict OptionalValidation) {
-	fmt.Printf("strict present=%t value=%t value=%q\n", strict.Present, strict.HasValue, strict.Value)
+//	ptr: (optional value) --ptr -p Optional string pointer.
+//	num: (optional value) --num -n Optional int pointer.
+//	tri: (optional value) --tri Optional double pointer.
+func Pointers(ptr *string, num *int, tri **string) {
+	ptrStr := "<nil>"
+	if ptr != nil {
+		ptrStr = fmt.Sprintf("%q", *ptr)
+	}
+	numStr := "<nil>"
+	if num != nil {
+		numStr = fmt.Sprintf("%d", *num)
+	}
+	triStr := "<nil>"
+	if tri != nil {
+		if *tri == nil {
+			triStr = "<bare>"
+		} else {
+			triStr = fmt.Sprintf("%q", **tri)
+		}
+	}
+	fmt.Printf("ptr=%s num=%s tri=%s\n", ptrStr, numStr, triStr)
 }
 
-// Ptr is a subcommand `app ptr` - Optional pointer parameter.
+// Slices is a subcommand `app slices` - Slice and pointer-slice optional values.
 //
 // Flags:
 //
-//	opt: (optional value) --opt -o Optional pointer flag.
-func Ptr(opt *OptionalLabel) {
-	if opt == nil {
-		fmt.Println("opt is nil")
-	} else {
-		fmt.Printf("opt present=%t value=%t value=%q\n", opt.Present, opt.HasValue, opt.Value)
+//	items: (optional value) --items -i Slice of strings.
+//	ptrs: (optional value) --ptrs -p Lossless slice of string pointers.
+func Slices(items []string, ptrs []*string) {
+	ptrsFormatted := make([]string, 0, len(ptrs))
+	for _, p := range ptrs {
+		if p == nil {
+			ptrsFormatted = append(ptrsFormatted, "<nil>")
+		} else {
+			ptrsFormatted = append(ptrsFormatted, fmt.Sprintf("%q", *p))
+		}
 	}
+	fmt.Printf("items=%q ptrs=%v\n", items, ptrsFormatted)
 }
 
 // Scope is a subcommand `app scope` - Optional flag before positional arg.
 //
 // Flags:
 //
-//	label: (optional value) --label -l Optional flag before positional arg.
+//	opt: (optional value) --opt -o Optional string pointer.
 //	pos: @1 Positional argument.
-func Scope(label OptionalLabel, pos string) {
-	fmt.Printf("scope present=%t value=%t label=%q pos=%q\n", label.Present, label.HasValue, label.Value, pos)
+func Scope(opt *string, pos string) {
+	optStr := "<nil>"
+	if opt != nil {
+		optStr = fmt.Sprintf("%q", *opt)
+	}
+	fmt.Printf("opt=%s pos=%q\n", optStr, pos)
+}
+
+// NullString is a consumer-owned nullable representation.
+type NullString struct {
+	String string
+	Valid  bool
+}
+
+func ToNullString(values []*string) (*NullString, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	v := values[len(values)-1]
+	if v == nil {
+		return &NullString{Valid: false}, nil
+	}
+	return &NullString{String: *v, Valid: true}, nil
+}
+
+// Convert is a subcommand `app convert` - Generator conversion.
+//
+// Flags:
+//
+//	raw: (optional value) --raw -r Raw optional flags.
+//	dest: (generator: ToNullString(raw)) Converted NullString.
+func Convert(raw []*string, dest *NullString) {
+	if dest == nil {
+		fmt.Println("dest=<nil>")
+	} else if !dest.Valid {
+		fmt.Println("dest=<bare>")
+	} else {
+		fmt.Printf("dest=%q\n", dest.String)
+	}
+}
+
+type Level int
+
+func ParseLevel(s string) (Level, error) {
+	switch s {
+	case "debug":
+		return 1, nil
+	case "info":
+		return 2, nil
+	case "warn":
+		return 3, nil
+	case "":
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unknown level %q", s)
+	}
+}
+
+// Custom is a subcommand `app custom` - Custom parser optional flag.
+//
+// Flags:
+//
+//	level: (optional value; parser: ParseLevel) --level -l Log level.
+func Custom(level *Level) {
+	if level == nil {
+		fmt.Println("level=<nil>")
+	} else {
+		fmt.Printf("level=%d\n", *level)
+	}
 }
 -- expected/invocations.json --
 [
-  {"args": [], "stdout": "present=false value=false label=\"\"\n"},
-  {"args": ["--label"], "stdout": "present=true value=false label=\"\"\n"},
-  {"args": ["--label="], "stdout": "present=true value=true label=\"\"\n"},
-  {"args": ["--label=zero"], "stdout": "present=true value=true label=\"zero\"\n"},
-  {"args": ["-l"], "stdout": "present=true value=false label=\"\"\n"},
-  {"args": ["-lblue"], "stdout": "present=true value=true label=\"blue\"\n"},
-  {"args": ["-l=blue"], "stdout": "present=true value=true label=\"blue\"\n"},
-  {"args": ["-l="], "stdout": "present=true value=true label=\"\"\n"},
-  {"args": ["pointers"], "stdout": "bare=0 values=[]\n"},
-  {"args": ["pointers", "--items=first", "--items", "-i="], "stdout": "bare=1 values=[\"first\" \"\"]\n"},
-  {"args": ["pointers", "-i", "-ival1", "--items=val2"], "stdout": "bare=1 values=[\"val1\" \"val2\"]\n"},
-  {"args": ["ptr"], "stdout": "opt is nil\n"},
-  {"args": ["ptr", "--opt"], "stdout": "opt present=true value=false value=\"\"\n"},
-  {"args": ["ptr", "--opt=hello"], "stdout": "opt present=true value=true value=\"hello\"\n"},
-  {"args": ["ptr", "-ohello"], "stdout": "opt present=true value=true value=\"hello\"\n"},
-  {"args": ["ptr", "-o"], "stdout": "opt present=true value=false value=\"\"\n"},
-  {"args": ["scope", "mypos"], "stdout": "scope present=false value=false label=\"\" pos=\"mypos\"\n"},
-  {"args": ["scope", "--label", "mypos"], "stdout": "scope present=true value=false label=\"\" pos=\"mypos\"\n"},
-  {"args": ["scope", "-l", "mypos"], "stdout": "scope present=true value=false label=\"\" pos=\"mypos\"\n"},
-  {"args": ["scope", "--label=custom", "mypos"], "stdout": "scope present=true value=true label=\"custom\" pos=\"mypos\"\n"},
-  {"args": ["scope", "-lcustom", "mypos"], "stdout": "scope present=true value=true label=\"custom\" pos=\"mypos\"\n"},
-  {"args": ["scope", "--label", "--", "mypos"], "stdout": "scope present=true value=false label=\"\" pos=\"mypos\"\n"},
-  {"args": ["validate", "--strict"], "stdout": "strict present=true value=false value=\"\"\n"},
-  {"args": ["validate", "--strict=ok"], "stdout": "strict present=true value=true value=\"ok\"\n"},
-  {"args": ["validate", "--strict=invalid"], "status": 1, "stderr": "Error: invalid optional value for flag strict: invalid parameter payload\n"},
-  {"args": ["validate", "-s=invalid"], "status": 1, "stderr": "Error: invalid optional value for flag -s: invalid parameter payload\n"},
-  {"args": ["validate", "-sinvalid"], "status": 1, "stderr": "Error: invalid optional value for flag -s: invalid parameter payload\n"},
+  {"args": [], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--label"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--label=hello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["--label="], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["-lhello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["-l=hello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["-l="], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["-l"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--verbose"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["--verbose=false"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--verbose=true"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["-v"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["-v=false"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["scalar"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str", "--num", "--def"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str=val", "--num=10", "--def=over"], "stdout": "str=\"val\" num=10 def=\"over\"\n"},
+  {"args": ["scalar", "--str=", "--def="], "stdout": "str=\"\" num=0 def=\"\"\n"},
+  {"args": ["scalar", "-sval", "-n10"], "stdout": "str=\"val\" num=10 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str=initial", "--str"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str", "--str=final"], "stdout": "str=\"final\" num=0 def=\"fallback\"\n"},
+  {"args": ["pointers"], "stdout": "ptr=<nil> num=<nil> tri=<nil>\n"},
+  {"args": ["pointers", "--ptr", "--num", "--tri"], "stdout": "ptr=\"\" num=0 tri=<bare>\n"},
+  {"args": ["pointers", "--ptr=hello", "--num=42", "--tri=deep"], "stdout": "ptr=\"hello\" num=42 tri=\"deep\"\n"},
+  {"args": ["pointers", "--ptr=", "--tri="], "stdout": "ptr=\"\" num=<nil> tri=\"\"\n"},
+  {"args": ["pointers", "-phello", "-n42"], "stdout": "ptr=\"hello\" num=42 tri=<nil>\n"},
+  {"args": ["pointers", "-p", "-n"], "stdout": "ptr=\"\" num=0 tri=<nil>\n"},
+  {"args": ["pointers", "--ptr=first", "--ptr"], "stdout": "ptr=\"\" num=<nil> tri=<nil>\n"},
+  {"args": ["pointers", "--ptr", "--ptr=second"], "stdout": "ptr=\"second\" num=<nil> tri=<nil>\n"},
+  {"args": ["slices"], "stdout": "items=[] ptrs=[]\n"},
+  {"args": ["slices", "--items=first", "--items", "-i=", "--ptrs=first", "--ptrs", "-p="], "stdout": "items=[\"first\" \"\" \"\"] ptrs=[\"first\" <nil> \"\"]\n"},
+  {"args": ["scope", "mypos"], "stdout": "opt=<nil> pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["scope", "-o", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt=val", "mypos"], "stdout": "opt=\"val\" pos=\"mypos\"\n"},
+  {"args": ["scope", "-oval", "mypos"], "stdout": "opt=\"val\" pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt", "--", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["convert"], "stdout": "dest=<nil>\n"},
+  {"args": ["convert", "--raw"], "stdout": "dest=<bare>\n"},
+  {"args": ["convert", "--raw=hello"], "stdout": "dest=\"hello\"\n"},
+  {"args": ["convert", "--raw="], "stdout": "dest=\"\"\n"},
+  {"args": ["convert", "-r"], "stdout": "dest=<bare>\n"},
+  {"args": ["convert", "-rhello"], "stdout": "dest=\"hello\"\n"},
+  {"args": ["custom"], "stdout": "level=<nil>\n"},
+  {"args": ["custom", "--level"], "stdout": "level=0\n"},
+  {"args": ["custom", "--level=info"], "stdout": "level=2\n"},
+  {"args": ["custom", "-l=warn"], "stdout": "level=3\n"},
+  {"args": ["custom", "--level=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag level: bad\n"},
+  {"args": ["custom", "-l=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
+  {"args": ["custom", "-lbad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
   {"args": ["--help"], "stderrFile": "root-help.stderr"},
   {"args": ["help"], "stderrFile": "root-help.stderr"},
   {"args": ["usage"], "stderrFile": "root-help.stderr"}
@@ -154,6 +219,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -217,7 +283,8 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
-	label         app.OptionalLabel
+	label         string
+	verbose       bool
 	CommandAction func(c *RootCmd) error
 }
 
@@ -258,8 +325,20 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 	c.CommandAction = func(c *RootCmd) error {
 
-		app.Root(c.label)
+		app.Root(c.label, c.verbose)
 		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewConvert() })
+		c.Commands["convert"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewCustom() })
+		c.Commands["custom"] = subCmd
+
 	}
 
 	{
@@ -269,8 +348,8 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 
 	{
-		subCmd := NewLazyCommand(func() Cmd { return c.NewPtr() })
-		c.Commands["ptr"] = subCmd
+		subCmd := NewLazyCommand(func() Cmd { return c.NewScalar() })
+		c.Commands["scalar"] = subCmd
 
 	}
 
@@ -281,8 +360,8 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	}
 
 	{
-		subCmd := NewLazyCommand(func() Cmd { return c.NewValidate() })
-		c.Commands["validate"] = subCmd
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSlices() })
+		c.Commands["slices"] = subCmd
 
 	}
 	c.Commands["help"] = func() Cmd {
@@ -398,8 +477,22 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			switch name {
 
 			case "label":
-				if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+				if !hasValue {
+					c.label = ""
+				} else {
+					s := value
+					c.label = s
+				}
+
+			case "verbose":
+				if !hasValue {
+					c.verbose = true
+				} else {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.verbose = b
 				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
@@ -427,8 +520,34 @@ func (c *RootCmd) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						c.label = ""
+					} else {
+						s := value
+						c.label = s
+					}
+				}
+
+				if char == "v" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.verbose = true
+					} else {
+						b, err := strconv.ParseBool(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid boolean value for flag -%s: %s", char, value)
+						}
+						c.verbose = b
 					}
 				}
 				if !found {
@@ -455,6 +574,244 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	return nil
 }
+-- expected/scalar.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Scalar)(nil)
+
+type Scalar struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	str           string
+	num           int
+	def           string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Scalar) error
+}
+
+type UsageDataScalar struct {
+	*Scalar
+	Recursive bool
+}
+
+func (c *Scalar) Usage() {
+	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scalar) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Scalar) commandPath() string { return "app scalar" }
+
+func (c *Scalar) UsageRecursive() {
+	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scalar) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "str":
+				if !hasValue {
+					c.str = ""
+				} else {
+					s := value
+					c.str = s
+				}
+
+			case "num":
+				if !hasValue {
+					c.num = 0
+				} else {
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+					}
+					val := v
+					c.num = val
+				}
+
+			case "def":
+				if !hasValue {
+					c.def = "fallback"
+				} else {
+					s := value
+					c.def = s
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "s" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.str = ""
+					} else {
+						s := value
+						c.str = s
+					}
+				}
+
+				if char == "n" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.num = 0
+					} else {
+						v, err := strconv.Atoi(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.num = val
+					}
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewScalar() *Scalar {
+	set := flag.NewFlagSet("scalar", flag.ContinueOnError)
+	v := &Scalar{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	v.def = "fallback"
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Scalar) error {
+
+		app.Scalar(c.str, c.num, c.def)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
 -- expected/pointers.go --
 // Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
 
@@ -465,6 +822,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	app "example.com/optionalvalue"
@@ -476,7 +834,9 @@ var _ Cmd = (*Pointers)(nil)
 type Pointers struct {
 	*RootCmd
 	Flags         *flag.FlagSet
-	items         app.OptionalPointers
+	ptr           *string
+	num           *int
+	tri           **string
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *Pointers) error
 }
@@ -534,9 +894,36 @@ func (c *Pointers) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 
-			case "items":
-				if err := c.items.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+			case "ptr":
+				if !hasValue {
+					bare := ""
+					c.ptr = &bare
+				} else {
+					s := value
+					c.ptr = &s
+				}
+
+			case "num":
+				if !hasValue {
+					bare := 0
+					c.num = &bare
+				} else {
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+					}
+					val := v
+					c.num = &val
+				}
+
+			case "tri":
+				if !hasValue {
+					var nilVal *string
+					c.tri = &nilVal
+				} else {
+					s := value
+					sPtr := &s
+					c.tri = &sPtr
 				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
@@ -552,7 +939,7 @@ func (c *Pointers) Execute(args []string) (err error) {
 				}
 				found := false
 
-				if char == "i" {
+				if char == "p" {
 					found = true
 					value := ""
 					hasValue := false
@@ -564,10 +951,40 @@ func (c *Pointers) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.items.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						bare := ""
+						c.ptr = &bare
+					} else {
+						s := value
+						c.ptr = &s
 					}
 				}
+
+				if char == "n" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						bare := 0
+						c.num = &bare
+					} else {
+						v, err := strconv.Atoi(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.num = &val
+					}
+				}
+
 				if !found {
 					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
@@ -606,7 +1023,7 @@ func (c *RootCmd) NewPointers() *Pointers {
 
 	v.CommandAction = func(c *Pointers) error {
 
-		app.Pointers(c.items)
+		app.Pointers(c.ptr, c.num, c.tri)
 		return nil
 	}
 
@@ -638,7 +1055,7 @@ func (c *RootCmd) NewPointers() *Pointers {
 	}
 	return v
 }
--- expected/validate.go --
+-- expected/slices.go --
 // Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
 
 package main
@@ -654,42 +1071,43 @@ import (
 	"example.com/optionalvalue/cmd"
 )
 
-var _ Cmd = (*Validate)(nil)
+var _ Cmd = (*Slices)(nil)
 
-type Validate struct {
+type Slices struct {
 	*RootCmd
 	Flags         *flag.FlagSet
-	strict        app.OptionalValidation
+	items         []string
+	ptrs          []*string
 	SubCommands   map[string]func() Cmd
-	CommandAction func(c *Validate) error
+	CommandAction func(c *Slices) error
 }
 
-type UsageDataValidate struct {
-	*Validate
+type UsageDataSlices struct {
+	*Slices
 	Recursive bool
 }
 
-func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+func (c *Slices) Usage() {
+	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, false})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+func (c *Slices) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
 	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
 }
 
-func (c *Validate) commandPath() string { return "app validate" }
+func (c *Slices) commandPath() string { return "app slices" }
 
-func (c *Validate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
+func (c *Slices) UsageRecursive() {
+	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
 	}
 }
 
-func (c *Validate) Execute(args []string) (err error) {
+func (c *Slices) Execute(args []string) (err error) {
 	var remainingArgs []string
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {
@@ -717,9 +1135,21 @@ func (c *Validate) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 
-			case "strict":
-				if err := c.strict.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+			case "items":
+				if !hasValue {
+					bare := ""
+					c.items = append(c.items, bare)
+				} else {
+					s := value
+					c.items = append(c.items, s)
+				}
+
+			case "ptrs":
+				if !hasValue {
+					c.ptrs = append(c.ptrs, nil)
+				} else {
+					s := value
+					c.ptrs = append(c.ptrs, &s)
 				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
@@ -735,7 +1165,7 @@ func (c *Validate) Execute(args []string) (err error) {
 				}
 				found := false
 
-				if char == "s" {
+				if char == "i" {
 					found = true
 					value := ""
 					hasValue := false
@@ -747,8 +1177,32 @@ func (c *Validate) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.strict.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						bare := ""
+						c.items = append(c.items, bare)
+					} else {
+						s := value
+						c.items = append(c.items, s)
+					}
+				}
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.ptrs = append(c.ptrs, nil)
+					} else {
+						s := value
+						c.ptrs = append(c.ptrs, &s)
 					}
 				}
 				if !found {
@@ -778,207 +1232,18 @@ func (c *Validate) Execute(args []string) (err error) {
 	return nil
 }
 
-func (c *RootCmd) NewValidate() *Validate {
-	set := flag.NewFlagSet("validate", flag.ContinueOnError)
-	v := &Validate{
+func (c *RootCmd) NewSlices() *Slices {
+	set := flag.NewFlagSet("slices", flag.ContinueOnError)
+	v := &Slices{
 		RootCmd:     c,
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
 	set.Usage = v.Usage
 
-	v.CommandAction = func(c *Validate) error {
+	v.CommandAction = func(c *Slices) error {
 
-		app.Validate(c.strict)
-		return nil
-	}
-
-	v.SubCommands["help"] = func() Cmd {
-		return &InternalCommand{
-			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					v.UsageRecursive()
-					return nil
-				}
-				v.Usage()
-				return nil
-			},
-			UsageFunc: v.Usage,
-		}
-	}
-	v.SubCommands["usage"] = func() Cmd {
-		return &InternalCommand{
-			Exec: func(args []string) error {
-				if slices.Contains(args, "-deep") {
-					v.UsageRecursive()
-					return nil
-				}
-				v.Usage()
-				return nil
-			},
-			UsageFunc: v.Usage,
-		}
-	}
-	return v
-}
--- expected/ptr.go --
-// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
-
-package main
-
-import (
-	"flag"
-	"fmt"
-	"os"
-	"slices"
-	"strings"
-
-	app "example.com/optionalvalue"
-	"example.com/optionalvalue/cmd"
-)
-
-var _ Cmd = (*Ptr)(nil)
-
-type Ptr struct {
-	*RootCmd
-	Flags         *flag.FlagSet
-	opt           *app.OptionalLabel
-	SubCommands   map[string]func() Cmd
-	CommandAction func(c *Ptr) error
-}
-
-type UsageDataPtr struct {
-	*Ptr
-	Recursive bool
-}
-
-func (c *Ptr) Usage() {
-	err := executeUsage(os.Stderr, "ptr_usage.txt", UsageDataPtr{c, false})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
-	}
-}
-
-func (c *Ptr) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
-	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
-}
-
-func (c *Ptr) commandPath() string { return "app ptr" }
-
-func (c *Ptr) UsageRecursive() {
-	err := executeUsage(os.Stderr, "ptr_usage.txt", UsageDataPtr{c, true})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
-	}
-}
-
-func (c *Ptr) Execute(args []string) (err error) {
-	var remainingArgs []string
-	dashDashSeen := false
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			dashDashSeen = true
-			remainingArgs = append(remainingArgs, args[i+1:]...)
-			break
-		}
-		if strings.HasPrefix(arg, "--") {
-			if arg == "--help" {
-				c.Usage()
-				return nil
-			}
-			name := arg[2:]
-			value := ""
-			hasValue := false
-			if strings.Contains(name, "=") {
-				parts := strings.SplitN(name, "=", 2)
-				name = parts[0]
-				value = parts[1]
-				hasValue = true
-			}
-			_ = value
-			_ = hasValue
-			switch name {
-
-			case "opt":
-				if c.opt == nil {
-					c.opt = new(app.OptionalLabel)
-				}
-				if err := c.opt.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
-				}
-			default:
-				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
-			}
-		} else if strings.HasPrefix(arg, "-") && arg != "-" {
-			// Short flags
-			shorts := arg[1:]
-			for j := 0; j < len(shorts); j++ {
-				char := string(shorts[j])
-				if char == "h" {
-					c.Usage()
-					return nil
-				}
-				found := false
-
-				if char == "o" {
-					found = true
-					value := ""
-					hasValue := false
-					if j+1 < len(shorts) {
-						value = shorts[j+1:]
-						if strings.HasPrefix(value, "=") {
-							value = value[1:]
-						}
-						hasValue = true
-						j = len(shorts)
-					}
-					if c.opt == nil {
-						c.opt = new(app.OptionalLabel)
-					}
-					if err := c.opt.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
-					}
-				}
-				if !found {
-					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
-				}
-			}
-		} else {
-			remainingArgs = append(remainingArgs, args[i:]...)
-			break
-		}
-	}
-
-	if !dashDashSeen && len(remainingArgs) > 0 {
-		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
-			return cmd().Execute(remainingArgs[1:])
-		}
-	}
-
-	if c.CommandAction != nil {
-		if err := c.CommandAction(c); err != nil {
-			return err
-		}
-	} else {
-		c.Usage()
-	}
-
-	return nil
-}
-
-func (c *RootCmd) NewPtr() *Ptr {
-	set := flag.NewFlagSet("ptr", flag.ContinueOnError)
-	v := &Ptr{
-		RootCmd:     c,
-		Flags:       set,
-		SubCommands: make(map[string]func() Cmd),
-	}
-	set.Usage = v.Usage
-
-	v.CommandAction = func(c *Ptr) error {
-
-		app.Ptr(c.opt)
+		app.Slices(c.items, c.ptrs)
 		return nil
 	}
 
@@ -1031,7 +1296,7 @@ var _ Cmd = (*Scope)(nil)
 type Scope struct {
 	*RootCmd
 	Flags         *flag.FlagSet
-	label         app.OptionalLabel
+	opt           *string
 	pos           string
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *Scope) error
@@ -1090,9 +1355,13 @@ func (c *Scope) Execute(args []string) (err error) {
 			_ = hasValue
 			switch name {
 
-			case "label":
-				if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+			case "opt":
+				if !hasValue {
+					bare := ""
+					c.opt = &bare
+				} else {
+					s := value
+					c.opt = &s
 				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
@@ -1108,7 +1377,7 @@ func (c *Scope) Execute(args []string) (err error) {
 				}
 				found := false
 
-				if char == "l" {
+				if char == "o" {
 					found = true
 					value := ""
 					hasValue := false
@@ -1120,8 +1389,12 @@ func (c *Scope) Execute(args []string) (err error) {
 						hasValue = true
 						j = len(shorts)
 					}
-					if err := c.label.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						bare := ""
+						c.opt = &bare
+					} else {
+						s := value
+						c.opt = &s
 					}
 				}
 				if !found {
@@ -1174,7 +1447,415 @@ func (c *RootCmd) NewScope() *Scope {
 
 	v.CommandAction = func(c *Scope) error {
 
-		app.Scope(c.label, c.pos)
+		app.Scope(c.opt, c.pos)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/convert.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Convert)(nil)
+
+type Convert struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	raw           []*string
+	dest          *app.NullString
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Convert) error
+}
+
+type UsageDataConvert struct {
+	*Convert
+	Recursive bool
+}
+
+func (c *Convert) Usage() {
+	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Convert) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Convert) commandPath() string { return "app convert" }
+
+func (c *Convert) UsageRecursive() {
+	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Convert) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "raw":
+				if !hasValue {
+					c.raw = append(c.raw, nil)
+				} else {
+					s := value
+					c.raw = append(c.raw, &s)
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "r" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.raw = append(c.raw, nil)
+					} else {
+						s := value
+						c.raw = append(c.raw, &s)
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	{
+		v, err := app.ToNullString(c.raw)
+		if err != nil {
+			return fmt.Errorf("failed to generate dest: %w", err)
+		}
+		c.dest = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewConvert() *Convert {
+	set := flag.NewFlagSet("convert", flag.ContinueOnError)
+	v := &Convert{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Convert) error {
+
+		app.Convert(c.raw, c.dest)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/custom.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Custom)(nil)
+
+type Custom struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	level         *app.Level
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Custom) error
+}
+
+type UsageDataCustom struct {
+	*Custom
+	Recursive bool
+}
+
+func (c *Custom) Usage() {
+	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Custom) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Custom) commandPath() string { return "app custom" }
+
+func (c *Custom) UsageRecursive() {
+	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Custom) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "level":
+				if !hasValue {
+					bare := *new(app.Level)
+					c.level = &bare
+				} else {
+					v, err := app.ParseLevel(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid example.com/optionalvalue.Level value for flag %s: %s", name, value)
+					}
+					val := app.Level(v)
+					c.level = &val
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "l" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						bare := *new(app.Level)
+						c.level = &bare
+					} else {
+						v, err := app.ParseLevel(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid example.com/optionalvalue.Level value for flag -%s: %s", char, value)
+						}
+						val := app.Level(v)
+						c.level = &val
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewCustom() *Custom {
+	set := flag.NewFlagSet("custom", flag.ContinueOnError)
+	v := &Custom{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Custom) error {
+
+		app.Custom(c.level)
 		return nil
 	}
 
@@ -1212,13 +1893,16 @@ Usage: app [flags...] <subcommand>
 - Root optional value command.
 
 Subcommands:
-    pointers - Repeated optional pointer values.
-    ptr      - Optional pointer parameter.
+    convert  - Generator conversion.
+    custom   - Custom parser optional flag.
+    pointers - Pointer and double-pointer optional values.
+    scalar   - Scalar optional values with defaults.
     scope    - Optional flag before positional arg.
-    validate - Validated optional flag.
+    slices   - Slice and pointer-slice optional values.
     help     Print this help message
     usage    Print this usage message
 
 
 Flags:
-    --label, -l [=OptionalLabel]   A consumer-owned three-state label.
+    --label, -l [=string]   Optional string label.
+    --verbose, -v [=bool]   Optional boolean flag.
