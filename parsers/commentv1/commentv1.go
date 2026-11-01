@@ -486,6 +486,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if ident, ok := sel.X.(*ast.Ident); ok {
 								typeAlias = ident.Name
 							}
+						} else if ident, ok := extractSelector.(*ast.Ident); ok {
+							typeActualName = ident.Name
+							if !isBuiltinGoType(ident.Name) && importPath != "" && f != nil && f.Name != nil {
+								typeImportPath = importPath
+								typePackageName = f.Name.Name
+							}
 						}
 
 						// Resolve alias against file imports
@@ -755,13 +761,6 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Generator.Func.ImportPath = importPath
 							fp.Generator.Func.PackagePath = importPath
 							fp.Generator.Func.CommandPackageName = f.Name.Name
-						}
-						if fp.OptionalValue && fp.TypeImportPath == "" {
-							if f != nil && f.Name != nil && f.Name.Name != "" {
-								fp.TypeImportPath = importPath
-								fp.TypePackageName = f.Name.Name
-								fp.TypeName = fp.BaseType()
-							}
 						}
 						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
@@ -1580,5 +1579,16 @@ func formatType(expr ast.Expr) (string, error) {
 		return "..." + s, nil
 	default:
 		return "", fmt.Errorf("unsupported type: %T", t)
+	}
+}
+
+func isBuiltinGoType(name string) bool {
+	switch name {
+	case "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64", "rune", "string",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "any":
+		return true
+	default:
+		return false
 	}
 }

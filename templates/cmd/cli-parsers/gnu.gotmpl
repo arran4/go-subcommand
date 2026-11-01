@@ -54,13 +54,80 @@
 				seenFlags["{{$param.Name}}"] = true
 				{{- end }}
 				{{- if $param.OptionalValue }}
-				{{- if and $param.HasPointer (not $param.IsSlice) }}
-				if c.{{$param.Name}} == nil {
-					c.{{$param.Name}} = new({{$param.NonPointerGeneratedType}})
-				}
-				{{- end }}
-				if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
-					return c.usageError(cmd.UsageInvalidValue, name, err, "invalid optional value for flag %s: %s", name, err)
+				if !hasValue {
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, nil)
+					{{- else }}
+					bare := {{$param.BareValueCode}}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, bare)
+					{{- end }}
+					{{- else if eq $param.PointerDepth 2 }}
+					var nilVal *{{$param.BaseType}}
+					c.{{$param.Name}} = &nilVal
+					{{- else if $param.HasPointer }}
+					bare := {{$param.BareValueCode}}
+					c.{{$param.Name}} = &bare
+					{{- else }}
+					c.{{$param.Name}} = {{$param.BareValueCode}}
+					{{- end }}
+				} else {
+					{{- if $param.IsBool }}
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, b)
+					{{- end }}
+					{{- else if eq $param.PointerDepth 2 }}
+					bPtr := &b
+					c.{{$param.Name}} = &bPtr
+					{{- else if $param.HasPointer }}
+					c.{{$param.Name}} = &b
+					{{- else }}
+					c.{{$param.Name}} = b
+					{{- end }}
+					{{- else if and $param.IsString (not $param.HasCustomParser) }}
+					s := value
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, s)
+					{{- end }}
+					{{- else if eq $param.PointerDepth 2 }}
+					sPtr := &s
+					c.{{$param.Name}} = &sPtr
+					{{- else if $param.HasPointer }}
+					c.{{$param.Name}} = &s
+					{{- else }}
+					c.{{$param.Name}} = s
+					{{- end }}
+					{{- else }}
+					v, err := {{$param.ParserCall "value"}}
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid {{$param.TypeDescription}} value for flag %s: %s", name, value)
+					}
+					val := {{$param.CastCode "v"}}
+					{{- if $param.IsSlice }}
+					{{- if $param.HasPointer }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+					{{- else }}
+					c.{{$param.Name}} = append(c.{{$param.Name}}, val)
+					{{- end }}
+					{{- else if eq $param.PointerDepth 2 }}
+					valPtr := &val
+					c.{{$param.Name}} = &valPtr
+					{{- else if $param.HasPointer }}
+					c.{{$param.Name}} = &val
+					{{- else }}
+					c.{{$param.Name}} = val
+					{{- end }}
+					{{- end }}
 				}
 				{{- else if $param.IsBool }}
 				if hasValue {
@@ -192,13 +259,80 @@
 						hasValue = true
 						j = len(shorts)
 					}
-					{{- if and $param.HasPointer (not $param.IsSlice) }}
-					if c.{{$param.Name}} == nil {
-						c.{{$param.Name}} = new({{$param.NonPointerGeneratedType}})
-					}
-					{{- end }}
-					if err := c.{{$param.Name}}.SetOptionalValue(true, hasValue, value); err != nil {
-						return c.usageError(cmd.UsageInvalidValue, char, err, "invalid optional value for flag -%s: %s", char, err)
+					if !hasValue {
+						{{- if $param.IsSlice }}
+						{{- if $param.HasPointer }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, nil)
+						{{- else }}
+						bare := {{$param.BareValueCode}}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, bare)
+						{{- end }}
+						{{- else if eq $param.PointerDepth 2 }}
+						var nilVal *{{$param.BaseType}}
+						c.{{$param.Name}} = &nilVal
+						{{- else if $param.HasPointer }}
+						bare := {{$param.BareValueCode}}
+						c.{{$param.Name}} = &bare
+						{{- else }}
+						c.{{$param.Name}} = {{$param.BareValueCode}}
+						{{- end }}
+					} else {
+						{{- if $param.IsBool }}
+						b, err := strconv.ParseBool(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid boolean value for flag -%s: %s", char, value)
+						}
+						{{- if $param.IsSlice }}
+						{{- if $param.HasPointer }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, &b)
+						{{- else }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, b)
+						{{- end }}
+						{{- else if eq $param.PointerDepth 2 }}
+						bPtr := &b
+						c.{{$param.Name}} = &bPtr
+						{{- else if $param.HasPointer }}
+						c.{{$param.Name}} = &b
+						{{- else }}
+						c.{{$param.Name}} = b
+						{{- end }}
+						{{- else if and $param.IsString (not $param.HasCustomParser) }}
+						s := value
+						{{- if $param.IsSlice }}
+						{{- if $param.HasPointer }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, &s)
+						{{- else }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, s)
+						{{- end }}
+						{{- else if eq $param.PointerDepth 2 }}
+						sPtr := &s
+						c.{{$param.Name}} = &sPtr
+						{{- else if $param.HasPointer }}
+						c.{{$param.Name}} = &s
+						{{- else }}
+						c.{{$param.Name}} = s
+						{{- end }}
+						{{- else }}
+						v, err := {{$param.ParserCall "value"}}
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid {{$param.TypeDescription}} value for flag -%s: %s", char, value)
+						}
+						val := {{$param.CastCode "v"}}
+						{{- if $param.IsSlice }}
+						{{- if $param.HasPointer }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, &val)
+						{{- else }}
+						c.{{$param.Name}} = append(c.{{$param.Name}}, val)
+						{{- end }}
+						{{- else if eq $param.PointerDepth 2 }}
+						valPtr := &val
+						c.{{$param.Name}} = &valPtr
+						{{- else if $param.HasPointer }}
+						c.{{$param.Name}} = &val
+						{{- else }}
+						c.{{$param.Name}} = val
+						{{- end }}
+						{{- end }}
 					}
 					{{- else if $param.IsBool }}
 					{{- if $param.IsSlice }}

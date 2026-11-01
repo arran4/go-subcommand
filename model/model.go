@@ -497,8 +497,11 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 
 	for _, p := range params {
 		if p.OptionalValue {
-			if p.IsPositional || p.IsVarArg || p.HasDefaultValue || p.HasGenerator() || p.Inherited {
-				return fmt.Errorf("command %s: optional-value parameter %s must be a local flag without a default or generator", cmdName, p.Name)
+			if p.IsPositional || p.IsVarArg || p.HasGenerator() {
+				return fmt.Errorf("command %s: optional-value parameter %s must be a flag without a generator or positional mapping", cmdName, p.Name)
+			}
+			if !p.IsSupportedOptionalValueType() {
+				return fmt.Errorf("command %s: parameter %s has type %s which is unsupported for (optional value); supported types are scalar primitives (T), pointers (*T, **T), and slices ([]T, []*T)", cmdName, p.Name, p.Type)
 			}
 		}
 		if p.IsFile() {
@@ -668,13 +671,27 @@ func (p *FunctionParameter) HasPointer() bool {
 	return strings.HasPrefix(t, "*")
 }
 
+// PointerDepth returns the number of pointer indirections on the scalar type.
+func (p *FunctionParameter) PointerDepth() int {
+	t := p.Type
+	t = strings.TrimPrefix(t, "[]")
+	depth := 0
+	for strings.HasPrefix(t, "*") {
+		depth++
+		t = strings.TrimPrefix(t, "*")
+	}
+	return depth
+}
+
 // BaseType returns the underlying Go type spelling (stripping * and []).
 // It deliberately preserves source import qualifiers so the result remains
 // valid Go syntax (for example, stream.Reader).
 func (p *FunctionParameter) BaseType() string {
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
-	t = strings.TrimPrefix(t, "*")
+	for strings.HasPrefix(t, "*") {
+		t = strings.TrimPrefix(t, "*")
+	}
 	return t
 }
 
@@ -693,19 +710,68 @@ func (p *FunctionParameter) CanonicalBaseType() string {
 // other imported types retain their source qualifier.
 func (p *FunctionParameter) GeneratedType() string {
 	if !p.IsReader() && !p.IsWriter() {
-		if p.TypeImportPath == "" || p.TypePackageName == "" || strings.Contains(p.BaseType(), ".") {
-			return p.Type
-		}
-		prefix := strings.TrimSuffix(p.Type, p.BaseType())
-		return prefix + p.TypePackageName + "." + p.BaseType()
+		return p.Type
 	}
 	prefix := strings.TrimSuffix(p.Type, p.BaseType())
 	return prefix + p.CanonicalBaseType()
 }
 
-// NonPointerGeneratedType returns the generated type without leading pointer indirection.
-func (p *FunctionParameter) NonPointerGeneratedType() string {
-	return strings.TrimPrefix(p.GeneratedType(), "*")
+// BareValueCode returns the Go expression representing the bare/default value of the parameter.
+func (p *FunctionParameter) BareValueCode() string {
+	if p.HasDefaultValue && p.Default != "" {
+		if p.IsString() && !strings.HasPrefix(p.Default, `"`) {
+			return fmt.Sprintf("%q", p.Default)
+		}
+		return p.Default
+	}
+	if p.IsBool() {
+		return "true"
+	}
+	if p.IsString() {
+		return `""`
+	}
+	if p.IsDuration() {
+		return "0"
+	}
+	base := p.BaseType()
+	switch base {
+	case "int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return "0"
+	}
+	return fmt.Sprintf("*new(%s)", base)
+}
+
+// IsSupportedOptionalValueType returns true if the parameter type is supported
+// by the optional-value flag contract.
+func (p *FunctionParameter) IsSupportedOptionalValueType() bool {
+	if p.IsReader() || p.IsWriter() || p.IsFile() || p.IsFlagPresence() {
+		return false
+	}
+	depth := p.PointerDepth()
+	if p.IsSlice() {
+		if depth > 1 {
+			return false
+		}
+	} else {
+		if depth > 2 {
+			return false
+		}
+	}
+	base := p.BaseType()
+	if p.HasCustomParser() {
+		return true
+	}
+	switch base {
+	case "string", "bool", "time.Duration",
+		"int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *FunctionParameter) IsBool() bool {

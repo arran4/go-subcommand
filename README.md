@@ -267,21 +267,33 @@ Multiple parenthesized attributes can be combined with semicolons, for example `
 
 #### Optional-value flags
 
-`(optional value)` is an explicit three-state flag contract: omitted, present
-without a value, and present with an assigned value (including `""`). Its
-parameter type is consumer-owned and must provide:
+`(optional value)` is an explicit flag contract supporting ordinary Go
+primitive types, pointers and slices. It distinguishes flag presence from value
+assignment:
 
-```go
-SetOptionalValue(present bool, hasValue bool, value string) error
-```
+| Type | Omitted | Bare flag | Explicit value |
+|---|---|---|---|
+| `T` | Zero / default | Best-effort bare/default value | Parsed `T` |
+| `*T` | nil | Pointer to bare/default value | Pointer to parsed `T` |
+| `**T` | nil | Pointer to nil (`*p == nil`) | Pointer to pointer to parsed `T` |
+| `[]T` | Empty/nil | Append bare/default value | Append parsed `T` |
+| `[]*T` | Empty/nil | Append nil | Append pointer to parsed `T` |
 
-For the GNU parser, `--label` supplies `present=true, hasValue=false`;
-`--label=value` supplies `present=true, hasValue=true`; and `-lvalue` or `-l=value`
-is the short attached-value spelling. A following positional token is never
-consumed as the optional value. This keeps `--` and positional parsing
-unambiguous. The Go-flag backend rejects optional-value parameters because its
-native bare-flag callback cannot distinguish a bare flag from an explicit
-boolean-looking value.
+- For scalar `T`, omission, a bare flag, and an explicit zero value merge into the same Go value.
+- For `*T`, omission evaluates to `nil`, while a bare flag points to the bare/default value.
+- For `**T`, all three states are distinguishable for a single occurrence: `nil` (omitted), non-nil pointing to `nil` (bare), and non-nil pointing to `*T` (explicit value).
+- For `[]*T`, each occurrence is preserved losslessly: an omitted flag produces an empty/nil slice, `--flag` appends `nil`, and `--flag=value` appends `&value` (including `&""` for `--flag=`).
+- Scalar and single-pointer flags follow conventional last-occurrence-wins; slices accumulate in order.
+
+For the GNU parser, `--name` supplies the bare flag; `--name=value` supplies an
+explicit value; and `--name=` supplies an explicit empty string. Short forms
+`-n`, `-nvalue`, `-n=value`, and `-n=` are also supported. A following positional
+token is never consumed as the optional value. This keeps `--` and positional
+parsing unambiguous. The Go-flag backend rejects optional-value parameters
+because its native callback cannot distinguish a bare flag from an explicit
+boolean-looking value. Richer consumer-owned types (such as `sql.NullString`)
+can be constructed by using a `generator:` provider depending on the parsed
+optional flag parameter.
 
 Providers can depend on `(flag presence)` parameters, just like other bound
 command values. Presence maps bind before any effectful provider, regardless of

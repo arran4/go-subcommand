@@ -3,6 +3,9 @@
 {{- $struct := index . 1 -}}
 {{- $params := index . 2 -}}
 	{{- range $params}}
+		{{- if and .OptionalValue .HasDefaultValue (not .HasPointer) (not .IsSlice) }}
+	{{$struct}}.{{.Name}} = {{.BareValueCode}}
+		{{- end }}
 		{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) (not .OptionalValue) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}

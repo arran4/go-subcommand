@@ -999,12 +999,14 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		}
 		if p.TypeImportPath != "" {
 			alias := ""
-			if p.OptionalValue && p.TypePackageName != "" {
-				alias = p.TypePackageName
-			} else if !p.IsReader() && !p.IsWriter() {
-				qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
-				if qualifier != path.Base(p.TypeImportPath) {
-					alias = qualifier
+			if !p.IsReader() && !p.IsWriter() {
+				if dot := strings.IndexByte(p.BaseType(), '.'); dot >= 0 {
+					qualifier := p.BaseType()[:dot]
+					if qualifier != path.Base(p.TypeImportPath) {
+						alias = qualifier
+					}
+				} else if p.TypePackageName != "" && p.TypePackageName != path.Base(p.TypeImportPath) {
+					alias = p.TypePackageName
 				}
 			}
 			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
@@ -1301,6 +1303,17 @@ func runtimeParserImports(parser string, params []*model.FunctionParameter) []te
 						needsStrconv = true
 					}
 				}
+
+				if param.OptionalValue {
+					if param.IsBool() {
+						needsStrconv = true
+					} else if !param.IsString() {
+						call := param.ParserCall("value")
+						if strings.Contains(call, "strconv.") {
+							needsStrconv = true
+						}
+					}
+				}
 			}
 		}
 	} else if parser == "go-flag" {
@@ -1459,6 +1472,11 @@ func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
 					previous := parameter.Type
 					prefix := strings.TrimSuffix(parameter.Type, base)
 					parameter.Type = prefix + identifier + base[dot:]
+					restores = append(restores, func() { parameter.Type = previous })
+				} else {
+					previous := parameter.Type
+					prefix := strings.TrimSuffix(parameter.Type, base)
+					parameter.Type = prefix + identifier + "." + base
 					restores = append(restores, func() { parameter.Type = previous })
 				}
 			}
