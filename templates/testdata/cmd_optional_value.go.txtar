@@ -26,6 +26,27 @@
       "OptionalValue": true,
       "FlagAliases": ["i"],
       "Description": "Repeated optional pointers"
+    },
+    {
+      "Name": "big",
+      "Type": "*int64",
+      "OptionalValue": true,
+      "FlagAliases": ["b"],
+      "Description": "Optional int64 pointer"
+    },
+    {
+      "Name": "ports",
+      "Type": "[]uint32",
+      "OptionalValue": true,
+      "FlagAliases": ["p"],
+      "Description": "Optional uint32 slice"
+    },
+    {
+      "Name": "timeout",
+      "Type": "*time.Duration",
+      "OptionalValue": true,
+      "FlagAliases": ["t"],
+      "Description": "Optional duration pointer"
     }
   ]
 }
@@ -41,7 +62,9 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"example.com/fixture/cmd"
 )
@@ -53,6 +76,9 @@ type ConfigCmd struct {
 	Flags         *flag.FlagSet
 	label         string
 	items         []*string
+	big           *int64
+	ports         []uint32
+	timeout       *time.Duration
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *ConfigCmd) error
 }
@@ -125,6 +151,45 @@ func (c *ConfigCmd) Execute(args []string) (err error) {
 					s := value
 					c.items = append(c.items, &s)
 				}
+
+			case "big":
+				if !hasValue {
+					var bare int64 = 0
+					c.big = &bare
+				} else {
+					v, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid int64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.big = &val
+				}
+
+			case "ports":
+				if !hasValue {
+					var bare uint32 = 0
+					c.ports = append(c.ports, bare)
+				} else {
+					v, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid uint32 value for flag %s: %s", name, value)
+					}
+					val := uint32(v)
+					c.ports = append(c.ports, val)
+				}
+
+			case "timeout":
+				if !hasValue {
+					var bare time.Duration = 0
+					c.timeout = &bare
+				} else {
+					v, err := time.ParseDuration(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid duration value for flag %s: %s", name, value)
+					}
+					val := v
+					c.timeout = &val
+				}
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
@@ -178,6 +243,81 @@ func (c *ConfigCmd) Execute(args []string) (err error) {
 						c.items = append(c.items, &s)
 					}
 				}
+
+				if char == "b" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare int64 = 0
+						c.big = &bare
+					} else {
+						v, err := strconv.ParseInt(value, 10, 64)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid int64 value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.big = &val
+					}
+				}
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare uint32 = 0
+						c.ports = append(c.ports, bare)
+					} else {
+						v, err := strconv.ParseUint(value, 10, 32)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid uint32 value for flag -%s: %s", char, value)
+						}
+						val := uint32(v)
+						c.ports = append(c.ports, val)
+					}
+				}
+
+				if char == "t" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare time.Duration = 0
+						c.timeout = &bare
+					} else {
+						v, err := time.ParseDuration(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid duration value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.timeout = &val
+					}
+				}
 				if !found {
 					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
 				}
@@ -216,7 +356,7 @@ func (c *RootCmd) NewConfigCmd() *ConfigCmd {
 
 	v.CommandAction = func(c *ConfigCmd) error {
 
-		Config(c.label, c.items)
+		Config(c.label, c.items, c.big, c.ports, c.timeout)
 		return nil
 	}
 

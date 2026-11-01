@@ -3887,6 +3887,10 @@ func TestGenerateOptionalValueDirect(t *testing.T) {
 		{[]string{"--label="}, "label=\"\" verbose=false"},
 		{[]string{"--label=zero"}, "label=\"zero\" verbose=false"},
 		{[]string{"-lblue"}, "label=\"blue\" verbose=false"},
+		{[]string{"numeric", "--big", "--ports", "-t5s"}, "big=0 ports=[0] timeout=5s rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>"},
+		{[]string{"numeric", "-b=123", "-p443", "-r3.14"}, "big=123 ports=[443] timeout=<nil> rate=3.14 ratio=<nil> speed=<nil> defCount=<nil>"},
+		{[]string{"numeric", "--ports", "-p80", "-p", "-p=443"}, "big=<nil> ports=[0 80 0 443] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>"},
+		{[]string{"numeric", "--def-count"}, "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=50"},
 	} {
 		run := exec.Command(bin, test.args...)
 		output, err := run.CombinedOutput()
@@ -3946,7 +3950,7 @@ func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
 				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
 			}
 		}
-		for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go"} {
+		for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go", "numeric.go"} {
 			buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
 				Name: "expected/" + name,
 				Data: files["cmd/app/"+name],
@@ -3984,7 +3988,7 @@ func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
 	}
 
 	// 4. Verify golden files in expected/
-	for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go"} {
+	for _, name := range []string{"root.go", "scalar.go", "pointers.go", "slices.go", "scope.go", "convert.go", "custom.go", "numeric.go"} {
 		golden, ok := expected[name]
 		if !ok {
 			t.Fatalf("missing expected golden %s", name)

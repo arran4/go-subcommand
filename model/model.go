@@ -210,8 +210,8 @@ type FunctionParameter struct {
 	Required bool
 	// OptionalValue marks a flag whose durable value observes whether it was
 	// omitted, supplied without a value, or supplied with an explicit value.
-	// The parameter type must implement the documented consumer-owned setter
-	// contract; generated applications never import gosubc at runtime.
+	// It binds directly to native Go scalar types, pointers, and slices, preserving
+	// three-state semantics where the declared type can represent them.
 	OptionalValue bool
 	// Generator specifies the source of the parameter value.
 	Generator GeneratorConfig

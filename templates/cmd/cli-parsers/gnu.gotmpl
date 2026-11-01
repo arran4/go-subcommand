@@ -59,14 +59,14 @@
 					{{- if $param.HasPointer }}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, nil)
 					{{- else }}
-					bare := {{$param.BareValueCode}}
+					var bare {{$param.BaseType}} = {{$param.BareValueCode}}
 					c.{{$param.Name}} = append(c.{{$param.Name}}, bare)
 					{{- end }}
 					{{- else if eq $param.PointerDepth 2 }}
 					var nilVal *{{$param.BaseType}}
 					c.{{$param.Name}} = &nilVal
 					{{- else if $param.HasPointer }}
-					bare := {{$param.BareValueCode}}
+					var bare {{$param.BaseType}} = {{$param.BareValueCode}}
 					c.{{$param.Name}} = &bare
 					{{- else }}
 					c.{{$param.Name}} = {{$param.BareValueCode}}
@@ -264,14 +264,14 @@
 						{{- if $param.HasPointer }}
 						c.{{$param.Name}} = append(c.{{$param.Name}}, nil)
 						{{- else }}
-						bare := {{$param.BareValueCode}}
+						var bare {{$param.BaseType}} = {{$param.BareValueCode}}
 						c.{{$param.Name}} = append(c.{{$param.Name}}, bare)
 						{{- end }}
 						{{- else if eq $param.PointerDepth 2 }}
 						var nilVal *{{$param.BaseType}}
 						c.{{$param.Name}} = &nilVal
 						{{- else if $param.HasPointer }}
-						bare := {{$param.BareValueCode}}
+						var bare {{$param.BaseType}} = {{$param.BareValueCode}}
 						c.{{$param.Name}} = &bare
 						{{- else }}
 						c.{{$param.Name}} = {{$param.BareValueCode}}

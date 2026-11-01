@@ -1207,7 +1207,7 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 		if p.HasGenerator() && !p.IsFlagPresence() {
 			imports = append(imports, templateImport{Path: "io"})
 		}
-		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
 		}
 
@@ -1236,7 +1236,7 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 	}
 
 	for _, p := range cmd.Parameters {
-		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
 		}
 

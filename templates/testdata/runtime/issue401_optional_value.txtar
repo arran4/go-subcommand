@@ -9,6 +9,8 @@ package app
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 )
 
 // Root is a subcommand `app` - Root optional value command.
@@ -153,6 +155,59 @@ func Custom(level *Level) {
 		fmt.Printf("level=%d\n", *level)
 	}
 }
+
+type Speed float64
+
+func ParseSpeed(s string) (Speed, error) {
+	if s == "" {
+		return 0, nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return Speed(f), nil
+}
+
+// Numeric is a subcommand `app numeric` - Extended numeric, duration, float and custom alias optional flags.
+//
+// Flags:
+//
+//	big: (optional value) --big -b 64-bit integer pointer.
+//	ports: (optional value) --ports -p Slice of 32-bit unsigned integers.
+//	timeout: (optional value) --timeout -t Duration pointer.
+//	rate: (optional value) --rate -r 64-bit float pointer.
+//	ratio: (optional value) --ratio 32-bit float pointer.
+//	speed: (optional value; parser: ParseSpeed) --speed -s Custom float alias pointer.
+//	defCount: (optional value; default: 50) --def-count Defaulted int64 pointer.
+func Numeric(big *int64, ports []uint32, timeout *time.Duration, rate *float64, ratio *float32, speed *Speed, defCount *int64) {
+	bigStr := "<nil>"
+	if big != nil {
+		bigStr = fmt.Sprintf("%d", *big)
+	}
+	timeoutStr := "<nil>"
+	if timeout != nil {
+		timeoutStr = timeout.String()
+	}
+	rateStr := "<nil>"
+	if rate != nil {
+		rateStr = fmt.Sprintf("%.2f", *rate)
+	}
+	ratioStr := "<nil>"
+	if ratio != nil {
+		ratioStr = fmt.Sprintf("%.2f", *ratio)
+	}
+	speedStr := "<nil>"
+	if speed != nil {
+		speedStr = fmt.Sprintf("%.2f", *speed)
+	}
+	defCountStr := "<nil>"
+	if defCount != nil {
+		defCountStr = fmt.Sprintf("%d", *defCount)
+	}
+	fmt.Printf("big=%s ports=%v timeout=%s rate=%s ratio=%s speed=%s defCount=%s\n",
+		bigStr, ports, timeoutStr, rateStr, ratioStr, speedStr, defCountStr)
+}
 -- expected/invocations.json --
 [
   {"args": [], "stdout": "label=\"\" verbose=false\n"},
@@ -204,6 +259,19 @@ func Custom(level *Level) {
   {"args": ["custom", "--level=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag level: bad\n"},
   {"args": ["custom", "-l=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
   {"args": ["custom", "-lbad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
+  {"args": ["numeric"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--big", "--ports", "--timeout", "--rate", "--ratio", "--speed", "--def-count"], "stdout": "big=0 ports=[0] timeout=0s rate=0.00 ratio=0.00 speed=0.00 defCount=50\n"},
+  {"args": ["numeric", "-b", "-p", "-t", "-r", "-s"], "stdout": "big=0 ports=[0] timeout=0s rate=0.00 ratio=<nil> speed=0.00 defCount=<nil>\n"},
+  {"args": ["numeric", "--big=9000000000", "--ports=8080", "--timeout=5s", "--rate=3.14", "--ratio=0.50", "--speed=55.5", "--def-count=120"], "stdout": "big=9000000000 ports=[8080] timeout=5s rate=3.14 ratio=0.50 speed=55.50 defCount=120\n"},
+  {"args": ["numeric", "-b=9000000000", "-p=8080", "-t=5s", "-r=3.14", "-s=55.5"], "stdout": "big=9000000000 ports=[8080] timeout=5s rate=3.14 ratio=<nil> speed=55.50 defCount=<nil>\n"},
+  {"args": ["numeric", "-b9000000000", "-p8080", "-t500ms", "-r2.72", "-s99.9"], "stdout": "big=9000000000 ports=[8080] timeout=500ms rate=2.72 ratio=<nil> speed=99.90 defCount=<nil>\n"},
+  {"args": ["numeric", "--big=100", "-b=200", "--big"], "stdout": "big=0 ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--big", "-b=42"], "stdout": "big=42 ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--timeout=10s", "-t"], "stdout": "big=<nil> ports=[] timeout=0s rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--speed=50", "-s"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=0.00 defCount=<nil>\n"},
+  {"args": ["numeric", "--ports", "-p80", "-p", "-p=443", "--ports=8080"], "stdout": "big=<nil> ports=[0 80 0 443 8080] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--def-count"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=50\n"},
+  {"args": ["numeric", "--def-count=200"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=200\n"},
   {"args": ["--help"], "stderrFile": "root-help.stderr"},
   {"args": ["help"], "stderrFile": "root-help.stderr"},
   {"args": ["usage"], "stderrFile": "root-help.stderr"}
@@ -338,6 +406,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewCustom() })
 		c.Commands["custom"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewNumeric() })
+		c.Commands["numeric"] = subCmd
 
 	}
 
@@ -896,7 +970,7 @@ func (c *Pointers) Execute(args []string) (err error) {
 
 			case "ptr":
 				if !hasValue {
-					bare := ""
+					var bare string = ""
 					c.ptr = &bare
 				} else {
 					s := value
@@ -905,7 +979,7 @@ func (c *Pointers) Execute(args []string) (err error) {
 
 			case "num":
 				if !hasValue {
-					bare := 0
+					var bare int = 0
 					c.num = &bare
 				} else {
 					v, err := strconv.Atoi(value)
@@ -952,7 +1026,7 @@ func (c *Pointers) Execute(args []string) (err error) {
 						j = len(shorts)
 					}
 					if !hasValue {
-						bare := ""
+						var bare string = ""
 						c.ptr = &bare
 					} else {
 						s := value
@@ -973,7 +1047,7 @@ func (c *Pointers) Execute(args []string) (err error) {
 						j = len(shorts)
 					}
 					if !hasValue {
-						bare := 0
+						var bare int = 0
 						c.num = &bare
 					} else {
 						v, err := strconv.Atoi(value)
@@ -1137,7 +1211,7 @@ func (c *Slices) Execute(args []string) (err error) {
 
 			case "items":
 				if !hasValue {
-					bare := ""
+					var bare string = ""
 					c.items = append(c.items, bare)
 				} else {
 					s := value
@@ -1178,7 +1252,7 @@ func (c *Slices) Execute(args []string) (err error) {
 						j = len(shorts)
 					}
 					if !hasValue {
-						bare := ""
+						var bare string = ""
 						c.items = append(c.items, bare)
 					} else {
 						s := value
@@ -1357,7 +1431,7 @@ func (c *Scope) Execute(args []string) (err error) {
 
 			case "opt":
 				if !hasValue {
-					bare := ""
+					var bare string = ""
 					c.opt = &bare
 				} else {
 					s := value
@@ -1390,7 +1464,7 @@ func (c *Scope) Execute(args []string) (err error) {
 						j = len(shorts)
 					}
 					if !hasValue {
-						bare := ""
+						var bare string = ""
 						c.opt = &bare
 					} else {
 						s := value
@@ -1769,7 +1843,7 @@ func (c *Custom) Execute(args []string) (err error) {
 
 			case "level":
 				if !hasValue {
-					bare := *new(app.Level)
+					var bare app.Level = *new(app.Level)
 					c.level = &bare
 				} else {
 					v, err := app.ParseLevel(value)
@@ -1806,7 +1880,7 @@ func (c *Custom) Execute(args []string) (err error) {
 						j = len(shorts)
 					}
 					if !hasValue {
-						bare := *new(app.Level)
+						var bare app.Level = *new(app.Level)
 						c.level = &bare
 					} else {
 						v, err := app.ParseLevel(value)
@@ -1887,6 +1961,392 @@ func (c *RootCmd) NewCustom() *Custom {
 	}
 	return v
 }
+-- expected/numeric.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Numeric)(nil)
+
+type Numeric struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	big           *int64
+	ports         []uint32
+	timeout       *time.Duration
+	rate          *float64
+	ratio         *float32
+	speed         *app.Speed
+	defCount      *int64
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Numeric) error
+}
+
+type UsageDataNumeric struct {
+	*Numeric
+	Recursive bool
+}
+
+func (c *Numeric) Usage() {
+	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Numeric) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Numeric) commandPath() string { return "app numeric" }
+
+func (c *Numeric) UsageRecursive() {
+	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Numeric) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "big":
+				if !hasValue {
+					var bare int64 = 0
+					c.big = &bare
+				} else {
+					v, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid int64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.big = &val
+				}
+
+			case "ports":
+				if !hasValue {
+					var bare uint32 = 0
+					c.ports = append(c.ports, bare)
+				} else {
+					v, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid uint32 value for flag %s: %s", name, value)
+					}
+					val := uint32(v)
+					c.ports = append(c.ports, val)
+				}
+
+			case "timeout":
+				if !hasValue {
+					var bare time.Duration = 0
+					c.timeout = &bare
+				} else {
+					v, err := time.ParseDuration(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid duration value for flag %s: %s", name, value)
+					}
+					val := v
+					c.timeout = &val
+				}
+
+			case "rate":
+				if !hasValue {
+					var bare float64 = 0
+					c.rate = &bare
+				} else {
+					v, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid float64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.rate = &val
+				}
+
+			case "ratio":
+				if !hasValue {
+					var bare float32 = 0
+					c.ratio = &bare
+				} else {
+					v, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid float32 value for flag %s: %s", name, value)
+					}
+					val := float32(v)
+					c.ratio = &val
+				}
+
+			case "speed":
+				if !hasValue {
+					var bare app.Speed = *new(app.Speed)
+					c.speed = &bare
+				} else {
+					v, err := app.ParseSpeed(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid example.com/optionalvalue.Speed value for flag %s: %s", name, value)
+					}
+					val := app.Speed(v)
+					c.speed = &val
+				}
+
+			case "defCount", "def-count":
+				if !hasValue {
+					var bare int64 = 50
+					c.defCount = &bare
+				} else {
+					v, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid int64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.defCount = &val
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "b" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare int64 = 0
+						c.big = &bare
+					} else {
+						v, err := strconv.ParseInt(value, 10, 64)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid int64 value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.big = &val
+					}
+				}
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare uint32 = 0
+						c.ports = append(c.ports, bare)
+					} else {
+						v, err := strconv.ParseUint(value, 10, 32)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid uint32 value for flag -%s: %s", char, value)
+						}
+						val := uint32(v)
+						c.ports = append(c.ports, val)
+					}
+				}
+
+				if char == "t" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare time.Duration = 0
+						c.timeout = &bare
+					} else {
+						v, err := time.ParseDuration(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid duration value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.timeout = &val
+					}
+				}
+
+				if char == "r" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare float64 = 0
+						c.rate = &bare
+					} else {
+						v, err := strconv.ParseFloat(value, 64)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid float64 value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.rate = &val
+					}
+				}
+
+				if char == "s" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare app.Speed = *new(app.Speed)
+						c.speed = &bare
+					} else {
+						v, err := app.ParseSpeed(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid example.com/optionalvalue.Speed value for flag -%s: %s", char, value)
+						}
+						val := app.Speed(v)
+						c.speed = &val
+					}
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewNumeric() *Numeric {
+	set := flag.NewFlagSet("numeric", flag.ContinueOnError)
+	v := &Numeric{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Numeric) error {
+
+		app.Numeric(c.big, c.ports, c.timeout, c.rate, c.ratio, c.speed, c.defCount)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
 -- expected/root-help.stderr --
 Usage: app [flags...] <subcommand>
 
@@ -1895,6 +2355,8 @@ Usage: app [flags...] <subcommand>
 Subcommands:
     convert  - Generator conversion.
     custom   - Custom parser optional flag.
+    numeric  - Extended numeric, duration, float and custom alias optional
+             flags.
     pointers - Pointer and double-pointer optional values.
     scalar   - Scalar optional values with defaults.
     scope    - Optional flag before positional arg.

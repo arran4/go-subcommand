@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 )
 
 // Root is a subcommand `app` - Root optional value command.
@@ -145,4 +147,57 @@ func Custom(level *Level) {
 	} else {
 		fmt.Printf("level=%d\n", *level)
 	}
+}
+
+type Speed float64
+
+func ParseSpeed(s string) (Speed, error) {
+	if s == "" {
+		return 0, nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return Speed(f), nil
+}
+
+// Numeric is a subcommand `app numeric` - Extended numeric, duration, float and custom alias optional flags.
+//
+// Flags:
+//
+//	big: (optional value) --big -b 64-bit integer pointer.
+//	ports: (optional value) --ports -p Slice of 32-bit unsigned integers.
+//	timeout: (optional value) --timeout -t Duration pointer.
+//	rate: (optional value) --rate -r 64-bit float pointer.
+//	ratio: (optional value) --ratio 32-bit float pointer.
+//	speed: (optional value; parser: ParseSpeed) --speed -s Custom float alias pointer.
+//	defCount: (optional value; default: 50) --def-count Defaulted int64 pointer.
+func Numeric(big *int64, ports []uint32, timeout *time.Duration, rate *float64, ratio *float32, speed *Speed, defCount *int64) {
+	bigStr := "<nil>"
+	if big != nil {
+		bigStr = fmt.Sprintf("%d", *big)
+	}
+	timeoutStr := "<nil>"
+	if timeout != nil {
+		timeoutStr = timeout.String()
+	}
+	rateStr := "<nil>"
+	if rate != nil {
+		rateStr = fmt.Sprintf("%.2f", *rate)
+	}
+	ratioStr := "<nil>"
+	if ratio != nil {
+		ratioStr = fmt.Sprintf("%.2f", *ratio)
+	}
+	speedStr := "<nil>"
+	if speed != nil {
+		speedStr = fmt.Sprintf("%.2f", *speed)
+	}
+	defCountStr := "<nil>"
+	if defCount != nil {
+		defCountStr = fmt.Sprintf("%d", *defCount)
+	}
+	fmt.Printf("big=%s ports=%v timeout=%s rate=%s ratio=%s speed=%s defCount=%s\n",
+		bigStr, ports, timeoutStr, rateStr, ratioStr, speedStr, defCountStr)
 }
