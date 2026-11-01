@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"flag"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -182,6 +183,14 @@ var providerDIClosableSource string
 
 //go:embed testdata/provider_di_imported.go
 var providerDIImportedSource string
+
+//go:embed testdata/optional_value.go
+var optionalValueSource string
+
+//go:embed templates/testdata/runtime/issue401_optional_value.txtar
+var optionalValueRuntimeFixture []byte
+
+var updateGolden = flag.Bool("update", false, "update golden files")
 
 // oldStyleFileWriter models an external implementation compiled against the
 // FileWriter interface before generated-file migration needed deletion.
@@ -3851,6 +3860,223 @@ func TestGenerateTypedErrors(t *testing.T) {
 				if strings.ReplaceAll(stderr.String(), binary, "app") != want {
 					t.Errorf("%v: stderr=%q want=%q", invocation.Args, stderr.String(), want)
 				}
+			}
+		})
+	}
+}
+
+func TestGenerateOptionalValueDirect(t *testing.T) {
+	dir := t.TempDir()
+	writeRuntimeFixture(t, filepath.Join(dir, "go.mod"), "module example.com/optional\n\ngo 1.22\n")
+	writeRuntimeFixture(t, filepath.Join(dir, "app.go"), optionalValueSource)
+	if err := Generate(dir, "", "commentv1", nil, false, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	bin := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	build.Dir = dir
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build generated optional-value app: %v\n%s", err, output)
+	}
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "present=false value=false label=\"\""},
+		{[]string{"--label"}, "present=true value=false label=\"\""},
+		{[]string{"--label="}, "present=true value=true label=\"\""},
+		{[]string{"--label=zero"}, "present=true value=true label=\"zero\""},
+		{[]string{"-lblue"}, "present=true value=true label=\"blue\""},
+	} {
+		run := exec.Command(bin, test.args...)
+		output, err := run.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(output)) != test.want {
+			t.Fatalf("run %v = %q, %v; want %q", test.args, output, err, test.want)
+		}
+	}
+}
+
+func TestGenerateOptionalValueFlagRuntime(t *testing.T) {
+	archive := txtar.Parse(optionalValueRuntimeFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     string
+		StderrFile string
+		Status     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Verify Go-flag rejects optional-value flag on generation
+	goFlagWriter := NewCollectingFileWriter()
+	err := GenerateWithFS(input, goFlagWriter, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "go-flag"})
+	if err == nil || !strings.Contains(err.Error(), "optional-value flag") || !strings.Contains(err.Error(), "unsupported by go-flag") {
+		t.Fatalf("expected go-flag rejection error, got: %v", err)
+	}
+
+	// 2. Generate with GNU parser
+	generate := func() map[string][]byte {
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu"}); err != nil {
+			t.Fatal(err)
+		}
+		return writer.Files
+	}
+	files := generate()
+	if !reflect.DeepEqual(files, generate()) {
+		t.Fatal("nondeterministic generation")
+	}
+
+	// 3. Verify no runtime dependency on gosubc
+	for name, data := range files {
+		if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+			t.Fatalf("runtime generator dependency in %s", name)
+		}
+	}
+
+	// Update golden files if requested
+	if *updateGolden {
+		var buf bytes.Buffer
+		buf.WriteString(strings.TrimSpace(string(archive.Comment)) + "\n")
+		for _, f := range archive.Files {
+			if strings.HasPrefix(f.Name, "input/") || f.Name == "expected/invocations.json" {
+				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+			}
+		}
+		for _, name := range []string{"root.go", "pointers.go", "validate.go", "ptr.go", "scope.go"} {
+			buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+				Name: "expected/" + name,
+				Data: files["cmd/app/"+name],
+			}}})))
+		}
+		// Materialize and run --help to capture root-help.stderr
+		dir := t.TempDir()
+		for name, file := range input {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+		}
+		for name, data := range files {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+		}
+		binary := filepath.Join(dir, "app")
+		build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+		build.Dir = dir
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build: %v\n%s", err, out)
+		}
+		cmd := exec.Command(binary, "--help")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "COLUMNS=80")
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		_ = cmd.Run()
+		buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+			Name: "expected/root-help.stderr",
+			Data: []byte(strings.ReplaceAll(stderr.String(), binary, "app")),
+		}}})))
+		if err := os.WriteFile("templates/testdata/runtime/issue401_optional_value.txtar", buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("updated issue401_optional_value.txtar")
+		return
+	}
+
+	// 4. Verify golden files in expected/
+	for _, name := range []string{"root.go", "pointers.go", "validate.go", "ptr.go", "scope.go"} {
+		golden, ok := expected[name]
+		if !ok {
+			t.Fatalf("missing expected golden %s", name)
+		}
+		generated, ok := files["cmd/app/"+name]
+		if !ok {
+			t.Fatalf("missing generated file cmd/app/%s", name)
+		}
+		if !bytes.Equal(generated, golden.Data) {
+			t.Fatalf("generated %s differs from golden:\n%s", name, string(generated))
+		}
+	}
+
+	// 5. Build and execute invocations
+	dir := t.TempDir()
+	for name, file := range input {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+	}
+	for name, data := range files {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
+	binary := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+
+	for _, invocation := range invocations {
+		command := exec.Command(binary, invocation.Args...)
+		command.Dir = dir
+		command.Env = append(os.Environ(), "COLUMNS=80")
+		var stdout, stderr bytes.Buffer
+		command.Stdout, command.Stderr = &stdout, &stderr
+		err := command.Run()
+		status := 0
+		if err != nil {
+			if exit, ok := err.(*exec.ExitError); ok {
+				status = exit.ExitCode()
+			} else {
+				t.Fatal(err)
+			}
+		}
+		wantStderr := invocation.Stderr
+		if invocation.StderrFile != "" {
+			file, ok := expected[invocation.StderrFile]
+			if !ok {
+				t.Fatalf("missing expected stderr file %s", invocation.StderrFile)
+			}
+			wantStderr = string(file.Data)
+		}
+		gotStderr := strings.ReplaceAll(stderr.String(), binary, "app")
+		if status != invocation.Status || stdout.String() != invocation.Stdout || gotStderr != wantStderr {
+			t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q",
+				invocation.Args, status, stdout.String(), gotStderr, invocation.Status, invocation.Stdout, wantStderr)
+		}
+	}
+}
+
+func TestOptionalValueRejectsGoFlagBackend(t *testing.T) {
+	param := &model.FunctionParameter{Name: "label", OptionalValue: true}
+	command := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{param}, CLIParser: "go-flag"}
+	err := resolveCLIParsers([]*model.Command{command}, "gnu")
+	if err == nil || !strings.Contains(err.Error(), "unsupported by go-flag") {
+		t.Fatalf("expected go-flag rejection error, got: %v", err)
+	}
+
+	subCmd := &model.SubCommand{SubCommandName: "sub", Parameters: []*model.FunctionParameter{param}, CLIParser: "go-flag"}
+	rootCmd := &model.Command{MainCmdName: "app", SubCommands: []*model.SubCommand{subCmd}, CLIParser: "gnu"}
+	err = resolveCLIParsers([]*model.Command{rootCmd}, "gnu")
+	if err == nil || !strings.Contains(err.Error(), "unsupported by go-flag") {
+		t.Fatalf("expected subcommand go-flag rejection error, got: %v", err)
+	}
+}
+
+func TestOptionalValueInvalidConfigurations(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		param *model.FunctionParameter
+	}{
+		{"positional", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsPositional: true}},
+		{"vararg", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsVarArg: true}},
+		{"default", &model.FunctionParameter{Name: "opt", OptionalValue: true, HasDefaultValue: true, Default: "foo"}},
+		{"generator", &model.FunctionParameter{Name: "opt", OptionalValue: true, Generator: model.GeneratorConfig{Type: model.SourceTypeGenerator}}},
+		{"inherited", &model.FunctionParameter{Name: "opt", OptionalValue: true, Inherited: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{tc.param}}
+			dm := &model.DataModel{Commands: []*model.Command{cmd}}
+			err := dm.Validate()
+			if err == nil || !strings.Contains(err.Error(), "must be a local flag without a default or generator") {
+				t.Fatalf("expected validation error, got: %v", err)
 			}
 		})
 	}
