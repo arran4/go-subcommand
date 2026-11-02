@@ -61,13 +61,23 @@ var _ Cmd = (*ToggleCmd)(nil)
 
 type ToggleCmd struct {
 	*RootCmd
-	Flags         *flag.FlagSet
-	x             bool
-	verbose       bool
-	count         int
-	args          []string
-	SubCommands   map[string]func() Cmd
-	CommandAction func(c *ToggleCmd) error
+	Flags           *flag.FlagSet
+	x               bool
+	verbose         bool
+	count           int
+	args            []string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *ToggleCmd) error
+	plusMinusCommit func() error
+}
+
+func (c *ToggleCmd) commitAll() error {
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
 }
 
 type UsageDataToggleCmd struct {
@@ -212,14 +222,19 @@ func (c *ToggleCmd) Execute(args []string) (err error) {
 	for name := range c.SubCommands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}
-	if plusMinusHelp {
+	if pmSpecial == "help" || pmSpecial == "usage" {
 		c.Usage()
 		return nil
 	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
 	_ = seenFlags
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
@@ -235,6 +250,9 @@ func (c *ToggleCmd) Execute(args []string) (err error) {
 		}
 		varArgs := remainingArgs[varArgStart:]
 		c.args = varArgs
+	}
+	if err := c.commitAll(); err != nil {
+		return err
 	}
 
 	if c.CommandAction != nil {

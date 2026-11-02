@@ -1250,7 +1250,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func isLikelyAttribute(attrStr string) bool {
 	lower := strings.ToLower(attrStr)
-	knownKVs := []string{"generator:", "parser:", "default:", "alias:", "aliases:", "aka:"}
+	knownKVs := []string{"generator:", "parser:", "default:", "alias:", "aliases:", "aka:", "plus:", "plus-bare:", "plus-value:", "plus-assigned:"}
 	for _, k := range knownKVs {
 		if strings.Contains(lower, k) {
 			return true

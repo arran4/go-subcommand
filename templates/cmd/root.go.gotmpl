@@ -88,7 +88,21 @@ type RootCmd struct {
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
 	CommandAction func(c *RootCmd) error
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	plusMinusCommit func() error
+	{{- end }}
 }
+
+{{- if eq .ResolvedCLIParser "plus-minus" }}
+func (c *RootCmd) commitAll() error {
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+{{- end }}
 
 func (c *RootCmd) Usage() {
 	err := executeUsage(os.Stderr, "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, false})
@@ -377,6 +391,12 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- if .FunctionName }}
 
 {{- template "positional_args_parsing" .Parameters }}
+
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
 
 	{{- range $param := .Parameters }}
 	{{- if and (not $param.IsPositional) (not $param.HasGenerator) (not $param.HasConstructor) (or $param.IsWriter $param.IsReader) $param.HasDefaultValue (not $param.IsSlice) }}

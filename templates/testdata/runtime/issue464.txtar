@@ -124,6 +124,17 @@ func PlusMinus() { fmt.Println("literal") }
 //	a: -q (default: true) Canonical short with an alias.
 //	seen: (flag presence) Explicit inputs.
 func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0, "", seen, nil) }
+
+// Ops is a subcommand `app ops` -- Configured plus operations.
+//
+// Flags:
+//
+//	count: (plus: reset; plus-value: set) --count (default: 7) Count with reset and assigned plus.
+//	title: (plus-value: set) --title (default: "hello") Title with assigned plus only.
+//	toggle: (plus-value: set) -t --toggle (default: false) Bool with assigned plus.
+func Ops(count int, title string, toggle bool) {
+	fmt.Printf("ops count=%d title=%q toggle=%t\n", count, title, toggle)
+}
 -- expected/invocations.json --
 [
   {
@@ -649,6 +660,99 @@ func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0,
     "flag": "a",
     "path": "app single",
     "cause": false
+  },
+  {
+    "args": [
+      "ops"
+    ],
+    "stdout": "ops count=7 title=\"hello\" toggle=false\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++count=3"
+    ],
+    "stdout": "ops count=3 title=\"hello\" toggle=false\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++title="
+    ],
+    "stdout": "ops count=7 title=\"\" toggle=false\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++toggle=true"
+    ],
+    "stdout": "ops count=7 title=\"hello\" toggle=true\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++toggle=false"
+    ],
+    "stdout": "ops count=7 title=\"hello\" toggle=false\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++version"
+    ],
+    "stdout": "Version: dev\nCommit: none\nDate: unknown\n"
+  },
+  {
+    "args": [
+      "++version"
+    ],
+    "stdout": "Version: dev\nCommit: none\nDate: unknown\n"
+  },
+  {
+    "args": [
+      "ops",
+      "++count="
+    ],
+    "status": 1,
+    "stderr": "Error: invalid value \"\" for flag count: strconv.Atoi: parsing \"\": invalid syntax\n",
+    "kind": "invalid-value",
+    "flag": "count",
+    "path": "app ops",
+    "cause": true
+  },
+  {
+    "args": [
+      "ops",
+      "++title"
+    ],
+    "status": 1,
+    "stderr": "Error: unknown flag: ++title\n",
+    "kind": "unknown-flag",
+    "flag": "title",
+    "path": "app ops",
+    "cause": false
+  },
+  {
+    "args": [
+      "++alpha=true"
+    ],
+    "status": 1,
+    "stderr": "Error: flag ++alpha does not support assigned plus operation\n",
+    "kind": "invalid-value",
+    "flag": "alpha",
+    "path": "app",
+    "cause": false
+  },
+  {
+    "args": [
+      "++alpha=false"
+    ],
+    "status": 1,
+    "stderr": "Error: flag ++alpha does not support assigned plus operation\n",
+    "kind": "invalid-value",
+    "flag": "alpha",
+    "path": "app",
+    "cause": false
   }
 ]
 -- expected/root.go --
@@ -721,18 +825,28 @@ func executeUsage(out io.Writer, templateName string, data any) error {
 
 type RootCmd struct {
 	*flag.FlagSet
-	Commands      map[string]func() Cmd
-	Version       string
-	Commit        string
-	Date          string
-	alpha         bool
-	beta          bool
-	ab            bool
-	count         int
-	label         string
-	seen          map[string]bool
-	args          []string
-	CommandAction func(c *RootCmd) error
+	Commands        map[string]func() Cmd
+	Version         string
+	Commit          string
+	Date            string
+	alpha           bool
+	beta            bool
+	ab              bool
+	count           int
+	label           string
+	seen            map[string]bool
+	args            []string
+	CommandAction   func(c *RootCmd) error
+	plusMinusCommit func() error
+}
+
+func (c *RootCmd) commitAll() error {
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
 }
 
 func (c *RootCmd) Usage() {
@@ -805,6 +919,12 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	{
 		subCmd := NewLazyCommand(func() Cmd { return c.NewLegacy() })
 		c.Commands["legacy"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewOps() })
+		c.Commands["ops"] = subCmd
 
 	}
 
@@ -1091,14 +1211,19 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	for name := range c.Commands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}
-	if plusMinusHelp {
+	if pmSpecial == "help" || pmSpecial == "usage" {
 		c.Usage()
 		return nil
 	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
 	_ = seenFlags
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
@@ -1114,6 +1239,9 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 		varArgs := remainingArgs[varArgStart:]
 		c.args = varArgs
+	}
+	if err := c.commitAll(); err != nil {
+		return err
 	}
 	c.seen = seenFlags
 	if c.CommandAction != nil {
@@ -1147,16 +1275,18 @@ type plusMinusOption struct {
 }
 
 type plusMinusValue struct {
-	Name   string
-	Prefix string
-	Option plusMinusOption
-	Value  string
-	IsPlus bool
+	Name     string
+	Prefix   string
+	Option   plusMinusOption
+	Value    string
+	IsPlus   bool
+	Assigned bool
 }
 
 type plusMinusToken struct {
-	Boundary, Terminated, Help, NeedsValue bool
-	Values                                 []plusMinusValue
+	Boundary, Terminated, NeedsValue bool
+	Special                          string
+	Values                           []plusMinusValue
 }
 
 // Tokenization validates an individual option token against the option tables.
@@ -1166,8 +1296,16 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 		result.Terminated = true
 		return result, nil
 	}
-	if token == "-h" || token == "--help" {
-		result.Help = true
+	if token == "-h" || token == "--help" || token == "++help" {
+		result.Special = "help"
+		return result, nil
+	}
+	if token == "--usage" || token == "++usage" {
+		result.Special = "usage"
+		return result, nil
+	}
+	if token == "--version" || token == "++version" {
+		result.Special = "version"
 		return result, nil
 	}
 	if len(token) < 2 || (token[0] != '-' && token[0] != '+') {
@@ -1186,9 +1324,6 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 		if at := strings.IndexByte(rest, '='); at >= 0 {
 			name, value, assigned = rest[:at], rest[at+1:], true
 		}
-		if name == "help" && prefix == "++" {
-			return result, newUsageError(path, cmd.UsageUnknownFlag, "help", nil, "unknown flag: ++help")
-		}
 		option, found := long[name]
 		if !found {
 			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", prefix, name)
@@ -1200,18 +1335,18 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 			result.NeedsValue = !option.Boolean && !assigned
 		} else { // prefix == "++"
 			if assigned {
-				if !option.SupportsValuePlus && option.Set == nil {
+				if !option.SupportsValuePlus {
 					return result, newUsageError(path, cmd.UsageInvalidValue, name, nil, "flag ++%s does not support assigned plus operation", name)
 				}
 			} else {
 				if option.Boolean {
 					value = "false"
-				} else if !option.SupportsBarePlus && option.Set == nil {
+				} else if !option.SupportsBarePlus {
 					return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: ++%s", name)
 				}
 			}
 		}
-		result.Values = []plusMinusValue{{Name: name, Prefix: prefix, Option: option, Value: value, IsPlus: prefix == "++"}}
+		result.Values = []plusMinusValue{{Name: name, Prefix: prefix, Option: option, Value: value, IsPlus: prefix == "++", Assigned: assigned}}
 		return result, nil
 	}
 
@@ -1231,7 +1366,7 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 			if len(body) > 1 || prefix == '+' {
 				return result, newUsageError(path, cmd.UsageInvalidArguments, "h", nil, "help cannot be disabled or clustered: %s", token)
 			}
-			result.Help = true
+			result.Special = "help"
 			return result, nil
 		}
 		option, found := short[char]
@@ -1246,26 +1381,34 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 			if prefix == '+' {
 				value = "false"
 			}
-			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+'})
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+', Assigned: false})
 		} else {
 			rest := body[j+1:]
 			value := ""
+			assigned := false
 			if strings.HasPrefix(rest, "=") {
 				value = rest[1:]
+				assigned = true
 			} else if len(rest) > 0 {
 				value = rest
+				assigned = true
 			} else {
-				result.NeedsValue = true
+				if prefix == '-' {
+					result.NeedsValue = true
+				}
 			}
 			if prefix == '+' {
-				if value != "" && !option.SupportsValuePlus && option.Set == nil {
-					return result, newUsageError(path, cmd.UsageInvalidValue, char, nil, "flag +%s does not support assigned plus operation", char)
-				}
-				if value == "" && !result.NeedsValue && !option.SupportsBarePlus && option.Set == nil {
-					return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: +%s", char)
+				if assigned {
+					if !option.SupportsValuePlus {
+						return result, newUsageError(path, cmd.UsageInvalidValue, char, nil, "flag +%s does not support assigned plus operation", char)
+					}
+				} else {
+					if !option.SupportsBarePlus {
+						return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: +%s", char)
+					}
 				}
 			}
-			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+'})
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+', Assigned: assigned})
 			break
 		}
 	}
@@ -1284,7 +1427,7 @@ func isFlagLike(token string) bool {
 
 // Scans args, validates all tokens and staged values before committing any changes.
 // Preserves positional argument ordering and yields when encountering subcommands.
-func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...map[string]bool) (remaining []string, seen map[string]bool, terminated, help bool, err error) {
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...map[string]bool) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
 	var subcmdMap map[string]bool
 	if len(subcommands) > 0 {
 		subcmdMap = subcommands[0]
@@ -1298,10 +1441,10 @@ func parsePlusMinus(args []string, path string, short, long map[string]plusMinus
 	for i := 0; i < len(args); i++ {
 		token, tokenErr := tokenizePlusMinus(args[i], path, short, long)
 		if tokenErr != nil {
-			return nil, stagedSeen, false, false, tokenErr
+			return nil, stagedSeen, nil, false, "", tokenErr
 		}
-		if token.Help {
-			return nil, stagedSeen, false, true, nil
+		if token.Special != "" {
+			return nil, stagedSeen, nil, false, token.Special, nil
 		}
 		if token.Terminated {
 			dashDashSeen = true
@@ -1314,12 +1457,15 @@ func parsePlusMinus(args []string, path string, short, long map[string]plusMinus
 		}
 		if token.Boundary {
 			if subcmdMap != nil && subcmdMap[args[i]] && len(positionals) == 0 {
-				for _, commit := range commits {
-					if err := commit(); err != nil {
-						return nil, nil, false, false, err
+				commitFn := func() error {
+					for _, fn := range commits {
+						if err := fn(); err != nil {
+							return err
+						}
 					}
+					return nil
 				}
-				return args[i:], stagedSeen, false, false, nil
+				return args[i:], stagedSeen, commitFn, false, "", nil
 			}
 			positionals = append(positionals, args[i])
 			continue
@@ -1329,88 +1475,86 @@ func parsePlusMinus(args []string, path string, short, long map[string]plusMinus
 			lastName := lastVal.Name
 			flagPrefix := lastVal.Prefix
 			if i+1 >= len(args) {
-				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
 			}
 			next := args[i+1]
 			if isFlagLike(next) {
-				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
 			}
 			i++
 			token.Values[len(token.Values)-1].Value = next
+			token.Values[len(token.Values)-1].Assigned = true
 		}
 
 		for _, v := range token.Values {
-			var commit func() error
+			var commitFn func() error
 			var stageErr error
 
 			if !v.IsPlus {
 				if v.Option.StageMinus != nil {
-					commit, stageErr = v.Option.StageMinus(v.Value)
+					commitFn, stageErr = v.Option.StageMinus(v.Value)
 				} else if v.Option.Set != nil {
 					val := v.Value
 					opt := v.Option
 					if opt.IO {
-						commit = func() error { return opt.Set(val) }
+						commitFn = func() error { return opt.Set(val) }
 					} else {
 						stageErr = opt.Set(val)
 					}
 				}
 			} else {
-				if v.Value != "" && !v.Option.Boolean {
+				if v.Assigned {
 					if v.Option.StageValuePlus != nil {
-						commit, stageErr = v.Option.StageValuePlus(v.Value)
+						commitFn, stageErr = v.Option.StageValuePlus(v.Value)
 					} else if v.Option.Set != nil {
 						val := v.Value
 						opt := v.Option
 						if opt.IO {
-							commit = func() error { return opt.Set(val) }
+							commitFn = func() error { return opt.Set(val) }
 						} else {
 							stageErr = opt.Set(val)
 						}
 					} else {
-						return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageInvalidValue, v.Name, nil, "flag ++%s does not support assigned plus operation", v.Name)
+						return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageInvalidValue, v.Name, nil, "flag ++%s does not support assigned plus operation", v.Name)
 					}
 				} else {
-					if v.Option.Boolean {
-						if v.Option.StageBarePlus != nil {
-							commit, stageErr = v.Option.StageBarePlus()
-						} else if v.Option.Set != nil {
-							opt := v.Option
+					if v.Option.StageBarePlus != nil {
+						commitFn, stageErr = v.Option.StageBarePlus()
+					} else if v.Option.Set != nil {
+						opt := v.Option
+						if v.Option.Boolean {
 							stageErr = opt.Set("false")
+						} else {
+							stageErr = opt.Set("")
 						}
 					} else {
-						if v.Option.StageBarePlus != nil {
-							commit, stageErr = v.Option.StageBarePlus()
-						} else if v.Option.Set != nil {
-							opt := v.Option
-							stageErr = opt.Set("")
-						} else {
-							return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageUnknownFlag, v.Name, nil, "unknown flag: ++%s", v.Name)
-						}
+						return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageUnknownFlag, v.Name, nil, "unknown flag: ++%s", v.Name)
 					}
 				}
 			}
 
 			if stageErr != nil {
 				if v.Option.IO {
-					return nil, stagedSeen, false, false, stageErr
+					return nil, stagedSeen, nil, false, "", stageErr
 				}
-				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageInvalidValue, v.Name, stageErr, "invalid value %q for flag %s: %v", v.Value, v.Name, stageErr)
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageInvalidValue, v.Name, stageErr, "invalid value %q for flag %s: %v", v.Value, v.Name, stageErr)
 			}
-			if commit != nil {
-				commits = append(commits, commit)
+			if commitFn != nil {
+				commits = append(commits, commitFn)
 			}
 			stagedSeen[v.Option.Key] = true
 		}
 	}
 
-	for _, commit := range commits {
-		if err := commit(); err != nil {
-			return nil, nil, false, false, err
+	commitFn := func() error {
+		for _, fn := range commits {
+			if err := fn(); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-
-	return positionals, stagedSeen, dashDashSeen, false, nil
+	return positionals, stagedSeen, commitFn, dashDashSeen, "", nil
 }
 -- expected/gnu_pm.go --
 // Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
@@ -1432,12 +1576,22 @@ var _ Cmd = (*GnuPm)(nil)
 
 type GnuPm struct {
 	*Gnu
-	Flags         *flag.FlagSet
-	child         bool
-	seen          map[string]bool
-	args          []string
-	SubCommands   map[string]func() Cmd
-	CommandAction func(c *GnuPm) error
+	Flags           *flag.FlagSet
+	child           bool
+	seen            map[string]bool
+	args            []string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *GnuPm) error
+	plusMinusCommit func() error
+}
+
+func (c *GnuPm) commitAll() error {
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
 }
 
 type UsageDataGnuPm struct {
@@ -1753,14 +1907,19 @@ func (c *GnuPm) Execute(args []string) (err error) {
 	for name := range c.SubCommands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}
-	if plusMinusHelp {
+	if pmSpecial == "help" || pmSpecial == "usage" {
 		c.Usage()
 		return nil
 	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
 	_ = seenFlags
 
 	if !dashDashSeen && len(remainingArgs) > 0 {
@@ -1776,6 +1935,9 @@ func (c *GnuPm) Execute(args []string) (err error) {
 		}
 		varArgs := remainingArgs[varArgStart:]
 		c.args = varArgs
+	}
+	if err := c.commitAll(); err != nil {
+		return err
 	}
 
 	c.seen = seenFlags
@@ -1908,6 +2070,7 @@ Subcommands:
     {{formatHelpRow $maxSize "gnu pm old" "Deep override back to Go-flag."}}
 {{- end}}
     {{formatHelpRow $maxSize "legacy" "Go-flag override."}}
+    {{formatHelpRow $maxSize "ops" "Configured plus operations."}}
     {{formatHelpRow $maxSize "plus-minus" "Helper filename collision."}}
     {{formatHelpRow $maxSize "single" "Canonical one-letter toggle."}}
     {{formatHelpRow $maxSize "values" "Long values and conversion."}}
@@ -1936,6 +2099,7 @@ Subcommands:
     effect     Effectful provider.
     gnu        GNU scope.
     legacy     Go-flag override.
+    ops        Configured plus operations.
     plus-minus Helper filename collision.
     single     Canonical one-letter toggle.
     values     Long values and conversion.

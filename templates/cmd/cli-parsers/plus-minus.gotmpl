@@ -77,9 +77,9 @@
 			}, nil
 			{{- else if .SupportsBarePlus }}
 			{{- if and .PlusBare.Func (ne .PlusBare.Func.FunctionName "") }}
-			v, err := {{.BarePlusCall}}
-			if err != nil { return nil, err }
 			return func() error {
+				v, err := {{.BarePlusCall}}
+				if err != nil { return err }
 				{{- if .HasPointer }}
 				val := {{.CastCode "v"}}
 				{{- if .IsSlice }}
@@ -144,11 +144,25 @@
 			if err != nil { return nil, err }
 			{{- end }}
 			{{- if and .PlusValue.Func (ne .PlusValue.Func.FunctionName "") }}
-			v, err := {{.ValuePlusCall "raw"}}
-			if err != nil { return nil, err }
+			return func() error {
+				v, err := {{.ValuePlusCall "raw"}}
+				if err != nil { return err }
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
 			{{- else }}
 			v := raw
-			{{- end }}
 			return func() error {
 				{{- if .HasPointer }}
 				val := {{.CastCode "v"}}
@@ -164,6 +178,7 @@
 				{{- end }}
 				return nil
 			}, nil
+			{{- end }}
 			{{- else }}
 			return nil, nil
 			{{- end }}
@@ -198,8 +213,13 @@
 		subcmdMap[name] = true
 	}
 	{{- end }}
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil { return err }
-	if plusMinusHelp { c.Usage(); return nil }
+	if pmSpecial == "help" || pmSpecial == "usage" { c.Usage(); return nil }
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
 	_ = seenFlags
 {{- end }}

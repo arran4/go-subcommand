@@ -30,7 +30,34 @@ type {{.SubCommandStructName}} struct {
 	{{- end}}
 	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	plusMinusCommit func() error
+	{{- end }}
 }
+
+{{- if eq .ResolvedCLIParser "plus-minus" }}
+func (c *{{.SubCommandStructName}}) commitAll() error {
+	{{- if .Parent }}
+	{{- if eq .Parent.ResolvedCLIParser "plus-minus" }}
+	if err := c.{{.Parent.SubCommandStructName}}.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
+	{{- else }}
+	{{- if eq .Command.ResolvedCLIParser "plus-minus" }}
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
+	{{- end }}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+{{- end }}
 
 type UsageData{{.SubCommandStructName}} struct {
 	*{{.SubCommandStructName}}
@@ -123,6 +150,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 
 {{- template "positional_args_parsing" .Parameters }}
+
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
