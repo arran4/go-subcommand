@@ -430,14 +430,14 @@ func TestOptionalValueSourceDiagnostics(t *testing.T) {
 		want  []string
 	}{
 		{
-			name: "positional",
+			name:  "positional",
 			param: FunctionParameter{Name: "path", Type: "string", IsPositional: true, PositionalArgIndex: 1, OptionalValue: true},
-			want: []string{`command "app list"`, `parameter "path"`, "(optional value)", "named flags", "positional @N", "(default:"},
+			want:  []string{`command "app list"`, `parameter "path"`, "(optional value)", "named flags", "positional @N", "(default:"},
 		},
 		{
-			name: "variadic positional",
+			name:  "variadic positional",
 			param: FunctionParameter{Name: "files", Type: "[]string", IsPositional: true, IsVarArg: true, OptionalValue: true},
-			want: []string{`command "app list"`, `parameter "files"`, "(optional value)", "variadic positional", "zero-minimum"},
+			want:  []string{`command "app list"`, `parameter "files"`, "(optional value)", "variadic positional", "zero-minimum"},
 		},
 		{
 			name: "generator same parameter",
