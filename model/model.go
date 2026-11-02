@@ -497,8 +497,14 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 
 	for _, p := range params {
 		if p.OptionalValue {
-			if p.IsPositional || p.IsVarArg || p.HasGenerator() {
-				return fmt.Errorf("command %s: optional-value parameter %s must be a flag without a generator or positional mapping", cmdName, p.Name)
+			if p.IsVarArg {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags, not a variadic positional argument; use a zero-minimum variadic tail to make positional arguments omittable, or declare a separate named flag", cmdName, p.Name)
+			}
+			if p.IsPositional {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags (--name or --name=value), not positional @N; use a positional default (for example, @1 with (default: \".\")) to make an argument omittable", cmdName, p.Name)
+			}
+			if p.HasGenerator() {
+				return fmt.Errorf("command %q, parameter %q: conflicting value sources: (optional value) binds a CLI flag while (generator: ...) supplies the same parameter; declare separate parameters, e.g. raw []*string with (optional value) --raw, and dest with (generator: Convert(raw))", cmdName, p.Name)
 			}
 			if !p.IsSupportedOptionalValueType() {
 				return fmt.Errorf("command %s: parameter %s has type %s which is unsupported for (optional value); supported types are scalar primitives (T), pointers (*T, **T), and slices ([]T, []*T)", cmdName, p.Name, p.Type)
