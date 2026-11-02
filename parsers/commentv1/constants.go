@@ -60,6 +60,10 @@ const (
 	// Usage: (required)
 	AttributeRequired = "required"
 
+	// AttributeOptionalValue marks a flag whose value is optional.
+	// Usage: (optional value)
+	AttributeOptionalValue = "optional value"
+
 	// AttributeGenerator specifies a generator function for the parameter.
 	// Usage: (generator: MyGeneratorFunc)
 	AttributeGenerator = "generator"

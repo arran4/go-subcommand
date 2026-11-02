@@ -265,6 +265,57 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
+#### Optional-value flags
+
+`(optional value)` is an explicit flag contract supporting ordinary Go
+primitive types, pointers and slices. It distinguishes flag presence from value
+assignment:
+
+| Type | Omitted | Bare flag | Explicit value |
+|---|---|---|---|
+| `T` | Zero / default | Best-effort bare/default value | Parsed `T` |
+| `*T` | nil | Pointer to bare/default value | Pointer to parsed `T` |
+| `**T` | nil | Pointer to nil (`*p == nil`) | Pointer to pointer to parsed `T` |
+| `[]T` | Empty/nil | Append bare/default value | Append parsed `T` |
+| `[]*T` | Empty/nil | Append nil | Append pointer to parsed `T` |
+
+- For scalar `T`, omission, a bare flag, and an explicit zero value merge into the same Go value.
+- For `*T`, omission evaluates to `nil`, while a bare flag points to the bare/default value.
+- For `**T`, all three states are distinguishable for a single occurrence: `nil` (omitted), non-nil pointing to `nil` (bare), and non-nil pointing to `*T` (explicit value).
+- For `[]*T`, each occurrence is preserved losslessly: an omitted flag produces an empty/nil slice, `--flag` appends `nil`, and `--flag=value` appends `&value` (including `&""` for `--flag=`).
+- Scalar and single-pointer flags follow conventional last-occurrence-wins; slices accumulate in order.
+
+For the GNU parser, `--name` supplies the bare flag; `--name=value` supplies an
+explicit value; and `--name=` supplies an explicit empty string. Short forms
+`-n`, `-nvalue`, `-n=value`, and `-n=` are also supported. A following positional
+token is never consumed as the optional value. This keeps `--` and positional
+parsing unambiguous. The Go-flag backend rejects optional-value parameters
+because its native callback cannot distinguish a bare flag from an explicit
+boolean-looking value. Richer consumer-owned types (such as `sql.NullString`)
+can be constructed by using a `generator:` provider depending on the parsed
+optional flag parameter.
+
+`(optional value)` applies only to **named flags**, not positional arguments:
+an `@1` positional can instead be made omittable with `(default: ".")`, and a
+variadic `...` tail can accept zero or more values. These are distinct from a
+flag that accepts `--name` and `--name=value`.
+
+`(optional value)` and `(generator: ...)` cannot populate **the same
+parameter**: one reads argv and the other obtains its value from a function.
+Generators **can consume** parsed optional flags as named dependencies:
+
+```go
+// Flags:
+//   raw: (optional value) --raw
+//   dest: (generator: ToNullString(raw))
+func Convert(raw []*string, dest *NullString) {}
+```
+
+Here `raw` preserves omitted, bare and explicit assigned occurrences; the
+consumer-owned `ToNullString(raw)` converts them into the `dest` type. A
+runnable version is included in `testdata/optional_value.go` and the compiled
+`templates/testdata/runtime/issue401_optional_value.txtar` scenarios.
+
 Providers can depend on `(flag presence)` parameters, just like other bound
 command values. Presence maps bind before any effectful provider, regardless of
 parameter declaration order, and are never acquired or closed as providers.

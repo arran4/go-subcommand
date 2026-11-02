@@ -208,6 +208,11 @@ type FunctionParameter struct {
 	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
 	Required bool
+	// OptionalValue marks a flag whose durable value observes whether it was
+	// omitted, supplied without a value, or supplied with an explicit value.
+	// It binds directly to native Go scalar types, pointers, and slices, preserving
+	// three-state semantics where the declared type can represent them.
+	OptionalValue bool
 	// Generator specifies the source of the parameter value.
 	Generator GeneratorConfig
 	// Parser holds configuration for value parsing.
@@ -491,6 +496,20 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	}
 
 	for _, p := range params {
+		if p.OptionalValue {
+			if p.IsVarArg {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags, not a variadic positional argument; use a zero-minimum variadic tail to make positional arguments omittable, or declare a separate named flag", cmdName, p.Name)
+			}
+			if p.IsPositional {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags (--name or --name=value), not positional @N; use a positional default (for example, @1 with (default: \".\")) to make an argument omittable", cmdName, p.Name)
+			}
+			if p.HasGenerator() {
+				return fmt.Errorf("command %q, parameter %q: conflicting value sources: (optional value) binds a CLI flag while (generator: ...) supplies the same parameter; declare separate parameters, e.g. raw []*string with (optional value) --raw, and dest with (generator: Convert(raw))", cmdName, p.Name)
+			}
+			if !p.IsSupportedOptionalValueType() {
+				return fmt.Errorf("command %s: parameter %s has type %s which is unsupported for (optional value); supported types are scalar primitives (T), pointers (*T, **T), and slices ([]T, []*T)", cmdName, p.Name, p.Type)
+			}
+		}
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
 		}
@@ -562,7 +581,9 @@ func (p *FunctionParameter) FlagString() string {
 	flags := strings.Join(parts, ", ")
 
 	typeStr := ""
-	if p.Type != "bool" {
+	if p.OptionalValue {
+		typeStr = " [=" + p.Type + "]"
+	} else if p.Type != "bool" {
 		typeStr = " " + p.Type
 	}
 	return flags + typeStr
@@ -656,13 +677,27 @@ func (p *FunctionParameter) HasPointer() bool {
 	return strings.HasPrefix(t, "*")
 }
 
+// PointerDepth returns the number of pointer indirections on the scalar type.
+func (p *FunctionParameter) PointerDepth() int {
+	t := p.Type
+	t = strings.TrimPrefix(t, "[]")
+	depth := 0
+	for strings.HasPrefix(t, "*") {
+		depth++
+		t = strings.TrimPrefix(t, "*")
+	}
+	return depth
+}
+
 // BaseType returns the underlying Go type spelling (stripping * and []).
 // It deliberately preserves source import qualifiers so the result remains
 // valid Go syntax (for example, stream.Reader).
 func (p *FunctionParameter) BaseType() string {
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
-	t = strings.TrimPrefix(t, "*")
+	for strings.HasPrefix(t, "*") {
+		t = strings.TrimPrefix(t, "*")
+	}
 	return t
 }
 
@@ -685,6 +720,64 @@ func (p *FunctionParameter) GeneratedType() string {
 	}
 	prefix := strings.TrimSuffix(p.Type, p.BaseType())
 	return prefix + p.CanonicalBaseType()
+}
+
+// BareValueCode returns the Go expression representing the bare/default value of the parameter.
+func (p *FunctionParameter) BareValueCode() string {
+	if p.HasDefaultValue && p.Default != "" {
+		if p.IsString() && !strings.HasPrefix(p.Default, `"`) {
+			return fmt.Sprintf("%q", p.Default)
+		}
+		return p.Default
+	}
+	if p.IsBool() {
+		return "true"
+	}
+	if p.IsString() {
+		return `""`
+	}
+	if p.IsDuration() {
+		return "0"
+	}
+	base := p.BaseType()
+	switch base {
+	case "int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return "0"
+	}
+	return fmt.Sprintf("*new(%s)", base)
+}
+
+// IsSupportedOptionalValueType returns true if the parameter type is supported
+// by the optional-value flag contract.
+func (p *FunctionParameter) IsSupportedOptionalValueType() bool {
+	if p.IsReader() || p.IsWriter() || p.IsFile() || p.IsFlagPresence() {
+		return false
+	}
+	depth := p.PointerDepth()
+	if p.IsSlice() {
+		if depth > 1 {
+			return false
+		}
+	} else {
+		if depth > 2 {
+			return false
+		}
+	}
+	base := p.BaseType()
+	if p.HasCustomParser() {
+		return true
+	}
+	switch base {
+	case "string", "bool", "time.Duration",
+		"int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *FunctionParameter) IsBool() bool {
