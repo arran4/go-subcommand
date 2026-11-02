@@ -241,3 +241,13 @@ func TestParseParamDetails_Integration(t *testing.T) {
 		})
 	}
 }
+
+func TestParseParamDetailsOptionalValue(t *testing.T) {
+	parsed := parseParamDetails("(optional value) --label -l Optional label")
+	if !parsed.OptionalValue {
+		t.Fatalf("expected OptionalValue=true, got false")
+	}
+	if len(parsed.Flags) != 2 || parsed.Flags[0] != "label" || parsed.Flags[1] != "l" {
+		t.Fatalf("unexpected flags: %v", parsed.Flags)
+	}
+}

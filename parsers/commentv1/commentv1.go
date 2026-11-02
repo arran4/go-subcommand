@@ -486,6 +486,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if ident, ok := sel.X.(*ast.Ident); ok {
 								typeAlias = ident.Name
 							}
+						} else if ident, ok := extractSelector.(*ast.Ident); ok {
+							typeActualName = ident.Name
+							if !isBuiltinGoType(ident.Name) && importPath != "" && f != nil && f.Name != nil {
+								typeImportPath = importPath
+								typePackageName = f.Name.Name
+							}
 						}
 
 						// Resolve alias against file imports
@@ -637,6 +643,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -673,6 +682,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -708,6 +720,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
+							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
@@ -928,6 +943,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
+	OptionalValue      bool
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
 	DefaultExpr        *model.FuncRef
@@ -1183,7 +1199,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence"}
+	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1339,6 +1355,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Generator.Type = model.SourceTypeFlagPresence
 		case AttributeRequired:
 			p.Required = true
+		case AttributeOptionalValue:
+			p.OptionalValue = true
 		case AttributeGenerator:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
@@ -1561,5 +1579,16 @@ func formatType(expr ast.Expr) (string, error) {
 		return "..." + s, nil
 	default:
 		return "", fmt.Errorf("unsupported type: %T", t)
+	}
+}
+
+func isBuiltinGoType(name string) bool {
+	switch name {
+	case "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64", "rune", "string",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "any":
+		return true
+	default:
+		return false
 	}
 }

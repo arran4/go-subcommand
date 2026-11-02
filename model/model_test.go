@@ -2,6 +2,7 @@ package model
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -420,4 +421,58 @@ func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+}
+
+func TestOptionalValueSourceDiagnostics(t *testing.T) {
+	tests := []struct {
+		name  string
+		param FunctionParameter
+		want  []string
+	}{
+		{
+			name: "positional",
+			param: FunctionParameter{Name: "path", Type: "string", IsPositional: true, PositionalArgIndex: 1, OptionalValue: true},
+			want: []string{`command "app list"`, `parameter "path"`, "(optional value)", "named flags", "positional @N", "(default:"},
+		},
+		{
+			name: "variadic positional",
+			param: FunctionParameter{Name: "files", Type: "[]string", IsPositional: true, IsVarArg: true, OptionalValue: true},
+			want: []string{`command "app list"`, `parameter "files"`, "(optional value)", "variadic positional", "zero-minimum"},
+		},
+		{
+			name: "generator same parameter",
+			param: FunctionParameter{
+				Name: "dest", Type: "string", OptionalValue: true,
+				Generator: GeneratorConfig{Type: SourceTypeGenerator, Func: &FuncRef{FunctionName: "Convert"}, Inputs: []string{"raw"}},
+			},
+			want: []string{`command "app list"`, `parameter "dest"`, "conflicting value sources", "same parameter", "separate parameters", "Convert(raw)"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateParameters([]*FunctionParameter{&tt.param}, "app list")
+			if err == nil {
+				t.Fatal("expected invalid source combination")
+			}
+			for _, part := range tt.want {
+				if !strings.Contains(err.Error(), part) {
+					t.Errorf("diagnostic %q missing %q", err, part)
+				}
+			}
+		})
+	}
+}
+
+func TestOptionalValueValidSeparateSourcesAndOmittablePositionals(t *testing.T) {
+	// A positional default and a zero-minimum variadic tail are omittable,
+	// but neither needs the optional-value flag annotation.
+	params := []*FunctionParameter{
+		{Name: "path", Type: "string", IsPositional: true, PositionalArgIndex: 1, HasDefaultValue: true, Default: "."},
+		{Name: "files", Type: "[]string", IsPositional: true, IsVarArg: true, VarArgMin: 0},
+		{Name: "raw", Type: "[]*string", OptionalValue: true},
+		{Name: "dest", Type: "*Result", Generator: GeneratorConfig{Type: SourceTypeGenerator, Func: &FuncRef{FunctionName: "Convert"}, Inputs: []string{"raw"}}},
+	}
+	if err := validateParameters(params, "app list"); err != nil {
+		t.Fatalf("valid optional positional and generator conversion rejected: %v", err)
+	}
 }

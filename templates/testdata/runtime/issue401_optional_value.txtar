@@ -1,0 +1,2370 @@
+Inspectable optional-value flags: ordinary Go primitive types, pointers,
+slices, lossless pointer slices, generator conversion, and positional non-consumption.
+-- input/go.mod --
+module example.com/optionalvalue
+
+go 1.22
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+)
+
+// Root is a subcommand `app` - Root optional value command.
+//
+// Flags:
+//
+//	label: (optional value) --label -l Optional string label.
+//	verbose: (optional value) --verbose -v Optional boolean flag.
+func Root(label string, verbose bool) {
+	fmt.Printf("label=%q verbose=%t\n", label, verbose)
+}
+
+// Scalar is a subcommand `app scalar` - Scalar optional values with defaults.
+//
+// Flags:
+//
+//	str: (optional value) --str -s String scalar.
+//	num: (optional value) --num -n Integer scalar.
+//	def: (optional value; default: "fallback") --def Defaulted string scalar.
+func Scalar(str string, num int, def string) {
+	fmt.Printf("str=%q num=%d def=%q\n", str, num, def)
+}
+
+// Pointers is a subcommand `app pointers` - Pointer and double-pointer optional values.
+//
+// Flags:
+//
+//	ptr: (optional value) --ptr -p Optional string pointer.
+//	num: (optional value) --num -n Optional int pointer.
+//	tri: (optional value) --tri Optional double pointer.
+func Pointers(ptr *string, num *int, tri **string) {
+	ptrStr := "<nil>"
+	if ptr != nil {
+		ptrStr = fmt.Sprintf("%q", *ptr)
+	}
+	numStr := "<nil>"
+	if num != nil {
+		numStr = fmt.Sprintf("%d", *num)
+	}
+	triStr := "<nil>"
+	if tri != nil {
+		if *tri == nil {
+			triStr = "<bare>"
+		} else {
+			triStr = fmt.Sprintf("%q", **tri)
+		}
+	}
+	fmt.Printf("ptr=%s num=%s tri=%s\n", ptrStr, numStr, triStr)
+}
+
+// Slices is a subcommand `app slices` - Slice and pointer-slice optional values.
+//
+// Flags:
+//
+//	items: (optional value) --items -i Slice of strings.
+//	ptrs: (optional value) --ptrs -p Lossless slice of string pointers.
+func Slices(items []string, ptrs []*string) {
+	ptrsFormatted := make([]string, 0, len(ptrs))
+	for _, p := range ptrs {
+		if p == nil {
+			ptrsFormatted = append(ptrsFormatted, "<nil>")
+		} else {
+			ptrsFormatted = append(ptrsFormatted, fmt.Sprintf("%q", *p))
+		}
+	}
+	fmt.Printf("items=%q ptrs=%v\n", items, ptrsFormatted)
+}
+
+// Scope is a subcommand `app scope` - Optional flag before positional arg.
+//
+// Flags:
+//
+//	opt: (optional value) --opt -o Optional string pointer.
+//	pos: @1 Positional argument.
+func Scope(opt *string, pos string) {
+	optStr := "<nil>"
+	if opt != nil {
+		optStr = fmt.Sprintf("%q", *opt)
+	}
+	fmt.Printf("opt=%s pos=%q\n", optStr, pos)
+}
+
+// NullString is a consumer-owned nullable representation.
+type NullString struct {
+	String string
+	Valid  bool
+}
+
+func ToNullString(values []*string) (*NullString, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	v := values[len(values)-1]
+	if v == nil {
+		return &NullString{Valid: false}, nil
+	}
+	return &NullString{String: *v, Valid: true}, nil
+}
+
+// Convert is a subcommand `app convert` - Generator conversion.
+//
+// Flags:
+//
+//	raw: (optional value) --raw -r Raw optional flags.
+//	dest: (generator: ToNullString(raw)) Converted NullString.
+func Convert(raw []*string, dest *NullString) {
+	if dest == nil {
+		fmt.Println("dest=<nil>")
+	} else if !dest.Valid {
+		fmt.Println("dest=<bare>")
+	} else {
+		fmt.Printf("dest=%q\n", dest.String)
+	}
+}
+
+type Level int
+
+func ParseLevel(s string) (Level, error) {
+	switch s {
+	case "debug":
+		return 1, nil
+	case "info":
+		return 2, nil
+	case "warn":
+		return 3, nil
+	case "":
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unknown level %q", s)
+	}
+}
+
+// Custom is a subcommand `app custom` - Custom parser optional flag.
+//
+// Flags:
+//
+//	level: (optional value; parser: ParseLevel) --level -l Log level.
+func Custom(level *Level) {
+	if level == nil {
+		fmt.Println("level=<nil>")
+	} else {
+		fmt.Printf("level=%d\n", *level)
+	}
+}
+
+type Speed float64
+
+func ParseSpeed(s string) (Speed, error) {
+	if s == "" {
+		return 0, nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return Speed(f), nil
+}
+
+// Numeric is a subcommand `app numeric` - Extended numeric, duration, float and custom alias optional flags.
+//
+// Flags:
+//
+//	big: (optional value) --big -b 64-bit integer pointer.
+//	ports: (optional value) --ports -p Slice of 32-bit unsigned integers.
+//	timeout: (optional value) --timeout -t Duration pointer.
+//	rate: (optional value) --rate -r 64-bit float pointer.
+//	ratio: (optional value) --ratio 32-bit float pointer.
+//	speed: (optional value; parser: ParseSpeed) --speed -s Custom float alias pointer.
+//	defCount: (optional value; default: 50) --def-count Defaulted int64 pointer.
+func Numeric(big *int64, ports []uint32, timeout *time.Duration, rate *float64, ratio *float32, speed *Speed, defCount *int64) {
+	bigStr := "<nil>"
+	if big != nil {
+		bigStr = fmt.Sprintf("%d", *big)
+	}
+	timeoutStr := "<nil>"
+	if timeout != nil {
+		timeoutStr = timeout.String()
+	}
+	rateStr := "<nil>"
+	if rate != nil {
+		rateStr = fmt.Sprintf("%.2f", *rate)
+	}
+	ratioStr := "<nil>"
+	if ratio != nil {
+		ratioStr = fmt.Sprintf("%.2f", *ratio)
+	}
+	speedStr := "<nil>"
+	if speed != nil {
+		speedStr = fmt.Sprintf("%.2f", *speed)
+	}
+	defCountStr := "<nil>"
+	if defCount != nil {
+		defCountStr = fmt.Sprintf("%d", *defCount)
+	}
+	fmt.Printf("big=%s ports=%v timeout=%s rate=%s ratio=%s speed=%s defCount=%s\n",
+		bigStr, ports, timeoutStr, rateStr, ratioStr, speedStr, defCountStr)
+}
+-- expected/invocations.json --
+[
+  {"args": [], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--label"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--label=hello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["--label="], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["-lhello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["-l=hello"], "stdout": "label=\"hello\" verbose=false\n"},
+  {"args": ["-l="], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["-l"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--verbose"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["--verbose=false"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["--verbose=true"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["-v"], "stdout": "label=\"\" verbose=true\n"},
+  {"args": ["-v=false"], "stdout": "label=\"\" verbose=false\n"},
+  {"args": ["scalar"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str", "--num", "--def"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str=val", "--num=10", "--def=over"], "stdout": "str=\"val\" num=10 def=\"over\"\n"},
+  {"args": ["scalar", "--str=", "--def="], "stdout": "str=\"\" num=0 def=\"\"\n"},
+  {"args": ["scalar", "-sval", "-n10"], "stdout": "str=\"val\" num=10 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str=initial", "--str"], "stdout": "str=\"\" num=0 def=\"fallback\"\n"},
+  {"args": ["scalar", "--str", "--str=final"], "stdout": "str=\"final\" num=0 def=\"fallback\"\n"},
+  {"args": ["pointers"], "stdout": "ptr=<nil> num=<nil> tri=<nil>\n"},
+  {"args": ["pointers", "--ptr", "--num", "--tri"], "stdout": "ptr=\"\" num=0 tri=<bare>\n"},
+  {"args": ["pointers", "--ptr=hello", "--num=42", "--tri=deep"], "stdout": "ptr=\"hello\" num=42 tri=\"deep\"\n"},
+  {"args": ["pointers", "--ptr=", "--tri="], "stdout": "ptr=\"\" num=<nil> tri=\"\"\n"},
+  {"args": ["pointers", "-phello", "-n42"], "stdout": "ptr=\"hello\" num=42 tri=<nil>\n"},
+  {"args": ["pointers", "-p", "-n"], "stdout": "ptr=\"\" num=0 tri=<nil>\n"},
+  {"args": ["pointers", "--ptr=first", "--ptr"], "stdout": "ptr=\"\" num=<nil> tri=<nil>\n"},
+  {"args": ["pointers", "--ptr", "--ptr=second"], "stdout": "ptr=\"second\" num=<nil> tri=<nil>\n"},
+  {"args": ["slices"], "stdout": "items=[] ptrs=[]\n"},
+  {"args": ["slices", "--items=first", "--items", "-i=", "--ptrs=first", "--ptrs", "-p="], "stdout": "items=[\"first\" \"\" \"\"] ptrs=[\"first\" <nil> \"\"]\n"},
+  {"args": ["scope", "mypos"], "stdout": "opt=<nil> pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["scope", "-o", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt=val", "mypos"], "stdout": "opt=\"val\" pos=\"mypos\"\n"},
+  {"args": ["scope", "-oval", "mypos"], "stdout": "opt=\"val\" pos=\"mypos\"\n"},
+  {"args": ["scope", "--opt", "--", "mypos"], "stdout": "opt=\"\" pos=\"mypos\"\n"},
+  {"args": ["convert"], "stdout": "dest=<nil>\n"},
+  {"args": ["convert", "--raw"], "stdout": "dest=<bare>\n"},
+  {"args": ["convert", "--raw=hello"], "stdout": "dest=\"hello\"\n"},
+  {"args": ["convert", "--raw="], "stdout": "dest=\"\"\n"},
+  {"args": ["convert", "-r"], "stdout": "dest=<bare>\n"},
+  {"args": ["convert", "-rhello"], "stdout": "dest=\"hello\"\n"},
+  {"args": ["custom"], "stdout": "level=<nil>\n"},
+  {"args": ["custom", "--level"], "stdout": "level=0\n"},
+  {"args": ["custom", "--level=info"], "stdout": "level=2\n"},
+  {"args": ["custom", "-l=warn"], "stdout": "level=3\n"},
+  {"args": ["custom", "--level=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag level: bad\n"},
+  {"args": ["custom", "-l=bad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
+  {"args": ["custom", "-lbad"], "status": 1, "stderr": "Error: invalid example.com/optionalvalue.Level value for flag -l: bad\n"},
+  {"args": ["numeric"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--big", "--ports", "--timeout", "--rate", "--ratio", "--speed", "--def-count"], "stdout": "big=0 ports=[0] timeout=0s rate=0.00 ratio=0.00 speed=0.00 defCount=50\n"},
+  {"args": ["numeric", "-b", "-p", "-t", "-r", "-s"], "stdout": "big=0 ports=[0] timeout=0s rate=0.00 ratio=<nil> speed=0.00 defCount=<nil>\n"},
+  {"args": ["numeric", "--big=9000000000", "--ports=8080", "--timeout=5s", "--rate=3.14", "--ratio=0.50", "--speed=55.5", "--def-count=120"], "stdout": "big=9000000000 ports=[8080] timeout=5s rate=3.14 ratio=0.50 speed=55.50 defCount=120\n"},
+  {"args": ["numeric", "-b=9000000000", "-p=8080", "-t=5s", "-r=3.14", "-s=55.5"], "stdout": "big=9000000000 ports=[8080] timeout=5s rate=3.14 ratio=<nil> speed=55.50 defCount=<nil>\n"},
+  {"args": ["numeric", "-b9000000000", "-p8080", "-t500ms", "-r2.72", "-s99.9"], "stdout": "big=9000000000 ports=[8080] timeout=500ms rate=2.72 ratio=<nil> speed=99.90 defCount=<nil>\n"},
+  {"args": ["numeric", "--big=100", "-b=200", "--big"], "stdout": "big=0 ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--big", "-b=42"], "stdout": "big=42 ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--timeout=10s", "-t"], "stdout": "big=<nil> ports=[] timeout=0s rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--speed=50", "-s"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=0.00 defCount=<nil>\n"},
+  {"args": ["numeric", "--ports", "-p80", "-p", "-p=443", "--ports=8080"], "stdout": "big=<nil> ports=[0 80 0 443 8080] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=<nil>\n"},
+  {"args": ["numeric", "--def-count"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=50\n"},
+  {"args": ["numeric", "--def-count=200"], "stdout": "big=<nil> ports=[] timeout=<nil> rate=<nil> ratio=<nil> speed=<nil> defCount=200\n"},
+  {"args": ["--help"], "stderrFile": "root-help.stderr"},
+  {"args": ["help"], "stderrFile": "root-help.stderr"},
+  {"args": ["usage"], "stderrFile": "root-help.stderr"}
+]
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+	"example.com/optionalvalue/cmd/app/templates"
+)
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands      map[string]func() Cmd
+	Version       string
+	Commit        string
+	Date          string
+	label         string
+	verbose       bool
+	CommandAction func(c *RootCmd) error
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+	}
+	c.FlagSet.Usage = c.Usage
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		app.Root(c.label, c.verbose)
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewConvert() })
+		c.Commands["convert"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewCustom() })
+		c.Commands["custom"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewNumeric() })
+		c.Commands["numeric"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewPointers() })
+		c.Commands["pointers"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewScalar() })
+		c.Commands["scalar"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewScope() })
+		c.Commands["scope"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewSlices() })
+		c.Commands["slices"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "label":
+				if !hasValue {
+					c.label = ""
+				} else {
+					s := value
+					c.label = s
+				}
+
+			case "verbose":
+				if !hasValue {
+					c.verbose = true
+				} else {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.verbose = b
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "l" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.label = ""
+					} else {
+						s := value
+						c.label = s
+					}
+				}
+
+				if char == "v" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.verbose = true
+					} else {
+						b, err := strconv.ParseBool(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid boolean value for flag -%s: %s", char, value)
+						}
+						c.verbose = b
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		c.Usage()
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/scalar.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Scalar)(nil)
+
+type Scalar struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	str           string
+	num           int
+	def           string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Scalar) error
+}
+
+type UsageDataScalar struct {
+	*Scalar
+	Recursive bool
+}
+
+func (c *Scalar) Usage() {
+	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scalar) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Scalar) commandPath() string { return "app scalar" }
+
+func (c *Scalar) UsageRecursive() {
+	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scalar) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "str":
+				if !hasValue {
+					c.str = ""
+				} else {
+					s := value
+					c.str = s
+				}
+
+			case "num":
+				if !hasValue {
+					c.num = 0
+				} else {
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+					}
+					val := v
+					c.num = val
+				}
+
+			case "def":
+				if !hasValue {
+					c.def = "fallback"
+				} else {
+					s := value
+					c.def = s
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "s" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.str = ""
+					} else {
+						s := value
+						c.str = s
+					}
+				}
+
+				if char == "n" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.num = 0
+					} else {
+						v, err := strconv.Atoi(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.num = val
+					}
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewScalar() *Scalar {
+	set := flag.NewFlagSet("scalar", flag.ContinueOnError)
+	v := &Scalar{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	v.def = "fallback"
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Scalar) error {
+
+		app.Scalar(c.str, c.num, c.def)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/pointers.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Pointers)(nil)
+
+type Pointers struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	ptr           *string
+	num           *int
+	tri           **string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Pointers) error
+}
+
+type UsageDataPointers struct {
+	*Pointers
+	Recursive bool
+}
+
+func (c *Pointers) Usage() {
+	err := executeUsage(os.Stderr, "pointers_usage.txt", UsageDataPointers{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Pointers) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Pointers) commandPath() string { return "app pointers" }
+
+func (c *Pointers) UsageRecursive() {
+	err := executeUsage(os.Stderr, "pointers_usage.txt", UsageDataPointers{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Pointers) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "ptr":
+				if !hasValue {
+					var bare string = ""
+					c.ptr = &bare
+				} else {
+					s := value
+					c.ptr = &s
+				}
+
+			case "num":
+				if !hasValue {
+					var bare int = 0
+					c.num = &bare
+				} else {
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid integer value for flag %s: %s", name, value)
+					}
+					val := v
+					c.num = &val
+				}
+
+			case "tri":
+				if !hasValue {
+					var nilVal *string
+					c.tri = &nilVal
+				} else {
+					s := value
+					sPtr := &s
+					c.tri = &sPtr
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare string = ""
+						c.ptr = &bare
+					} else {
+						s := value
+						c.ptr = &s
+					}
+				}
+
+				if char == "n" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare int = 0
+						c.num = &bare
+					} else {
+						v, err := strconv.Atoi(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid integer value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.num = &val
+					}
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewPointers() *Pointers {
+	set := flag.NewFlagSet("pointers", flag.ContinueOnError)
+	v := &Pointers{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Pointers) error {
+
+		app.Pointers(c.ptr, c.num, c.tri)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/slices.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Slices)(nil)
+
+type Slices struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	items         []string
+	ptrs          []*string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Slices) error
+}
+
+type UsageDataSlices struct {
+	*Slices
+	Recursive bool
+}
+
+func (c *Slices) Usage() {
+	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Slices) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Slices) commandPath() string { return "app slices" }
+
+func (c *Slices) UsageRecursive() {
+	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Slices) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "items":
+				if !hasValue {
+					var bare string = ""
+					c.items = append(c.items, bare)
+				} else {
+					s := value
+					c.items = append(c.items, s)
+				}
+
+			case "ptrs":
+				if !hasValue {
+					c.ptrs = append(c.ptrs, nil)
+				} else {
+					s := value
+					c.ptrs = append(c.ptrs, &s)
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "i" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare string = ""
+						c.items = append(c.items, bare)
+					} else {
+						s := value
+						c.items = append(c.items, s)
+					}
+				}
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.ptrs = append(c.ptrs, nil)
+					} else {
+						s := value
+						c.ptrs = append(c.ptrs, &s)
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewSlices() *Slices {
+	set := flag.NewFlagSet("slices", flag.ContinueOnError)
+	v := &Slices{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Slices) error {
+
+		app.Slices(c.items, c.ptrs)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/scope.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Scope)(nil)
+
+type Scope struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	opt           *string
+	pos           string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Scope) error
+}
+
+type UsageDataScope struct {
+	*Scope
+	Recursive bool
+}
+
+func (c *Scope) Usage() {
+	err := executeUsage(os.Stderr, "scope_usage.txt", UsageDataScope{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scope) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Scope) commandPath() string { return "app scope" }
+
+func (c *Scope) UsageRecursive() {
+	err := executeUsage(os.Stderr, "scope_usage.txt", UsageDataScope{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Scope) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "opt":
+				if !hasValue {
+					var bare string = ""
+					c.opt = &bare
+				} else {
+					s := value
+					c.opt = &s
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "o" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare string = ""
+						c.opt = &bare
+					} else {
+						s := value
+						c.opt = &s
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	if len(remainingArgs) < 1 {
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
+	}
+	// Handle positional argument pos
+	{
+		argIndex := 0
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			c.pos = argVal
+		} else {
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewScope() *Scope {
+	set := flag.NewFlagSet("scope", flag.ContinueOnError)
+	v := &Scope{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Scope) error {
+
+		app.Scope(c.opt, c.pos)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/convert.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Convert)(nil)
+
+type Convert struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	raw           []*string
+	dest          *app.NullString
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Convert) error
+}
+
+type UsageDataConvert struct {
+	*Convert
+	Recursive bool
+}
+
+func (c *Convert) Usage() {
+	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Convert) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Convert) commandPath() string { return "app convert" }
+
+func (c *Convert) UsageRecursive() {
+	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Convert) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "raw":
+				if !hasValue {
+					c.raw = append(c.raw, nil)
+				} else {
+					s := value
+					c.raw = append(c.raw, &s)
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "r" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						c.raw = append(c.raw, nil)
+					} else {
+						s := value
+						c.raw = append(c.raw, &s)
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	{
+		v, err := app.ToNullString(c.raw)
+		if err != nil {
+			return fmt.Errorf("failed to generate dest: %w", err)
+		}
+		c.dest = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewConvert() *Convert {
+	set := flag.NewFlagSet("convert", flag.ContinueOnError)
+	v := &Convert{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Convert) error {
+
+		app.Convert(c.raw, c.dest)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/custom.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Custom)(nil)
+
+type Custom struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	level         *app.Level
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Custom) error
+}
+
+type UsageDataCustom struct {
+	*Custom
+	Recursive bool
+}
+
+func (c *Custom) Usage() {
+	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Custom) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Custom) commandPath() string { return "app custom" }
+
+func (c *Custom) UsageRecursive() {
+	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Custom) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "level":
+				if !hasValue {
+					var bare app.Level = *new(app.Level)
+					c.level = &bare
+				} else {
+					v, err := app.ParseLevel(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid example.com/optionalvalue.Level value for flag %s: %s", name, value)
+					}
+					val := app.Level(v)
+					c.level = &val
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "l" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare app.Level = *new(app.Level)
+						c.level = &bare
+					} else {
+						v, err := app.ParseLevel(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid example.com/optionalvalue.Level value for flag -%s: %s", char, value)
+						}
+						val := app.Level(v)
+						c.level = &val
+					}
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewCustom() *Custom {
+	set := flag.NewFlagSet("custom", flag.ContinueOnError)
+	v := &Custom{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Custom) error {
+
+		app.Custom(c.level)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/numeric.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	app "example.com/optionalvalue"
+	"example.com/optionalvalue/cmd"
+)
+
+var _ Cmd = (*Numeric)(nil)
+
+type Numeric struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	big           *int64
+	ports         []uint32
+	timeout       *time.Duration
+	rate          *float64
+	ratio         *float32
+	speed         *app.Speed
+	defCount      *int64
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Numeric) error
+}
+
+type UsageDataNumeric struct {
+	*Numeric
+	Recursive bool
+}
+
+func (c *Numeric) Usage() {
+	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Numeric) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Numeric) commandPath() string { return "app numeric" }
+
+func (c *Numeric) UsageRecursive() {
+	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Numeric) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "big":
+				if !hasValue {
+					var bare int64 = 0
+					c.big = &bare
+				} else {
+					v, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid int64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.big = &val
+				}
+
+			case "ports":
+				if !hasValue {
+					var bare uint32 = 0
+					c.ports = append(c.ports, bare)
+				} else {
+					v, err := strconv.ParseUint(value, 10, 32)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid uint32 value for flag %s: %s", name, value)
+					}
+					val := uint32(v)
+					c.ports = append(c.ports, val)
+				}
+
+			case "timeout":
+				if !hasValue {
+					var bare time.Duration = 0
+					c.timeout = &bare
+				} else {
+					v, err := time.ParseDuration(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid duration value for flag %s: %s", name, value)
+					}
+					val := v
+					c.timeout = &val
+				}
+
+			case "rate":
+				if !hasValue {
+					var bare float64 = 0
+					c.rate = &bare
+				} else {
+					v, err := strconv.ParseFloat(value, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid float64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.rate = &val
+				}
+
+			case "ratio":
+				if !hasValue {
+					var bare float32 = 0
+					c.ratio = &bare
+				} else {
+					v, err := strconv.ParseFloat(value, 32)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid float32 value for flag %s: %s", name, value)
+					}
+					val := float32(v)
+					c.ratio = &val
+				}
+
+			case "speed":
+				if !hasValue {
+					var bare app.Speed = *new(app.Speed)
+					c.speed = &bare
+				} else {
+					v, err := app.ParseSpeed(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid example.com/optionalvalue.Speed value for flag %s: %s", name, value)
+					}
+					val := app.Speed(v)
+					c.speed = &val
+				}
+
+			case "defCount", "def-count":
+				if !hasValue {
+					var bare int64 = 50
+					c.defCount = &bare
+				} else {
+					v, err := strconv.ParseInt(value, 10, 64)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid int64 value for flag %s: %s", name, value)
+					}
+					val := v
+					c.defCount = &val
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "b" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare int64 = 0
+						c.big = &bare
+					} else {
+						v, err := strconv.ParseInt(value, 10, 64)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid int64 value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.big = &val
+					}
+				}
+
+				if char == "p" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare uint32 = 0
+						c.ports = append(c.ports, bare)
+					} else {
+						v, err := strconv.ParseUint(value, 10, 32)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid uint32 value for flag -%s: %s", char, value)
+						}
+						val := uint32(v)
+						c.ports = append(c.ports, val)
+					}
+				}
+
+				if char == "t" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare time.Duration = 0
+						c.timeout = &bare
+					} else {
+						v, err := time.ParseDuration(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid duration value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.timeout = &val
+					}
+				}
+
+				if char == "r" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare float64 = 0
+						c.rate = &bare
+					} else {
+						v, err := strconv.ParseFloat(value, 64)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid float64 value for flag -%s: %s", char, value)
+						}
+						val := v
+						c.rate = &val
+					}
+				}
+
+				if char == "s" {
+					found = true
+					value := ""
+					hasValue := false
+					if j+1 < len(shorts) {
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						hasValue = true
+						j = len(shorts)
+					}
+					if !hasValue {
+						var bare app.Speed = *new(app.Speed)
+						c.speed = &bare
+					} else {
+						v, err := app.ParseSpeed(value)
+						if err != nil {
+							return c.usageError(cmd.UsageInvalidValue, char, err, "invalid example.com/optionalvalue.Speed value for flag -%s: %s", char, value)
+						}
+						val := app.Speed(v)
+						c.speed = &val
+					}
+				}
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewNumeric() *Numeric {
+	set := flag.NewFlagSet("numeric", flag.ContinueOnError)
+	v := &Numeric{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Numeric) error {
+
+		app.Numeric(c.big, c.ports, c.timeout, c.rate, c.ratio, c.speed, c.defCount)
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/root-help.stderr --
+Usage: app [flags...] <subcommand>
+
+- Root optional value command.
+
+Subcommands:
+    convert  - Generator conversion.
+    custom   - Custom parser optional flag.
+    numeric  - Extended numeric, duration, float and custom alias optional
+             flags.
+    pointers - Pointer and double-pointer optional values.
+    scalar   - Scalar optional values with defaults.
+    scope    - Optional flag before positional arg.
+    slices   - Slice and pointer-slice optional values.
+    help     Print this help message
+    usage    Print this usage message
+
+
+Flags:
+    --label, -l [=string]   Optional string label.
+    --verbose, -v [=bool]   Optional boolean flag.

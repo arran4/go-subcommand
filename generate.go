@@ -512,6 +512,9 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
 		}
 		cmd.ResolvedCLIParser = resolved
+		if err := validateOptionalValueParser(cmd.Parameters, resolved, cmd.MainCmdName); err != nil {
+			return err
+		}
 		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
 			return err
 		}
@@ -526,8 +529,20 @@ func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited stri
 			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
 		}
 		subCommand.ResolvedCLIParser = resolved
+		if err := validateOptionalValueParser(subCommand.Parameters, resolved, subCommand.SubCommandName); err != nil {
+			return err
+		}
 		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateOptionalValueParser(params []*model.FunctionParameter, backend, command string) error {
+	for _, param := range params {
+		if param.OptionalValue && backend != "gnu" {
+			return fmt.Errorf("command %q: optional-value flag %q is unsupported by %s; select gnu", command, param.Name, backend)
 		}
 	}
 	return nil
@@ -985,9 +1000,13 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		if p.TypeImportPath != "" {
 			alias := ""
 			if !p.IsReader() && !p.IsWriter() {
-				qualifier := strings.SplitN(p.BaseType(), ".", 2)[0]
-				if qualifier != path.Base(p.TypeImportPath) {
-					alias = qualifier
+				if dot := strings.IndexByte(p.BaseType(), '.'); dot >= 0 {
+					qualifier := p.BaseType()[:dot]
+					if qualifier != path.Base(p.TypeImportPath) {
+						alias = qualifier
+					}
+				} else if p.TypePackageName != "" && p.TypePackageName != path.Base(p.TypeImportPath) {
+					alias = p.TypePackageName
 				}
 			}
 			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
@@ -1188,7 +1207,7 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 		if p.HasGenerator() && !p.IsFlagPresence() {
 			imports = append(imports, templateImport{Path: "io"})
 		}
-		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
 		}
 
@@ -1217,7 +1236,7 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 	}
 
 	for _, p := range cmd.Parameters {
-		if p.Type == "time.Duration" || p.Type == "[]time.Duration" || p.Type == "*time.Duration" || p.Type == "[]*time.Duration" {
+		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
 		}
 
@@ -1282,6 +1301,17 @@ func runtimeParserImports(parser string, params []*model.FunctionParameter) []te
 					call := param.ParserCall("value")
 					if strings.Contains(call, "strconv.") {
 						needsStrconv = true
+					}
+				}
+
+				if param.OptionalValue {
+					if param.IsBool() {
+						needsStrconv = true
+					} else if !param.IsString() {
+						call := param.ParserCall("value")
+						if strings.Contains(call, "strconv.") {
+							needsStrconv = true
+						}
 					}
 				}
 			}
@@ -1442,6 +1472,11 @@ func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
 					previous := parameter.Type
 					prefix := strings.TrimSuffix(parameter.Type, base)
 					parameter.Type = prefix + identifier + base[dot:]
+					restores = append(restores, func() { parameter.Type = previous })
+				} else {
+					previous := parameter.Type
+					prefix := strings.TrimSuffix(parameter.Type, base)
+					parameter.Type = prefix + identifier + "." + base
 					restores = append(restores, func() { parameter.Type = previous })
 				}
 			}
