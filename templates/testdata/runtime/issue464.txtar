@@ -223,21 +223,21 @@ func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0,
       "word",
       "+a"
     ],
-    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"word\" \"+a\"] seen={}\n"
+    "stdout": "root a=false b=false ab=false count=7 label=\"base\" args=[\"word\"] seen={\"alpha\":true}\n"
   },
   {
     "args": [
       "+",
       "-ab"
     ],
-    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"+\" \"-ab\"] seen={}\n"
+    "stdout": "root a=true b=true ab=false count=7 label=\"base\" args=[\"+\"] seen={\"alpha\":true,\"beta\":true}\n"
   },
   {
     "args": [
       "-",
       "+ab"
     ],
-    "stdout": "root a=true b=false ab=false count=7 label=\"base\" args=[\"-\" \"+ab\"] seen={}\n"
+    "stdout": "root a=false b=false ab=false count=7 label=\"base\" args=[\"-\"] seen={\"alpha\":true,\"beta\":true}\n"
   },
   {
     "args": [
@@ -330,7 +330,7 @@ func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0,
       "word",
       "+c"
     ],
-    "stdout": "gnu/pm a=true b=false ab=false count=0 label=\"\" args=[\"word\" \"+c\"] seen={}\n"
+    "stdout": "gnu/pm a=false b=false ab=false count=0 label=\"\" args=[\"word\"] seen={\"child\":true}\n"
   },
   {
     "args": [
@@ -464,9 +464,9 @@ func Single(a bool, seen map[string]bool) { report("single", a, false, false, 0,
       "++a"
     ],
     "status": 1,
-    "stderr": "Error: invalid plus-minus option: ++a\n",
-    "kind": "invalid-arguments",
-    "flag": "",
+    "stderr": "Error: unknown flag: ++a\n",
+    "kind": "unknown-flag",
+    "flag": "a",
     "path": "app",
     "cause": false
   },
@@ -911,43 +911,167 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 
 func (c *RootCmd) Execute(args []string) (err error) {
 	plusMinusOptions := map[string]plusMinusOption{
-		"alpha": {Key: "alpha", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.alpha = v
-			return nil
-		}},
-		"beta": {Key: "beta", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.beta = v
-			return nil
-		}},
-		"ab": {Key: "ab", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.ab = v
-			return nil
-		}},
-		"count": {Key: "count", Boolean: false, IO: false, Set: func(value string) error {
-			v, err := strconv.Atoi(value)
-			if err != nil {
-				return err
-			}
-			c.count = v
-			return nil
-		}},
-		"label": {Key: "label", Boolean: false, IO: false, Set: func(value string) error {
-			v := value
-			c.label = v
-			return nil
-		}},
+		"alpha": {
+			Key:               "alpha",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.alpha = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.alpha = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.alpha = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"beta": {
+			Key:               "beta",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.beta = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.beta = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.beta = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"ab": {
+			Key:               "ab",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.ab = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.ab = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.ab = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"count": {
+			Key:               "count",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.count = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.count = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"label": {
+			Key:               "label",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.label = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.label = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
 	}
 	plusMinusShort := map[string]plusMinusOption{
 		"a": plusMinusOptions["alpha"],
@@ -963,7 +1087,11 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		"label":  plusMinusOptions["label"],
 	}
 	_ = plusMinusOptions
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	subcmdMap := make(map[string]bool)
+	for name := range c.Commands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}
@@ -1007,16 +1135,23 @@ import (
 )
 
 type plusMinusOption struct {
-	Key     string
-	Boolean bool
-	IO      bool
-	Set     func(string) error
+	Key               string
+	Boolean           bool
+	IO                bool
+	SupportsBarePlus  bool
+	SupportsValuePlus bool
+	Set               func(string) error
+	StageMinus        func(string) (func() error, error)
+	StageBarePlus     func() (func() error, error)
+	StageValuePlus    func(string) (func() error, error)
 }
 
 type plusMinusValue struct {
 	Name   string
+	Prefix string
 	Option plusMinusOption
 	Value  string
+	IsPlus bool
 }
 
 type plusMinusToken struct {
@@ -1024,7 +1159,7 @@ type plusMinusToken struct {
 	Values                                 []plusMinusValue
 }
 
-// Tokenization validates a complete cluster before any setter runs.
+// Tokenization validates an individual option token against the option tables.
 func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOption) (plusMinusToken, error) {
 	var result plusMinusToken
 	if token == "--" {
@@ -1035,89 +1170,247 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 		result.Help = true
 		return result, nil
 	}
-	if len(token) < 2 || token[0] != '-' && token[0] != '+' {
+	if len(token) < 2 || (token[0] != '-' && token[0] != '+') {
 		result.Boundary = true
 		return result, nil
 	}
-	if strings.HasPrefix(token, "--") {
-		name, value, assigned := token[2:], "", false
-		if at := strings.IndexByte(name, '='); at >= 0 {
-			name, value, assigned = name[:at], name[at+1:], true
+	if strings.HasPrefix(token, "--") || strings.HasPrefix(token, "++") {
+		prefix := token[:2]
+		rest := token[2:]
+		if rest == "" {
+			// Standalone "++" is treated as boundary positional
+			result.Boundary = true
+			return result, nil
+		}
+		name, value, assigned := rest, "", false
+		if at := strings.IndexByte(rest, '='); at >= 0 {
+			name, value, assigned = rest[:at], rest[at+1:], true
+		}
+		if name == "help" && prefix == "++" {
+			return result, newUsageError(path, cmd.UsageUnknownFlag, "help", nil, "unknown flag: ++help")
 		}
 		option, found := long[name]
-		if len(name) < 2 || !found {
-			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+		if !found {
+			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", prefix, name)
 		}
-		if option.Boolean && !assigned {
-			value = "true"
+		if prefix == "--" {
+			if option.Boolean && !assigned {
+				value = "true"
+			}
+			result.NeedsValue = !option.Boolean && !assigned
+		} else { // prefix == "++"
+			if assigned {
+				if !option.SupportsValuePlus && option.Set == nil {
+					return result, newUsageError(path, cmd.UsageInvalidValue, name, nil, "flag ++%s does not support assigned plus operation", name)
+				}
+			} else {
+				if option.Boolean {
+					value = "false"
+				} else if !option.SupportsBarePlus && option.Set == nil {
+					return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: ++%s", name)
+				}
+			}
 		}
-		result.NeedsValue = !option.Boolean && !assigned
-		result.Values = []plusMinusValue{{Name: name, Option: option, Value: value}}
+		result.Values = []plusMinusValue{{Name: name, Prefix: prefix, Option: option, Value: value, IsPlus: prefix == "++"}}
 		return result, nil
 	}
-	if token[1] == '+' || strings.ContainsAny(token[1:], "=+-") {
+
+	prefix := token[0]
+	prefixStr := string(prefix)
+	body := token[1:]
+	if body[0] == '+' || body[0] == '-' {
 		return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
 	}
-	for i := 1; i < len(token); i++ {
-		name := token[i : i+1]
-		if !(token[i] >= 'a' && token[i] <= 'z' || token[i] >= 'A' && token[i] <= 'Z') {
+
+	for j := 0; j < len(body); j++ {
+		char := body[j : j+1]
+		if !(body[j] >= 'a' && body[j] <= 'z' || body[j] >= 'A' && body[j] <= 'Z') {
 			return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid short option syntax: %s", token)
 		}
-		if name == "h" {
-			return result, newUsageError(path, cmd.UsageInvalidArguments, name, nil, "help cannot be disabled or clustered: %s", token)
+		if char == "h" {
+			if len(body) > 1 || prefix == '+' {
+				return result, newUsageError(path, cmd.UsageInvalidArguments, "h", nil, "help cannot be disabled or clustered: %s", token)
+			}
+			result.Help = true
+			return result, nil
 		}
-		option, found := short[name]
+		option, found := short[char]
 		if !found {
-			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", token[:1], name)
+			return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: %c%s", prefix, char)
 		}
-		if !option.Boolean {
-			return result, newUsageError(path, cmd.UsageInvalidArguments, name, nil, "short option %s requires a long value form", name)
+		if option.Boolean {
+			if j+1 < len(body) && body[j+1] == '=' {
+				return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
+			}
+			value := "true"
+			if prefix == '+' {
+				value = "false"
+			}
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+'})
+		} else {
+			rest := body[j+1:]
+			value := ""
+			if strings.HasPrefix(rest, "=") {
+				value = rest[1:]
+			} else if len(rest) > 0 {
+				value = rest
+			} else {
+				result.NeedsValue = true
+			}
+			if prefix == '+' {
+				if value != "" && !option.SupportsValuePlus && option.Set == nil {
+					return result, newUsageError(path, cmd.UsageInvalidValue, char, nil, "flag +%s does not support assigned plus operation", char)
+				}
+				if value == "" && !result.NeedsValue && !option.SupportsBarePlus && option.Set == nil {
+					return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: +%s", char)
+				}
+			}
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+'})
+			break
 		}
-		value := "true"
-		if token[0] == '+' {
-			value = "false"
-		}
-		result.Values = append(result.Values, plusMinusValue{Name: name, Option: option, Value: value})
 	}
 	return result, nil
 }
 
-// Stop at this scope's first command/positional boundary. The remaining slice
-// retains its original bytes and is never inspected or rewritten by this parser.
-func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption) (remaining []string, seen map[string]bool, terminated, help bool, err error) {
-	seen = make(map[string]bool)
+func isFlagLike(token string) bool {
+	if strings.HasPrefix(token, "--") && len(token) > 2 {
+		return true
+	}
+	if strings.HasPrefix(token, "++") && len(token) > 2 {
+		return true
+	}
+	return false
+}
+
+// Scans args, validates all tokens and staged values before committing any changes.
+// Preserves positional argument ordering and yields when encountering subcommands.
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...map[string]bool) (remaining []string, seen map[string]bool, terminated, help bool, err error) {
+	var subcmdMap map[string]bool
+	if len(subcommands) > 0 {
+		subcmdMap = subcommands[0]
+	}
+
+	stagedSeen := make(map[string]bool)
+	var commits []func() error
+	var positionals []string
+	dashDashSeen := false
+
 	for i := 0; i < len(args); i++ {
 		token, tokenErr := tokenizePlusMinus(args[i], path, short, long)
 		if tokenErr != nil {
-			return nil, seen, false, false, tokenErr
-		}
-		if token.Boundary {
-			return args[i:], seen, false, false, nil
-		}
-		if token.Terminated {
-			return args[i+1:], seen, true, false, nil
+			return nil, stagedSeen, false, false, tokenErr
 		}
 		if token.Help {
-			return nil, seen, false, true, nil
+			return nil, stagedSeen, false, true, nil
+		}
+		if token.Terminated {
+			dashDashSeen = true
+			if len(positionals) == 0 {
+				positionals = args[i+1:]
+			} else {
+				positionals = append(positionals, args[i+1:]...)
+			}
+			break
+		}
+		if token.Boundary {
+			if subcmdMap != nil && subcmdMap[args[i]] && len(positionals) == 0 {
+				for _, commit := range commits {
+					if err := commit(); err != nil {
+						return nil, nil, false, false, err
+					}
+				}
+				return args[i:], stagedSeen, false, false, nil
+			}
+			positionals = append(positionals, args[i])
+			continue
 		}
 		if token.NeedsValue {
-			if i+1 == len(args) {
-				return nil, seen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, token.Values[0].Name, nil, "flag --%s requires a value", token.Values[0].Name)
+			lastVal := token.Values[len(token.Values)-1]
+			lastName := lastVal.Name
+			flagPrefix := lastVal.Prefix
+			if i+1 >= len(args) {
+				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
+			}
+			next := args[i+1]
+			if isFlagLike(next) {
+				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
 			}
 			i++
-			token.Values[0].Value = args[i]
+			token.Values[len(token.Values)-1].Value = next
 		}
-		for _, operation := range token.Values {
-			if setErr := operation.Option.Set(operation.Value); setErr != nil {
-				if operation.Option.IO {
-					return nil, seen, false, false, setErr
+
+		for _, v := range token.Values {
+			var commit func() error
+			var stageErr error
+
+			if !v.IsPlus {
+				if v.Option.StageMinus != nil {
+					commit, stageErr = v.Option.StageMinus(v.Value)
+				} else if v.Option.Set != nil {
+					val := v.Value
+					opt := v.Option
+					if opt.IO {
+						commit = func() error { return opt.Set(val) }
+					} else {
+						stageErr = opt.Set(val)
+					}
 				}
-				return nil, seen, false, false, newUsageError(path, cmd.UsageInvalidValue, operation.Name, setErr, "invalid value %q for flag %s: %v", operation.Value, operation.Name, setErr)
+			} else {
+				if v.Value != "" && !v.Option.Boolean {
+					if v.Option.StageValuePlus != nil {
+						commit, stageErr = v.Option.StageValuePlus(v.Value)
+					} else if v.Option.Set != nil {
+						val := v.Value
+						opt := v.Option
+						if opt.IO {
+							commit = func() error { return opt.Set(val) }
+						} else {
+							stageErr = opt.Set(val)
+						}
+					} else {
+						return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageInvalidValue, v.Name, nil, "flag ++%s does not support assigned plus operation", v.Name)
+					}
+				} else {
+					if v.Option.Boolean {
+						if v.Option.StageBarePlus != nil {
+							commit, stageErr = v.Option.StageBarePlus()
+						} else if v.Option.Set != nil {
+							opt := v.Option
+							stageErr = opt.Set("false")
+						}
+					} else {
+						if v.Option.StageBarePlus != nil {
+							commit, stageErr = v.Option.StageBarePlus()
+						} else if v.Option.Set != nil {
+							opt := v.Option
+							stageErr = opt.Set("")
+						} else {
+							return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageUnknownFlag, v.Name, nil, "unknown flag: ++%s", v.Name)
+						}
+					}
+				}
 			}
-			seen[operation.Option.Key] = true
+
+			if stageErr != nil {
+				if v.Option.IO {
+					return nil, stagedSeen, false, false, stageErr
+				}
+				return nil, stagedSeen, false, false, newUsageError(path, cmd.UsageInvalidValue, v.Name, stageErr, "invalid value %q for flag %s: %v", v.Value, v.Name, stageErr)
+			}
+			if commit != nil {
+				commits = append(commits, commit)
+			}
+			stagedSeen[v.Option.Key] = true
 		}
 	}
-	return nil, seen, false, false, nil
+
+	for _, commit := range commits {
+		if err := commit(); err != nil {
+			return nil, nil, false, false, err
+		}
+	}
+
+	return positionals, stagedSeen, dashDashSeen, false, nil
 }
 -- expected/gnu_pm.go --
 // Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
@@ -1174,23 +1467,293 @@ func (c *GnuPm) UsageRecursive() {
 
 func (c *GnuPm) Execute(args []string) (err error) {
 	plusMinusOptions := map[string]plusMinusOption{
-		"child": {Key: "child", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.child = v
-			return nil
-		}},
+		"child": {
+			Key:               "child",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.child = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.child = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.child = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"b": {
+			Key:               "b",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.b = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.b = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.b = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"ab": {
+			Key:               "ab",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.ab = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.ab = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.ab = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"alpha": {
+			Key:               "alpha",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.alpha = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.alpha = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.alpha = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"beta": {
+			Key:               "beta",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.beta = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.beta = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.beta = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"count": {
+			Key:               "count",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.count = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.count = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"label": {
+			Key:               "label",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.label = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.label = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
 	}
 	plusMinusShort := map[string]plusMinusOption{
 		"c": plusMinusOptions["child"],
+		"a": plusMinusOptions["a"],
+		"b": plusMinusOptions["b"],
 	}
 	plusMinusLong := map[string]plusMinusOption{
-		"child": plusMinusOptions["child"],
+		"child":  plusMinusOptions["child"],
+		"ab":     plusMinusOptions["ab"],
+		"alpha":  plusMinusOptions["alpha"],
+		"enable": plusMinusOptions["alpha"],
+		"beta":   plusMinusOptions["beta"],
+		"count":  plusMinusOptions["count"],
+		"label":  plusMinusOptions["label"],
 	}
 	_ = plusMinusOptions
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}

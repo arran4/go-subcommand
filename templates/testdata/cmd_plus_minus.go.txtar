@@ -97,30 +97,107 @@ func (c *ToggleCmd) UsageRecursive() {
 
 func (c *ToggleCmd) Execute(args []string) (err error) {
 	plusMinusOptions := map[string]plusMinusOption{
-		"x": {Key: "x", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.x = v
-			return nil
-		}},
-		"verbose": {Key: "verbose", Boolean: true, IO: false, Set: func(value string) error {
-			v, err := strconv.ParseBool(value)
-			if err != nil {
-				return err
-			}
-			c.verbose = v
-			return nil
-		}},
-		"count": {Key: "count", Boolean: false, IO: false, Set: func(value string) error {
-			v, err := strconv.Atoi(value)
-			if err != nil {
-				return err
-			}
-			c.count = v
-			return nil
-		}},
+		"x": {
+			Key:               "x",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.x = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.x = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.x = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"verbose": {
+			Key:               "verbose",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.verbose = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.verbose = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.verbose = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"count": {
+			Key:               "count",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.count = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.count = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
 	}
 	plusMinusShort := map[string]plusMinusOption{
 		"x": plusMinusOptions["x"],
@@ -131,7 +208,11 @@ func (c *ToggleCmd) Execute(args []string) (err error) {
 		"count":   plusMinusOptions["count"],
 	}
 	_ = plusMinusOptions
-	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong)
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, dashDashSeen, plusMinusHelp, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
 	if err != nil {
 		return err
 	}

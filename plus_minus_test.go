@@ -62,6 +62,24 @@ func TestPlusMinusGenerationAndRuntime(t *testing.T) {
 			}
 			if selection == "source" {
 				sourceFiles = files
+				if os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_GOLDENS") == "1" {
+					ar := txtar.Parse(plusMinusFixture)
+					for i, f := range ar.Files {
+						for _, name := range []string{"root.go", "plus_minus.go", "gnu_pm.go", "templates/app_usage.txt"} {
+							if f.Name == "expected/"+name && files["cmd/app/"+name] != nil {
+								ar.Files[i].Data = files["cmd/app/"+name]
+							}
+						}
+						if f.Name == "expected/app.1" && files["man/app.1"] != nil {
+							ar.Files[i].Data = files["man/app.1"]
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue464.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					plusMinusFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
 			} else if selection == "default" && !reflect.DeepEqual(files, sourceFiles) {
 				t.Fatal("source/default selection differ")
 			}
@@ -140,7 +158,7 @@ func TestPlusMinusRejectsAmbiguousSource(t *testing.T) {
 	for _, tc := range []struct{ name, from, to, want string }{
 		{"short collision", "beta: -b --beta", "beta: -a --beta", `command app: plus-minus short name "a" collides between alpha and beta`},
 		{"long collision", "beta: -b --beta", "beta: -b --beta --enable", `command app: plus-minus long name "enable" collides between alpha and beta`},
-		{"short value", "count: --count", "count: -n --count", `command app: plus-minus short name "n" requires a scalar boolean and an ASCII letter other than h`},
+		{"invalid short char", "count: --count", "count: -1 --count", `command app: plus-minus short name "1" requires an ASCII letter other than h`},
 		{"custom boolean", "alpha: -a --alpha", "alpha: (parser: ParseCustom) -a --alpha", "command app: plus-minus requires scalar booleans without custom parsers (alpha)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,13 +188,22 @@ func TestValidatePlusMinusParameters(t *testing.T) {
 		{"separate namespaces", []*model.FunctionParameter{{Name: "a", Type: "bool"}, {Name: "b", Type: "bool"}, {Name: "ab", Type: "bool"}}, true},
 		{"short collision", []*model.FunctionParameter{{Name: "alpha", Type: "bool", FlagAliases: []string{"a"}}, {Name: "a", Type: "bool"}}, false},
 		{"long collision", []*model.FunctionParameter{{Name: "alpha", Type: "bool", FlagAliases: []string{"both"}}, {Name: "both", Type: "bool"}}, false},
-		{"value short", []*model.FunctionParameter{{Name: "count", Type: "int", FlagAliases: []string{"n"}}}, false},
+		{"value short", []*model.FunctionParameter{{Name: "count", Type: "int", FlagAliases: []string{"n"}}}, true},
+		{"single char long", []*model.FunctionParameter{{Name: "alpha", Type: "bool", LongAliases: []string{"a"}}}, true},
+		{"separate short and long same char", []*model.FunctionParameter{{Name: "alpha", Type: "bool", ShortAliases: []string{"a"}}, {Name: "beta", Type: "string", LongAliases: []string{"a"}}}, true},
 		{"unicode", []*model.FunctionParameter{{Name: "alpha", Type: "bool", FlagAliases: []string{"é"}}}, false},
 		{"help", []*model.FunctionParameter{{Name: "help", Type: "bool"}}, false},
 		{"short help", []*model.FunctionParameter{{Name: "alpha", Type: "bool", FlagAliases: []string{"h"}}}, false},
 		{"boolean slice", []*model.FunctionParameter{{Name: "toggles", Type: "[]bool"}}, false},
 		{"custom boolean", []*model.FunctionParameter{{Name: "toggle", Type: "bool", Parser: model.ParserConfig{Type: model.ParserTypeCustom, Func: &model.FuncRef{FunctionName: "Parse"}}}}, false},
 		{"long value", []*model.FunctionParameter{{Name: "count", Type: "int"}}, true},
+		{"invalid plus-bare mode", []*model.FunctionParameter{{Name: "count", Type: "int", PlusBare: model.PlusOperationConfig{Mode: "negate"}}}, false},
+		{"valid plus-bare reset", []*model.FunctionParameter{{Name: "count", Type: "int", PlusBare: model.PlusOperationConfig{Mode: "reset"}}}, true},
+		{"valid plus-bare zero", []*model.FunctionParameter{{Name: "count", Type: "int", PlusBare: model.PlusOperationConfig{Mode: "zero"}}}, true},
+		{"valid plus-bare func", []*model.FunctionParameter{{Name: "count", Type: "int", PlusBare: model.PlusOperationConfig{Mode: "func", Func: &model.FuncRef{FunctionName: "MyReset"}}}}, true},
+		{"invalid plus-value mode", []*model.FunctionParameter{{Name: "count", Type: "int", PlusValue: model.PlusOperationConfig{Mode: "add"}}}, false},
+		{"valid plus-value set", []*model.FunctionParameter{{Name: "count", Type: "int", PlusValue: model.PlusOperationConfig{Mode: "set"}}}, true},
+		{"valid plus-value func", []*model.FunctionParameter{{Name: "count", Type: "int", PlusValue: model.PlusOperationConfig{Mode: "func", Func: &model.FuncRef{FunctionName: "MyAdd"}}}}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := validatePlusMinusParameters("app", tc.parameters); (err == nil) != tc.valid {

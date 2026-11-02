@@ -1042,29 +1042,39 @@ host defaults.
 #### `plus-minus` runtime parser
 
 Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
-This experimental backend remains Draft pending grammar review in #464/#505.
-Its proposed v1 uses a dedicated command-scoped parser:
+This backend implements a dedicated command-scoped parser with atomic staging and validation (#464):
 
 | Token | Meaning |
 | --- | --- |
-| `-a`, `+a` | Enable/disable short boolean a. |
-| `-ab`, `+ab` | Enable/disable short booleans a and b. |
-| `--ab` | One long option named ab, independent of the cluster. |
+| `-a`, `+a` | Enable/disable short boolean `a`. |
+| `-ab`, `+ab` | Enable/disable short booleans `a` and `b` in a cluster. |
+| `--a`, `++a` | One-character long option named `a`, distinct from short namespace. |
+| `--ab`, `++ab` | Long options named `ab`, independent of short clusters. |
+| `-n 5`, `-n5`, `-n=5` | Value-taking short option. |
+| `-abn5`, `-abn=5` | Short cluster with trailing attached value. |
 | `--count=3`, `--count 3` | Value-taking long option. |
-| `--` | Preserve the rest literally, including plus/minus-looking text. |
-| first positional or child | Stop this scope; remaining argv is untouched. |
+| `++count`, `++count=3` | Explicitly configured nonboolean plus operation (#531). |
+| `--` | Delimiter terminating option scanning and routing; remaining tokens are literal. |
 
 Scalar toggles are last-wins, preserve absent defaults, and track explicit
 presence for both polarities and all aliases. A long boolean may take an explicit
-Go boolean value such as `--enabled=false`. `--label +a` passes the literal value
-`+a`; `word +a` keeps both positional tokens. `-h`/`--help` print help when reached;
-ordinary help, usage and version dispatch still bypass business providers.
+Go boolean value such as `--enabled=false`. Short booleans reject `=` assignments.
+When values resemble options, attached assignment is required (`--label=--verbose`).
+Interspersed options after positional arguments are accepted within the same command scope
+while preserving positional argument ordering (#534). Subcommand boundaries yield
+unconsumed arguments to the child command. Unambiguous parent options can be supplied
+after child commands; child-declared options shadow parent options without conflict.
 
-V1 rejects `--a`, nonboolean short declarations/attached values, boolean slices or custom boolean parsers,
-Unicode option names, numeric short names, help disabling/clustering, `++a` and
-assignments to clusters. Signed numeric positionals need `--` or an earlier
-ordinary positional. Duplicate aliases across parameters in one namespace are
-generation errors; short a/b and long ab deliberately coexist.
+Nonboolean plus operations have no implicit behavior and require explicit consumer
+configuration (#531):
+- `(plus: reset)` or `(plus-bare: reset)`: resets to declared default.
+- `(plus-bare: zero)`: sets to zero value.
+- `(plus: FuncName)` or `(plus-bare: FuncName)`: calls consumer function `func() (T, error)`.
+- `(plus-value: set)`: standard value assignment under `+`/`++` prefix.
+- `(plus-value: FuncName)`: calls consumer function `func(string) (T, error)`.
+
+Standalone `++` after `--` is intentionally undefined in this release (#532).
+Generated Go code remains strictly compatible with Go 1.22 (#542).
 
 See the [grammar, audit and architecture decision](docs/content/docs/advanced/plus-minus-parser.md).
 `templates/testdata/runtime/issue464.txtar` records source comments, complete

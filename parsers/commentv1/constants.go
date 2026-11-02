@@ -99,4 +99,20 @@ const (
 	// AttributeAka is an alias for AttributeAliases.
 	// Usage: (aka: f)
 	AttributeAka = "aka"
+
+	// AttributePlus configures bare plus operation for a parameter.
+	// Usage: (plus: reset), (plus: zero), (plus: FuncName)
+	AttributePlus = "plus"
+
+	// AttributePlusBare is an alias for AttributePlus.
+	// Usage: (plus-bare: reset), (plus-bare: FuncName)
+	AttributePlusBare = "plus-bare"
+
+	// AttributePlusValue configures assigned plus operation for a parameter.
+	// Usage: (plus-value: set), (plus-value: FuncName)
+	AttributePlusValue = "plus-value"
+
+	// AttributePlusAssigned is an alias for AttributePlusValue.
+	// Usage: (plus-assigned: set), (plus-assigned: FuncName)
+	AttributePlusAssigned = "plus-assigned"
 )

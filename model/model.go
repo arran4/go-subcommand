@@ -90,6 +90,11 @@ type ParserConfig struct {
 	Func *FuncRef
 }
 
+type PlusOperationConfig struct {
+	Mode string   `json:",omitempty"`
+	Func *FuncRef `json:",omitempty"`
+}
+
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
@@ -224,6 +229,15 @@ type FunctionParameter struct {
 	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
 	// It is parser metadata and is intentionally excluded from serialized models.
 	InheritedFrom string `json:"-"`
+
+	// ShortAliases is the list of short option names (e.g., "v", "q") distinct from long names.
+	ShortAliases []string `json:",omitempty"`
+	// LongAliases is the list of long option names (e.g., "verbose", "quiet", "a") distinct from short names.
+	LongAliases []string `json:",omitempty"`
+	// PlusBare configures an explicit bare plus operation (+flag or ++flag without a value).
+	PlusBare PlusOperationConfig `json:",omitempty"`
+	// PlusValue configures an explicit assigned plus operation (+flag=val or ++flag=val).
+	PlusValue PlusOperationConfig `json:",omitempty"`
 
 	TypeImportPath  string
 	TypePackageName string
@@ -747,6 +761,82 @@ func (p *FunctionParameter) BareValueCode() string {
 		return "0"
 	}
 	return fmt.Sprintf("*new(%s)", base)
+}
+
+// ZeroValueCode returns the Go expression representing the zero value of the parameter.
+func (p *FunctionParameter) ZeroValueCode() string {
+	if p.IsBool() {
+		return "false"
+	}
+	if p.IsString() {
+		return `""`
+	}
+	if p.IsDuration() {
+		return "0"
+	}
+	base := p.BaseType()
+	switch base {
+	case "int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return "0"
+	}
+	return fmt.Sprintf("*new(%s)", base)
+}
+
+// DefaultValueCode returns the Go expression representing the default value or zero value.
+func (p *FunctionParameter) DefaultValueCode() string {
+	if p.HasDefaultValue && p.Default != "" {
+		if p.IsString() && !strings.HasPrefix(p.Default, `"`) {
+			return fmt.Sprintf("%q", p.Default)
+		}
+		return p.Default
+	}
+	return p.ZeroValueCode()
+}
+
+// SupportsBarePlus returns true if the parameter supports a bare plus operation (+flag or ++flag).
+func (p *FunctionParameter) SupportsBarePlus() bool {
+	if p.IsBool() {
+		return true
+	}
+	return p.PlusBare.Mode != "" || (p.PlusBare.Func != nil && p.PlusBare.Func.FunctionName != "")
+}
+
+// SupportsValuePlus returns true if the parameter supports an assigned plus operation (+flag=val or ++flag=val).
+func (p *FunctionParameter) SupportsValuePlus() bool {
+	return p.PlusValue.Mode != "" || (p.PlusValue.Func != nil && p.PlusValue.Func.FunctionName != "")
+}
+
+// BarePlusCall returns the expression to evaluate for a bare plus operation.
+func (p *FunctionParameter) BarePlusCall() string {
+	if p.PlusBare.Func != nil && p.PlusBare.Func.FunctionName != "" {
+		if p.PlusBare.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s()", p.PlusBare.Func.CommandPackageName, p.PlusBare.Func.FunctionName)
+		}
+		return fmt.Sprintf("%s()", p.PlusBare.Func.FunctionName)
+	}
+	if p.PlusBare.Mode == "zero" {
+		return p.ZeroValueCode()
+	}
+	if p.PlusBare.Mode == "reset" {
+		return p.DefaultValueCode()
+	}
+	return ""
+}
+
+// ValuePlusCall returns the expression to evaluate for an assigned plus operation.
+func (p *FunctionParameter) ValuePlusCall(valName string) string {
+	if p.PlusValue.Func != nil && p.PlusValue.Func.FunctionName != "" {
+		if p.PlusValue.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.PlusValue.Func.CommandPackageName, p.PlusValue.Func.FunctionName, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.PlusValue.Func.FunctionName, valName)
+	}
+	if p.PlusValue.Mode == "set" {
+		return valName
+	}
+	return valName
 }
 
 // IsSupportedOptionalValueType returns true if the parameter type is supported

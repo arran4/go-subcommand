@@ -643,6 +643,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if len(c.ShortFlags) > 0 {
+								fp.ShortAliases = c.ShortFlags
+							}
+							if len(c.LongFlags) > 0 {
+								fp.LongAliases = c.LongFlags
+							}
+							if c.PlusBare.Mode != "" || c.PlusBare.Func != nil {
+								fp.PlusBare = c.PlusBare
+							}
+							if c.PlusValue.Mode != "" || c.PlusValue.Func != nil {
+								fp.PlusValue = c.PlusValue
+							}
 							if c.OptionalValue {
 								fp.OptionalValue = true
 							}
@@ -682,6 +694,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if len(c.ShortFlags) > 0 {
+								fp.ShortAliases = c.ShortFlags
+							}
+							if len(c.LongFlags) > 0 {
+								fp.LongAliases = c.LongFlags
+							}
+							if c.PlusBare.Mode != "" || c.PlusBare.Func != nil {
+								fp.PlusBare = c.PlusBare
+							}
+							if c.PlusValue.Mode != "" || c.PlusValue.Func != nil {
+								fp.PlusValue = c.PlusValue
+							}
 							if c.OptionalValue {
 								fp.OptionalValue = true
 							}
@@ -720,6 +744,18 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
+							}
+							if len(c.ShortFlags) > 0 {
+								fp.ShortAliases = c.ShortFlags
+							}
+							if len(c.LongFlags) > 0 {
+								fp.LongAliases = c.LongFlags
+							}
+							if c.PlusBare.Mode != "" || c.PlusBare.Func != nil {
+								fp.PlusBare = c.PlusBare
+							}
+							if c.PlusValue.Mode != "" || c.PlusValue.Func != nil {
+								fp.PlusValue = c.PlusValue
 							}
 							if c.OptionalValue {
 								fp.OptionalValue = true
@@ -762,6 +798,16 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Generator.Func.PackagePath = importPath
 							fp.Generator.Func.CommandPackageName = f.Name.Name
 						}
+						if fp.PlusBare.Func != nil && fp.PlusBare.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.PlusBare.Func.ImportPath = importPath
+							fp.PlusBare.Func.PackagePath = importPath
+							fp.PlusBare.Func.CommandPackageName = f.Name.Name
+						}
+						if fp.PlusValue.Func != nil && fp.PlusValue.Func.ImportPath == "" && f.Name.Name != "main" {
+							fp.PlusValue.Func.ImportPath = importPath
+							fp.PlusValue.Func.PackagePath = importPath
+							fp.PlusValue.Func.CommandPackageName = f.Name.Name
+						}
 						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
 						if strings.Contains(fp.Type, "map[") && !fp.IsFlagPresence() {
@@ -778,6 +824,14 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							kebab := parsers.ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
+							}
+						}
+						if len(fp.ShortAliases) == 0 && len(fp.LongAliases) == 0 && !fp.IsFlagPresence() {
+							if len(name.Name) == 1 {
+								fp.ShortAliases = []string{name.Name}
+							} else {
+								kebab := parsers.ToKebabCase(name.Name)
+								fp.LongAliases = []string{kebab}
 							}
 						}
 
@@ -933,6 +987,8 @@ var (
 type ParsedParam struct {
 	FlagPresence       bool
 	Flags              []string
+	ShortFlags         []string
+	LongFlags          []string
 	Default            string
 	HasDefaultValue    bool
 	Description        string
@@ -944,6 +1000,8 @@ type ParsedParam struct {
 	Inherited          bool
 	Required           bool
 	OptionalValue      bool
+	PlusBare           model.PlusOperationConfig
+	PlusValue          model.PlusOperationConfig
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
 	DefaultExpr        *model.FuncRef
@@ -1314,6 +1372,37 @@ func splitSafe(s string, sep rune) []string {
 	return parts
 }
 
+func parseFuncRef(val string) *model.FuncRef {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return nil
+	}
+	if strings.Contains(val, "\"") {
+		lastDot := strings.LastIndex(val, ".")
+		if lastDot != -1 {
+			importPath := strings.Trim(val[:lastDot], "\"")
+			return &model.FuncRef{
+				ImportPath:         importPath,
+				PackagePath:        importPath,
+				CommandPackageName: path.Base(importPath),
+				FunctionName:       val[lastDot+1:],
+			}
+		}
+		return &model.FuncRef{FunctionName: strings.Trim(val, "\"")}
+	}
+	lastDot := strings.LastIndex(val, ".")
+	if lastDot != -1 {
+		importPath := val[:lastDot]
+		return &model.FuncRef{
+			ImportPath:         importPath,
+			PackagePath:        importPath,
+			CommandPackageName: path.Base(importPath),
+			FunctionName:       val[lastDot+1:],
+		}
+	}
+	return &model.FuncRef{FunctionName: val}
+}
+
 func parseAttributes(attrs string, p *ParsedParam) {
 	parts := splitSafe(attrs, ';')
 	// Check if semicolon split looks valid (keys shouldn't contain commas)
@@ -1379,35 +1468,23 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		case AttributeParser:
 			p.Parser.Type = model.ParserTypeCustom
 			if val != "" {
-				if strings.Contains(val, "\"") {
-					// parser: "pkg/path".Func
-					// parser: "pkg".Func
-					lastDot := strings.LastIndex(val, ".")
-					if lastDot != -1 {
-						p.Parser.Func = &model.FuncRef{
-							ImportPath:   strings.Trim(val[:lastDot], "\""),
-							FunctionName: val[lastDot+1:],
-						}
-						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
-					} else {
-						p.Parser.Func = &model.FuncRef{FunctionName: val}
-					}
-				} else {
-					// parser: Func
-					// parser: pkg.Func
-					lastDot := strings.LastIndex(val, ".")
-					if lastDot != -1 {
-						p.Parser.Func = &model.FuncRef{
-							ImportPath:   val[:lastDot],
-							FunctionName: val[lastDot+1:],
-						}
-						p.Parser.Func.PackagePath = p.Parser.Func.ImportPath
-						p.Parser.Func.CommandPackageName = path.Base(p.Parser.Func.ImportPath)
-					} else {
-						p.Parser.Func = &model.FuncRef{FunctionName: val}
-					}
-				}
+				p.Parser.Func = parseFuncRef(val)
+			}
+		case AttributePlus, AttributePlusBare:
+			valLower := strings.ToLower(val)
+			if valLower == "reset" || valLower == "zero" {
+				p.PlusBare.Mode = valLower
+			} else if val != "" {
+				p.PlusBare.Mode = "func"
+				p.PlusBare.Func = parseFuncRef(val)
+			}
+		case AttributePlusValue, AttributePlusAssigned:
+			valLower := strings.ToLower(val)
+			if valLower == "set" {
+				p.PlusValue.Mode = "set"
+			} else if val != "" {
+				p.PlusValue.Mode = "func"
+				p.PlusValue.Func = parseFuncRef(val)
 			}
 		case AttributeAka, AttributeAlias, AttributeAliases:
 			vals := splitSafe(val, ',')
@@ -1418,6 +1495,11 @@ func parseAttributes(attrs string, p *ParsedParam) {
 				v = strings.TrimSpace(v)
 				if v != "" {
 					p.Flags = append(p.Flags, strings.TrimLeft(v, "-"))
+					if strings.HasPrefix(v, "--") {
+						p.LongFlags = append(p.LongFlags, strings.TrimPrefix(v, "--"))
+					} else if strings.HasPrefix(v, "-") {
+						p.ShortFlags = append(p.ShortFlags, strings.TrimPrefix(v, "-"))
+					}
 				}
 			}
 		case AttributeDefault:
@@ -1504,12 +1586,27 @@ func parseParamDetails(text string) ParsedParam {
 	flagMatches := reFlag.FindAllStringSubmatch(text, -1)
 
 	seenFlags := make(map[string]bool)
+	seenShort := make(map[string]bool)
+	seenLong := make(map[string]bool)
 	for _, match := range flagMatches {
 		flag := match[2]
 		stripped := strings.TrimLeft(flag, "-")
 		if !seenFlags[stripped] {
 			p.Flags = append(p.Flags, stripped)
 			seenFlags[stripped] = true
+		}
+		if strings.HasPrefix(flag, "--") {
+			name := strings.TrimPrefix(flag, "--")
+			if !seenLong[name] {
+				p.LongFlags = append(p.LongFlags, name)
+				seenLong[name] = true
+			}
+		} else if strings.HasPrefix(flag, "-") {
+			name := strings.TrimPrefix(flag, "-")
+			if !seenShort[name] {
+				p.ShortFlags = append(p.ShortFlags, name)
+				seenShort[name] = true
+			}
 		}
 	}
 

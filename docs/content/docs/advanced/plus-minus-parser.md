@@ -37,17 +37,20 @@ helper is generated only for trees using plus-minus. GNU and Go-flag templates
 and conversion behavior stay unchanged. This does not require a parser framework;
 option C (a separate infrastructure project) is unnecessary for this slice.
 
-## Proposed grammar
+## Implemented grammar
 
 | Form | Meaning |
 | --- | --- |
 | `-a`, `+a` | Enable/disable one declared short boolean. |
 | `-ab`, `+ab` | Enable/disable each declared short boolean, in order. Validate the entire cluster before changing fields. |
-| `--ab` | One long option named ab; never a/b clustering. A bare long boolean sets true. |
-| `--enabled=false` | Explicit boolean value; standard Go `strconv.ParseBool` values are accepted. |
-| `--count=3`, `--count 3` | Value-taking long option; the following token is a value even if it resembles an option, command or `--`. |
-| `--` | End parsing and routing in this scope; subsequent text is literal. |
-| first ordinary token | Stop this parser. Dispatch a recognized child with untouched remaining argv, otherwise bind positionals verbatim. |
+| `--a`, `++a` | One-character long option named `a`, distinct from short namespace. |
+| `--ab`, `++ab` | One long option named `ab`; never `a`/`b` clustering. A bare long boolean sets true. |
+| `--enabled=false` | Explicit boolean value; standard Go `strconv.ParseBool` values are accepted. Short booleans do not take `=` assignments. |
+| `-n 5`, `-n5`, `-n=5` | Value-taking short option. |
+| `-abn5`, `-abn=5` | Clustered short toggles with trailing attached value. |
+| `--count=3`, `--count 3` | Value-taking long option. Values resembling options require attached assignment (`--label=--verbose`). |
+| `++count`, `++count=3` | Explicitly configured nonboolean plus operation (#531). |
+| `--` | End parsing and routing in this scope; subsequent tokens are literal positionals. |
 | `+`, `-` | Ordinary positional tokens. |
 | `-h`, `--help` | Help for the current scope, when reached during option parsing. |
 | `help`, `usage`, root `version` | Existing command dispatch; no business provider execution. |
@@ -55,22 +58,27 @@ option C (a separate infrastructure project) is unnecessary for this slice.
 Scalar toggles are last-wins, preserve declared defaults when absent, and record
 explicit presence under Go parameter names for both polarities and all aliases.
 Pointers use existing conversion/assignment rules. Nonboolean slices use repeated
-long values. Inherited ordinary values remain owned by the declaring parent;
-each parser supplies its own presence map.
+long values. Inherited options are resolved unambiguously across scopes; child-declared
+options shadow parent options without conflict (#534).
 
-V1 rejects one-character long names (`--a`), all nonboolean short declarations,
-boolean slices or custom boolean parsers, short attached values, assignments to clusters (`-a=false`,
-`+ab=value`), `++a`, Unicode option names, numeric short names, and disabling help
-(`+h`) or embedding help in a cluster. Short names are ASCII letters; long names
-have at least two ASCII letters/digits/underscores/hyphens, starting with a letter
-or underscore. Duplicate names within a parameter are deduplicated; collisions
-between parameters in the same namespace are generation errors. Short a/b and
-long ab deliberately coexist. Help names are reserved.
+Interspersed options appearing after positional arguments are accepted within the same command scope
+while preserving positional argument ordering. Subcommand boundaries yield unconsumed arguments
+to the child command.
 
-Alternatives include one-character long options, short values and optional
-values. Reject them in v1 to avoid ambiguity with boolean clusters. Signed numeric
-positionals require `--` or an earlier ordinary positional token. Revisit these
-choices separately after grammar review; #511's GNU optional values are independent.
+Nonboolean plus operations have no implicit behavior and require explicit consumer configuration (#531):
+- `(plus: reset)` or `(plus-bare: reset)`: resets to declared default.
+- `(plus-bare: zero)`: sets to zero value.
+- `(plus: FuncName)` or `(plus-bare: FuncName)`: calls consumer function `func() (T, error)`.
+- `(plus-value: set)`: standard value assignment under `+`/`++` prefix.
+- `(plus-value: FuncName)`: calls consumer function `func(string) (T, error)`.
+
+Standalone `++` after `--` is intentionally undefined in this release (#532).
+Generated Go code remains strictly compatible with Go 1.22 (#542).
+
+Syntax errors reject assignments to boolean clusters (`-a=false`, `+ab=value`),
+Unicode option names, numeric short names, and disabling help (`+h`) or embedding help in a cluster.
+Short names are ASCII letters; long names have at least one ASCII letter/digit/underscore/hyphen,
+starting with a letter or underscore. Collisions between parameters in the same namespace are generation errors.
 
 Malformed syntax uses UsageInvalidArguments, unknown names UsageUnknownFlag,
 missing long values UsageMissingFlagValue and conversion failures UsageInvalidValue.

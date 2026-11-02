@@ -58,16 +58,24 @@ func TestPlusMinusBoundariesAndAtomicClusters(t *testing.T) {
 		calls = 0
 		if _, _, _, _, err := parsePlusMinus(args, "app", short, nil); err == nil || calls != 0 { t.Fatalf("partial cluster changed state: %v calls=%d error=%v", args, calls, err) }
 	}
-	for _, prefix := range []string{"child", "word", "--"} {
-		args := []string{prefix, "+childOnly", "--label=+a"}
+	subcmds := map[string]bool{"child": true}
+	for _, tc := range []struct { prefix string; sub map[string]bool; start int }{
+		{"child", subcmds, 0},
+		{"--", nil, 1},
+	} {
+		args := []string{tc.prefix, "+childOnly", "--label=+a"}
 		before := append([]string(nil), args...)
-		tail, _, terminated, _, err := parsePlusMinus(args, "app", short, nil)
-		start := 0
-		if prefix == "--" { start = 1 }
-		if err != nil || !reflect.DeepEqual(args, before) || !reflect.DeepEqual(tail, before[start:]) || &tail[0] != &args[start] || terminated != (prefix == "--") { t.Fatalf("boundary changed argv: %v -> %v (%v)", args, tail, err) }
+		tail, _, terminated, _, err := parsePlusMinus(args, "app", short, nil, tc.sub)
+		if err != nil || !reflect.DeepEqual(args, before) || !reflect.DeepEqual(tail, before[tc.start:]) || &tail[0] != &args[tc.start] || terminated != (tc.prefix == "--") { t.Fatalf("boundary changed argv: %v -> %v (%v)", args, tail, err) }
 	}
-	long := map[string]plusMinusOption{"label": {Key: "label", Set: func(s string) error { if s != "+a" { t.Fatalf("value rewritten: %q", s) }; return nil }}}
-	if _, seen, _, _, err := parsePlusMinus([]string{"--label", "+a"}, "app", short, long); err != nil || !seen["label"] { t.Fatalf("value/presence: %v %v", seen, err) }
+	interspersedTail, seenInter, _, _, err := parsePlusMinus([]string{"word", "-a"}, "app", short, nil)
+	if err != nil || !seenInter["alpha"] || !reflect.DeepEqual(interspersedTail, []string{"word"}) {
+		t.Fatalf("interspersed: tail=%v seen=%v err=%v", interspersedTail, seenInter, err)
+	}
+	long := map[string]plusMinusOption{"label": {Key: "label", Set: func(s string) error { if s != "+a" && s != "val" { t.Fatalf("value rewritten: %q", s) }; return nil }}}
+	if _, seen, _, _, err := parsePlusMinus([]string{"--label=+a"}, "app", short, long); err != nil || !seen["label"] { t.Fatalf("attached value: %v %v", seen, err) }
+	if _, seen, _, _, err := parsePlusMinus([]string{"--label", "+a"}, "app", short, long); err != nil || !seen["label"] { t.Fatalf("separate plus value: %v %v", seen, err) }
+	if _, _, _, _, err := parsePlusMinus([]string{"--label", "--verbose"}, "app", short, long); err == nil { t.Fatalf("expected error for flag-like separate value") }
 }
 
 func TestPlusMinusConversionAndErrors(t *testing.T) {
@@ -79,7 +87,7 @@ func TestPlusMinusConversionAndErrors(t *testing.T) {
 		{[]string{"--count"}, cmd.UsageMissingFlagValue, false},
 		{[]string{"--count=bad"}, cmd.UsageInvalidValue, true},
 		{[]string{"--missing"}, cmd.UsageUnknownFlag, false},
-		{[]string{"++a"}, cmd.UsageInvalidArguments, false},
+		{[]string{"++a"}, cmd.UsageUnknownFlag, false},
 	} {
 		_, _, _, _, err := parsePlusMinus(tc.args, "app nested", nil, long)
 		wrapped := fmt.Errorf("caller: %w", err)
@@ -90,4 +98,166 @@ func TestPlusMinusConversionAndErrors(t *testing.T) {
 	ioError := errors.New("I/O acquisition")
 	long["input"] = plusMinusOption{Key: "input", IO: true, Set: func(string) error { return ioError }}
 	if _, _, _, _, err := parsePlusMinus([]string{"--input=file"}, "app", nil, long); err != ioError || errors.Is(err, cmd.ErrUsage) { t.Fatalf("I/O error reclassified: %v", err) }
+}
+
+func TestPlusMinusNonbooleanOperations(t *testing.T) {
+	currentCount := 7
+	opt := plusMinusOption{
+		Key:               "count",
+		SupportsBarePlus:  true,
+		SupportsValuePlus: true,
+		StageMinus: func(v string) (func() error, error) {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, err
+			}
+			return func() error { currentCount = n; return nil }, nil
+		},
+		StageBarePlus: func() (func() error, error) {
+			return func() error { currentCount = 7; return nil }, nil
+		},
+		StageValuePlus: func(v string) (func() error, error) {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, err
+			}
+			return func() error { currentCount += n; return nil }, nil
+		},
+	}
+	long := map[string]plusMinusOption{"count": opt}
+
+	// 1. Long minus with value
+	currentCount = 0
+	if _, _, _, _, err := parsePlusMinus([]string{"--count=10"}, "app", nil, long); err != nil || currentCount != 10 {
+		t.Fatalf("--count=10 failed: %v count=%d", err, currentCount)
+	}
+
+	// 2. Bare plus reset
+	if _, _, _, _, err := parsePlusMinus([]string{"++count"}, "app", nil, long); err != nil || currentCount != 7 {
+		t.Fatalf("++count reset failed: %v count=%d", err, currentCount)
+	}
+
+	// 3. Assigned plus operation
+	if _, _, _, _, err := parsePlusMinus([]string{"++count=3"}, "app", nil, long); err != nil || currentCount != 10 {
+		t.Fatalf("++count=3 failed: %v count=%d", err, currentCount)
+	}
+
+	// 4. Unsupported bare plus rejected
+	unsupportedBare := map[string]plusMinusOption{
+		"count": {Key: "count", SupportsBarePlus: false, SupportsValuePlus: true},
+	}
+	if _, _, _, _, err := parsePlusMinus([]string{"++count"}, "app", nil, unsupportedBare); err == nil {
+		t.Fatalf("expected error for unsupported ++count")
+	}
+
+	// 5. Unsupported assigned plus rejected
+	unsupportedValue := map[string]plusMinusOption{
+		"count": {Key: "count", SupportsBarePlus: true, SupportsValuePlus: false},
+	}
+	if _, _, _, _, err := parsePlusMinus([]string{"++count=5"}, "app", nil, unsupportedValue); err == nil {
+		t.Fatalf("expected error for unsupported ++count=5")
+	}
+}
+
+func TestPlusMinusShortValueForms(t *testing.T) {
+	aActive, bActive := false, false
+	nVal := 0
+	short := map[string]plusMinusOption{
+		"a": {Key: "a", Boolean: true, StageMinus: func(string) (func() error, error) {
+			return func() error { aActive = true; return nil }, nil
+		}},
+		"b": {Key: "b", Boolean: true, StageMinus: func(string) (func() error, error) {
+			return func() error { bActive = true; return nil }, nil
+		}},
+		"n": {Key: "n", Boolean: false, StageMinus: func(v string) (func() error, error) {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, err
+			}
+			return func() error { nVal = n; return nil }, nil
+		}},
+	}
+
+	// Separate: -n 5
+	aActive, bActive, nVal = false, false, 0
+	if _, _, _, _, err := parsePlusMinus([]string{"-n", "5"}, "app", short, nil); err != nil || nVal != 5 {
+		t.Fatalf("-n 5 failed: %v n=%d", err, nVal)
+	}
+
+	// Attached without '=': -n5
+	nVal = 0
+	if _, _, _, _, err := parsePlusMinus([]string{"-n5"}, "app", short, nil); err != nil || nVal != 5 {
+		t.Fatalf("-n5 failed: %v n=%d", err, nVal)
+	}
+
+	// Attached with '=': -n=5
+	nVal = 0
+	if _, _, _, _, err := parsePlusMinus([]string{"-n=5"}, "app", short, nil); err != nil || nVal != 5 {
+		t.Fatalf("-n=5 failed: %v n=%d", err, nVal)
+	}
+
+	// Cluster with attached value: -abn5
+	aActive, bActive, nVal = false, false, 0
+	if _, _, _, _, err := parsePlusMinus([]string{"-abn5"}, "app", short, nil); err != nil || !aActive || !bActive || nVal != 5 {
+		t.Fatalf("-abn5 failed: %v a=%t b=%t n=%d", err, aActive, bActive, nVal)
+	}
+
+	// Cluster with attached '=': -abn=5
+	aActive, bActive, nVal = false, false, 0
+	if _, _, _, _, err := parsePlusMinus([]string{"-abn=5"}, "app", short, nil); err != nil || !aActive || !bActive || nVal != 5 {
+		t.Fatalf("-abn=5 failed: %v a=%t b=%t n=%d", err, aActive, bActive, nVal)
+	}
+}
+
+func TestPlusMinusSingleCharLongNamespace(t *testing.T) {
+	shortCalled, longCalled := false, false
+	short := map[string]plusMinusOption{
+		"a": {Key: "short-a", Boolean: true, StageMinus: func(string) (func() error, error) {
+			return func() error { shortCalled = true; return nil }, nil
+		}},
+	}
+	long := map[string]plusMinusOption{
+		"a": {Key: "long-a", Boolean: true, StageMinus: func(string) (func() error, error) {
+			return func() error { longCalled = true; return nil }, nil
+		}},
+	}
+
+	// -a triggers short
+	shortCalled, longCalled = false, false
+	if _, _, _, _, err := parsePlusMinus([]string{"-a"}, "app", short, long); err != nil || !shortCalled || longCalled {
+		t.Fatalf("-a failed: short=%t long=%t err=%v", shortCalled, longCalled, err)
+	}
+
+	// --a triggers long
+	shortCalled, longCalled = false, false
+	if _, _, _, _, err := parsePlusMinus([]string{"--a"}, "app", short, long); err != nil || shortCalled || !longCalled {
+		t.Fatalf("--a failed: short=%t long=%t err=%v", shortCalled, longCalled, err)
+	}
+}
+
+func TestPlusMinusAtomicCommit(t *testing.T) {
+	stagedVal := 10
+	opt := plusMinusOption{
+		Key: "count",
+		StageMinus: func(v string) (func() error, error) {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, err
+			}
+			return func() error { stagedVal = n; return nil }, nil
+		},
+	}
+	long := map[string]plusMinusOption{"count": opt}
+
+	// First option valid, second option invalid conversion -> stagedVal remains unchanged
+	_, _, _, _, err := parsePlusMinus([]string{"--count=99", "--count=invalid"}, "app", nil, long)
+	if err == nil || stagedVal != 10 {
+		t.Fatalf("atomic commit failed: val=%d err=%v", stagedVal, err)
+	}
+
+	// First option valid, second option unknown flag -> stagedVal remains unchanged
+	_, _, _, _, err = parsePlusMinus([]string{"--count=99", "--unknown"}, "app", nil, long)
+	if err == nil || stagedVal != 10 {
+		t.Fatalf("atomic commit failed: val=%d err=%v", stagedVal, err)
+	}
 }
