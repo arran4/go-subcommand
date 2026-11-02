@@ -295,6 +295,27 @@ boolean-looking value. Richer consumer-owned types (such as `sql.NullString`)
 can be constructed by using a `generator:` provider depending on the parsed
 optional flag parameter.
 
+`(optional value)` applies only to **named flags**, not positional arguments:
+an `@1` positional can instead be made omittable with `(default: ".")`, and a
+variadic `...` tail can accept zero or more values. These are distinct from a
+flag that accepts `--name` and `--name=value`.
+
+`(optional value)` and `(generator: ...)` cannot populate **the same
+parameter**: one reads argv and the other obtains its value from a function.
+Generators **can consume** parsed optional flags as named dependencies:
+
+```go
+// Flags:
+//   raw: (optional value) --raw
+//   dest: (generator: ToNullString(raw))
+func Convert(raw []*string, dest *NullString) {}
+```
+
+Here `raw` preserves omitted, bare and explicit assigned occurrences; the
+consumer-owned `ToNullString(raw)` converts them into the `dest` type. A
+runnable version is included in `testdata/optional_value.go` and the compiled
+`templates/testdata/runtime/issue401_optional_value.txtar` scenarios.
+
 Providers can depend on `(flag presence)` parameters, just like other bound
 command values. Presence maps bind before any effectful provider, regardless of
 parameter declaration order, and are never acquired or closed as providers.
