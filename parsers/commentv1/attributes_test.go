@@ -70,6 +70,16 @@ func TestExtractParamAttributes(t *testing.T) {
 	}
 }
 
+func TestParseGeneratorInputs(t *testing.T) {
+	got := parseParamDetails("(generator: Build(prefix, config))")
+	if got.Generator.Func == nil || got.Generator.Func.FunctionName != "Build" {
+		t.Fatalf("generator function = %#v", got.Generator.Func)
+	}
+	if !reflect.DeepEqual(got.Generator.Inputs, []string{"prefix", "config"}) {
+		t.Fatalf("generator inputs = %#v", got.Generator.Inputs)
+	}
+}
+
 func TestParseAttributes(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -229,5 +239,15 @@ func TestParseParamDetails_Integration(t *testing.T) {
 				t.Errorf("Description = %q, want %q", got.Description, tt.want.Description)
 			}
 		})
+	}
+}
+
+func TestParseParamDetailsOptionalValue(t *testing.T) {
+	parsed := parseParamDetails("(optional value) --label -l Optional label")
+	if !parsed.OptionalValue {
+		t.Fatalf("expected OptionalValue=true, got false")
+	}
+	if len(parsed.Flags) != 2 || parsed.Flags[0] != "label" || parsed.Flags[1] != "l" {
+		t.Fatalf("unexpected flags: %v", parsed.Flags)
 	}
 }

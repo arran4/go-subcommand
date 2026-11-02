@@ -258,12 +258,78 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
 *   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
 *   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
-*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag.
+*   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag. Providers may name parameter dependencies, for example `generator: BuildClient(endpoint, token)`. Dependencies are bound first, providers run once per command execution in deterministic dependency order, and unknown dependencies or cycles fail generation with diagnostics.
 *   **Positional Argument:** `@N` (e.g., `@1`, `@2`). Maps the Nth positional argument (1-based) to this parameter.
 *   **Variadic Arguments:** `min...max` (e.g., `1...3`) or `...`. Maps remaining arguments to a slice.
 *   **Description:** Any remaining text is treated as the parameter description.
 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
+
+#### Optional-value flags
+
+`(optional value)` is an explicit flag contract supporting ordinary Go
+primitive types, pointers and slices. It distinguishes flag presence from value
+assignment:
+
+| Type | Omitted | Bare flag | Explicit value |
+|---|---|---|---|
+| `T` | Zero / default | Best-effort bare/default value | Parsed `T` |
+| `*T` | nil | Pointer to bare/default value | Pointer to parsed `T` |
+| `**T` | nil | Pointer to nil (`*p == nil`) | Pointer to pointer to parsed `T` |
+| `[]T` | Empty/nil | Append bare/default value | Append parsed `T` |
+| `[]*T` | Empty/nil | Append nil | Append pointer to parsed `T` |
+
+- For scalar `T`, omission, a bare flag, and an explicit zero value merge into the same Go value.
+- For `*T`, omission evaluates to `nil`, while a bare flag points to the bare/default value.
+- For `**T`, all three states are distinguishable for a single occurrence: `nil` (omitted), non-nil pointing to `nil` (bare), and non-nil pointing to `*T` (explicit value).
+- For `[]*T`, each occurrence is preserved losslessly: an omitted flag produces an empty/nil slice, `--flag` appends `nil`, and `--flag=value` appends `&value` (including `&""` for `--flag=`).
+- Scalar and single-pointer flags follow conventional last-occurrence-wins; slices accumulate in order.
+
+For the GNU parser, `--name` supplies the bare flag; `--name=value` supplies an
+explicit value; and `--name=` supplies an explicit empty string. Short forms
+`-n`, `-nvalue`, `-n=value`, and `-n=` are also supported. A following positional
+token is never consumed as the optional value. This keeps `--` and positional
+parsing unambiguous. The Go-flag backend rejects optional-value parameters
+because its native callback cannot distinguish a bare flag from an explicit
+boolean-looking value. Richer consumer-owned types (such as `sql.NullString`)
+can be constructed by using a `generator:` provider depending on the parsed
+optional flag parameter.
+
+`(optional value)` applies only to **named flags**, not positional arguments:
+an `@1` positional can instead be made omittable with `(default: ".")`, and a
+variadic `...` tail can accept zero or more values. These are distinct from a
+flag that accepts `--name` and `--name=value`.
+
+`(optional value)` and `(generator: ...)` cannot populate **the same
+parameter**: one reads argv and the other obtains its value from a function.
+Generators **can consume** parsed optional flags as named dependencies:
+
+```go
+// Flags:
+//   raw: (optional value) --raw
+//   dest: (generator: ToNullString(raw))
+func Convert(raw []*string, dest *NullString) {}
+```
+
+Here `raw` preserves omitted, bare and explicit assigned occurrences; the
+consumer-owned `ToNullString(raw)` converts them into the `dest` type. A
+runnable version is included in `testdata/optional_value.go` and the compiled
+`templates/testdata/runtime/issue401_optional_value.txtar` scenarios.
+
+Providers can depend on `(flag presence)` parameters, just like other bound
+command values. Presence maps bind before any effectful provider, regardless of
+parameter declaration order, and are never acquired or closed as providers.
+The map describes flags consumed by that command's parser; inherited ordinary
+values remain available through `(from parent)`.
+`templates/testdata/runtime/issue403_presence.txtar` shows complete source,
+generated root/nested code and compiled GNU/Go-flag invocations. For example,
+`app --enabled=false -n 0 --label=` passes false/zero/empty values and
+`seen={"count":true,"enabled":true,"label":true}` to a local provider followed
+by an imported dependent provider. Output records `open:first`, `open:second`,
+the action, then `close:second` and `close:first`, once each. Nested commands also
+exercise inherited flags and a positional provider input. Partial acquisition
+failure closes only acquired resources; action errors retain precedence over
+cleanup errors. Help, usage, version and a sibling without providers acquire none.
 
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 
@@ -853,7 +919,7 @@ if errors.Is(err, cmd.ErrUsage) && errors.As(err, &usage) {
 }
 ```
 
-`UsageError.Kind` distinguishes unknown commands, unknown flags, missing flag
+`UsageError.Kind` distinguishes no selected command (when requested), unknown commands, unknown flags, missing flag
 values, invalid supplied values, invalid positional arguments, and missing
 required flags. `CommandPath` is the canonical command path; `Flag` is the
 supplied name without leading dashes where applicable. `Err` preserves the
@@ -885,10 +951,51 @@ contract and exact invocation outputs are in
 `templates/testdata/issue523.go.txtar`.
 
 This supplies gogenmux's typed parser classification and wrapped explicit statuses.
-Removing its custom main template still requires declarative no-command policy,
-version/build metadata (including `builtBy` and propagation), version-output
+The declarative no-command policy below also covers bare invocation. Removing its
+custom main template still requires version/build metadata (including `builtBy` and propagation), version-output
 customization, and its validation/internal default classification and rendering
-contract. Those facilities remain separate work under #524 and #479/#503.
+contract. Those facilities remain separate work under #479/#503.
+
+### Require a selected command
+
+Add the accepted execution policy to functionless root metadata:
+
+```go
+// App is a command `app` -- Run jobs.
+// No command: error
+package commands
+```
+
+The equivalent native config block is:
+
+~~~text
+format-version: 1
+# Commands
+```command: app
+Description: Run jobs.
+No command: error
+```
+~~~
+
+Bare `app` and `app --` now return `cmd.UsageError` with kind
+`cmd.UsageNoCommand`, canonical path `app`, no flag and no inner cause.
+The generated process prints `Error: no command provided` on stderr and exits 1.
+`errors.Is(err, cmd.ErrUsage)` and `errors.As` work through wrapping; an explicit
+`cmd.ErrExitCode` still overrides the status. Unknown commands retain their own
+`cmd.UsageUnknownCommand` category.
+
+When the declaration is absent, bare invocation keeps existing help/status 0.
+This root-only policy conflicts with any real root action or `Default route:`,
+including help routes; generation rejects those combinations. It is independent
+of routing. `help`, `usage`, `--help` and `version` retain normal behavior without
+business providers. A bare `--` selects no command; `-- run` remains an unknown
+command after the routing terminator. Ordinary nested actions, aliases, inherited
+flags and positionals retain parser behavior. Functionless root flags still
+require separate typed binding support under #63/#522.
+
+See [No-command policy](docs/content/docs/advanced/no-command-policy.md) and
+`templates/testdata/issue524.go.txtar` for compiled Go/config examples and exact
+stdout/stderr/status snapshots on GNU and Go-flag.
 
 ### Generated application Go compatibility
 

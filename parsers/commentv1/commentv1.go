@@ -70,6 +70,7 @@ type CommandTree struct {
 	ExtendedHelp       string
 	Aliases            []string
 	DefaultRoute       string
+	NoCommand          model.NoCommandPolicy
 	CLIParser          string
 	ImportPath         string
 }
@@ -300,6 +301,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ExtendedHelp:       cmdTree.ExtendedHelp,
 			Aliases:            cmdTree.Aliases,
 			DefaultRoute:       cmdTree.DefaultRoute,
+			NoCommand:          cmdTree.NoCommand,
 			CLIParser:          cmdTree.CLIParser,
 		}
 
@@ -421,6 +423,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 			if !ok {
 				continue
 			}
+			for index, line := range strings.Split(s.Doc.Text(), "\n") {
+				key, _, colon := strings.Cut(line, ":")
+				if colon && strings.EqualFold(strings.TrimSpace(key), "No command") {
+					position := fset.Position(s.Doc.Pos())
+					return fmt.Errorf("%s:%d: No command policy belongs in functionless root metadata and conflicts with an executable action", filename, position.Line+index)
+				}
+			}
 
 			if cmdName == "" && len(subCommandSequence) == 0 {
 				cmdName = parsers.ToKebabCase(s.Name.Name)
@@ -476,6 +485,12 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							typeActualName = sel.Sel.Name
 							if ident, ok := sel.X.(*ast.Ident); ok {
 								typeAlias = ident.Name
+							}
+						} else if ident, ok := extractSelector.(*ast.Ident); ok {
+							typeActualName = ident.Name
+							if !isBuiltinGoType(ident.Name) && importPath != "" && f != nil && f.Name != nil {
+								typeImportPath = importPath
+								typePackageName = f.Name.Name
 							}
 						}
 
@@ -628,6 +643,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -664,6 +682,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -699,6 +720,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
+							}
+							if c.OptionalValue {
+								fp.OptionalValue = true
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
@@ -919,6 +943,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
+	OptionalValue      bool
 	Generator          model.GeneratorConfig
 	Parser             model.ParserConfig
 	DefaultExpr        *model.FuncRef
@@ -1174,7 +1199,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence"}
+	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1330,6 +1355,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Generator.Type = model.SourceTypeFlagPresence
 		case AttributeRequired:
 			p.Required = true
+		case AttributeOptionalValue:
+			p.OptionalValue = true
 		case AttributeGenerator:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
@@ -1343,6 +1370,9 @@ func parseAttributes(attrs string, p *ParsedParam) {
 				} else {
 					p.Generator.Func = &model.FuncRef{FunctionName: val}
 				}
+			}
+			if p.Generator.Func != nil {
+				p.Generator.Func.FunctionName, p.Generator.Inputs = parseGeneratorInputs(p.Generator.Func.FunctionName)
 			}
 		case AttributeRootContext, "constructor":
 			p.Generator.Type = model.SourceTypeConstructor
@@ -1400,6 +1430,27 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Inherited = true
 		}
 	}
+}
+
+func parseGeneratorInputs(function string) (string, []string) {
+	open := strings.IndexByte(function, '(')
+	if open < 0 || !strings.HasSuffix(strings.TrimSpace(function), ")") {
+		return strings.TrimSpace(function), nil
+	}
+	name := strings.TrimSpace(function[:open])
+	contents := strings.TrimSpace(function[open+1 : len(function)-1])
+	if contents == "" {
+		return name, nil
+	}
+	parts := splitSafe(contents, ',')
+	inputs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			inputs = append(inputs, part)
+		}
+	}
+	return name, inputs
 }
 
 func parseParamDetails(text string) ParsedParam {
@@ -1528,5 +1579,16 @@ func formatType(expr ast.Expr) (string, error) {
 		return "..." + s, nil
 	default:
 		return "", fmt.Errorf("unsupported type: %T", t)
+	}
+}
+
+func isBuiltinGoType(name string) bool {
+	switch name {
+	case "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64", "rune", "string",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "any":
+		return true
+	default:
+		return false
 	}
 }

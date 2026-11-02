@@ -86,15 +86,13 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 	clean := []string{lines[0]}
 	seen := make(map[string]bool)
 	var short string
+	var noCommand model.NoCommandPolicy
 	for index, line := range lines[1:] {
 		index += lineOffset
 		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
 		if lower == "flags:" || strings.HasPrefix(lower, "flag ") || strings.HasPrefix(lower, "param ") {
 			return nil, declarationError(source, index, "functionless metadata cannot declare flags or parameters; declare typed parameters on an executable Go function")
-		}
-		if strings.HasPrefix(lower, "no command:") {
-			return nil, declarationError(source, index, "No command policy is not supported yet (tracked in #524)")
 		}
 		key, value, hasColon := strings.Cut(trimmed, ":")
 		key = strings.ToLower(strings.TrimSpace(key))
@@ -105,7 +103,7 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 		case "default command", "default":
 			canonical = "default route"
 		}
-		if hasColon && (canonical == "description" || canonical == "aliases" || canonical == "cli-parser" || canonical == "default route") {
+		if hasColon && (canonical == "description" || canonical == "aliases" || canonical == "cli-parser" || canonical == "default route" || canonical == "no command") {
 			if seen[canonical] {
 				return nil, declarationError(source, index, "duplicate metadata directive %q", key)
 			}
@@ -116,6 +114,16 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 			}
 			if canonical == "description" {
 				short = value
+				continue
+			}
+			if canonical == "no command" {
+				if len(parts) != 1 {
+					return nil, declarationError(source, index, "No command policy is only supported on an application root")
+				}
+				if value != string(model.NoCommandError) {
+					return nil, declarationError(source, index, "unsupported No command policy %q; expected error", value)
+				}
+				noCommand = model.NoCommandError
 				continue
 			}
 			if canonical == "default route" {
@@ -139,7 +147,7 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 		description = short
 	}
 	route, _ := parseDefaultDirective(text)
-	return &model.CommandMetadata{Path: strings.Join(parts, " "), Description: description, ExtendedHelp: help, Aliases: aliases, CLIParser: parseCliParserDirective(text), DefaultRoute: route, Filename: source.Filename, Line: source.Line}, nil
+	return &model.CommandMetadata{Path: strings.Join(parts, " "), Description: description, ExtendedHelp: help, Aliases: aliases, CLIParser: parseCliParserDirective(text), DefaultRoute: route, NoCommand: noCommand, Filename: source.Filename, Line: source.Line}, nil
 }
 
 func appendHelp(existing, extra string) string {
@@ -194,6 +202,7 @@ func applyDeclarations(tree *CommandsTree) error {
 				return declarationError(source, 0, "conflicting Default route for %q", metadata.Path)
 			}
 			root.Metadata = metadata
+			root.NoCommand = metadata.NoCommand
 			if metadata.Description != "" {
 				root.Description = metadata.Description
 			}

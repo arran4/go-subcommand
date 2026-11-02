@@ -80,6 +80,9 @@ type FuncRef struct {
 type GeneratorConfig struct {
 	Type SourceType
 	Func *FuncRef
+	// Inputs names parameters made available to a provider. They are resolved
+	// within the command's generated field graph, not through globals.
+	Inputs []string
 }
 
 type ParserConfig struct {
@@ -125,6 +128,8 @@ type Command struct {
 	Aliases []string
 	// DefaultRoute specifies an explicit default route for bare invocation (e.g. "help simple" or "tools docs simple").
 	DefaultRoute string
+	// NoCommand is independent of executable default routing.
+	NoCommand NoCommandPolicy
 	// CLIParser is the explicit runtime CLI parser backend selected for this command.
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
@@ -203,6 +208,11 @@ type FunctionParameter struct {
 	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
 	Required bool
+	// OptionalValue marks a flag whose durable value observes whether it was
+	// omitted, supplied without a value, or supplied with an explicit value.
+	// It binds directly to native Go scalar types, pointers, and slices, preserving
+	// three-state semantics where the declared type can represent them.
+	OptionalValue bool
 	// Generator specifies the source of the parameter value.
 	Generator GeneratorConfig
 	// Parser holds configuration for value parsing.
@@ -231,6 +241,15 @@ func (dm *DataModel) Validate() error {
 
 func (cmd *Command) Validate() (err error) {
 	defer func() { err = metadataError(cmd.Metadata, err) }()
+	switch cmd.NoCommand {
+	case NoCommandDefault:
+	case NoCommandError:
+		if cmd.FunctionName != "" || cmd.DefaultRoute != "" {
+			return fmt.Errorf("command %s: No command: error conflicts with a root action or Default route", cmd.MainCmdName)
+		}
+	default:
+		return fmt.Errorf("command %s: unsupported No command policy %q", cmd.MainCmdName, cmd.NoCommand)
+	}
 	if cmd.DefaultRoute != "" {
 		if err := cmd.validateDefaultRoute(); err != nil {
 			return err
@@ -477,8 +496,66 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 	}
 
 	for _, p := range params {
+		if p.OptionalValue {
+			if p.IsVarArg {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags, not a variadic positional argument; use a zero-minimum variadic tail to make positional arguments omittable, or declare a separate named flag", cmdName, p.Name)
+			}
+			if p.IsPositional {
+				return fmt.Errorf("command %q, parameter %q: (optional value) applies to named flags (--name or --name=value), not positional @N; use a positional default (for example, @1 with (default: \".\")) to make an argument omittable", cmdName, p.Name)
+			}
+			if p.HasGenerator() {
+				return fmt.Errorf("command %q, parameter %q: conflicting value sources: (optional value) binds a CLI flag while (generator: ...) supplies the same parameter; declare separate parameters, e.g. raw []*string with (optional value) --raw, and dest with (generator: Convert(raw))", cmdName, p.Name)
+			}
+			if !p.IsSupportedOptionalValueType() {
+				return fmt.Errorf("command %s: parameter %s has type %s which is unsupported for (optional value); supported types are scalar primitives (T), pointers (*T, **T), and slices ([]T, []*T)", cmdName, p.Name, p.Type)
+			}
+		}
 		if p.IsFile() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
+		}
+	}
+	return validateGeneratorDependencies(params, cmdName)
+}
+
+func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) error {
+	all := make(map[string]*FunctionParameter)
+	providers := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		all[param.Name] = param
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			providers[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var visit func(*FunctionParameter) error
+	visit = func(provider *FunctionParameter) error {
+		switch state[provider.Name] {
+		case 1:
+			return fmt.Errorf("command %s: generator dependency cycle includes %s", cmdName, provider.Name)
+		case 2:
+			return nil
+		}
+		state[provider.Name] = 1
+		for _, input := range provider.Generator.Inputs {
+			param, ok := all[input]
+			if !ok {
+				return fmt.Errorf("command %s: generator %s references unknown dependency %s", cmdName, provider.Name, input)
+			}
+			if dependency := providers[param.Name]; dependency != nil {
+				if err := visit(dependency); err != nil {
+					return err
+				}
+			}
+		}
+		state[provider.Name] = 2
+		return nil
+	}
+	for _, provider := range params {
+		if providers[provider.Name] == nil {
+			continue
+		}
+		if err := visit(provider); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -504,7 +581,9 @@ func (p *FunctionParameter) FlagString() string {
 	flags := strings.Join(parts, ", ")
 
 	typeStr := ""
-	if p.Type != "bool" {
+	if p.OptionalValue {
+		typeStr = " [=" + p.Type + "]"
+	} else if p.Type != "bool" {
 		typeStr = " " + p.Type
 	}
 	return flags + typeStr
@@ -598,13 +677,27 @@ func (p *FunctionParameter) HasPointer() bool {
 	return strings.HasPrefix(t, "*")
 }
 
+// PointerDepth returns the number of pointer indirections on the scalar type.
+func (p *FunctionParameter) PointerDepth() int {
+	t := p.Type
+	t = strings.TrimPrefix(t, "[]")
+	depth := 0
+	for strings.HasPrefix(t, "*") {
+		depth++
+		t = strings.TrimPrefix(t, "*")
+	}
+	return depth
+}
+
 // BaseType returns the underlying Go type spelling (stripping * and []).
 // It deliberately preserves source import qualifiers so the result remains
 // valid Go syntax (for example, stream.Reader).
 func (p *FunctionParameter) BaseType() string {
 	t := p.Type
 	t = strings.TrimPrefix(t, "[]")
-	t = strings.TrimPrefix(t, "*")
+	for strings.HasPrefix(t, "*") {
+		t = strings.TrimPrefix(t, "*")
+	}
 	return t
 }
 
@@ -627,6 +720,64 @@ func (p *FunctionParameter) GeneratedType() string {
 	}
 	prefix := strings.TrimSuffix(p.Type, p.BaseType())
 	return prefix + p.CanonicalBaseType()
+}
+
+// BareValueCode returns the Go expression representing the bare/default value of the parameter.
+func (p *FunctionParameter) BareValueCode() string {
+	if p.HasDefaultValue && p.Default != "" {
+		if p.IsString() && !strings.HasPrefix(p.Default, `"`) {
+			return fmt.Sprintf("%q", p.Default)
+		}
+		return p.Default
+	}
+	if p.IsBool() {
+		return "true"
+	}
+	if p.IsString() {
+		return `""`
+	}
+	if p.IsDuration() {
+		return "0"
+	}
+	base := p.BaseType()
+	switch base {
+	case "int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return "0"
+	}
+	return fmt.Sprintf("*new(%s)", base)
+}
+
+// IsSupportedOptionalValueType returns true if the parameter type is supported
+// by the optional-value flag contract.
+func (p *FunctionParameter) IsSupportedOptionalValueType() bool {
+	if p.IsReader() || p.IsWriter() || p.IsFile() || p.IsFlagPresence() {
+		return false
+	}
+	depth := p.PointerDepth()
+	if p.IsSlice() {
+		if depth > 1 {
+			return false
+		}
+	} else {
+		if depth > 2 {
+			return false
+		}
+	}
+	base := p.BaseType()
+	if p.HasCustomParser() {
+		return true
+	}
+	switch base {
+	case "string", "bool", "time.Duration",
+		"int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *FunctionParameter) IsBool() bool {
@@ -1339,11 +1490,59 @@ func (p *FunctionParameter) HasConstructor() bool {
 }
 
 func (p *FunctionParameter) GeneratorCall() string {
+	return p.GeneratorCallFor("", false)
+}
+
+// GeneratorCallFor renders a provider invocation using fields owned by receiver.
+// Validation resolves and orders Inputs before templates use this method.
+func (p *FunctionParameter) GeneratorCallFor(receiver string, fields bool) string {
 	if p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
-		if p.Generator.Func.CommandPackageName != "" {
-			return fmt.Sprintf("%s.%s()", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName)
+		args := make([]string, 0, len(p.Generator.Inputs))
+		for _, input := range p.Generator.Inputs {
+			if fields && receiver != "" {
+				args = append(args, receiver+"."+input)
+			} else {
+				args = append(args, input)
+			}
 		}
-		return fmt.Sprintf("%s()", p.Generator.Func.FunctionName)
+		argumentList := strings.Join(args, ", ")
+		if p.Generator.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.Generator.Func.CommandPackageName, p.Generator.Func.FunctionName, argumentList)
+		}
+		return fmt.Sprintf("%s(%s)", p.Generator.Func.FunctionName, argumentList)
 	}
 	return ""
+}
+
+// OrderedGenerators returns provider-backed local parameters in deterministic
+// dependency order. Command validation must be called first.
+func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
+	byName := make(map[string]*FunctionParameter)
+	for _, param := range params {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			byName[param.Name] = param
+		}
+	}
+	state := make(map[string]uint8)
+	var ordered []*FunctionParameter
+	var visit func(*FunctionParameter)
+	visit = func(param *FunctionParameter) {
+		if state[param.Name] == 2 {
+			return
+		}
+		state[param.Name] = 1
+		for _, input := range param.Generator.Inputs {
+			if dependency := byName[input]; dependency != nil {
+				visit(dependency)
+			}
+		}
+		state[param.Name] = 2
+		ordered = append(ordered, param)
+	}
+	for _, param := range params {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+			visit(param)
+		}
+	}
+	return ordered
 }

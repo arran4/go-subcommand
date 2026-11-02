@@ -30,6 +30,8 @@ The content is derived from:
 
 See [Generated errors and process boundary](generated-errors/) for typed usage failures, wrapped explicit exit statuses, and the generated runner.
 
+See [No-command policy](no-command-policy/) to require a selected command using functionless root metadata or native configuration.
+
 ## Architecture
 
 The generator works by:

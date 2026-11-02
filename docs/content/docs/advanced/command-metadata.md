@@ -20,6 +20,10 @@ func Generate() { fmt.Println("generate") }
 `app help`, `app usage`, `app --help`, recursive help and version keep normal
 dispatch behaviour and do not acquire business providers.
 
+An optional [No command: error](../no-command-policy/) directive changes bare
+invocation to a typed usage error/status 1. It belongs only on a functionless
+application root and conflicts with root actions and default routes.
+
 An implicit root, inferred from `app generate`, has the same no-action behaviour
 without explicit root help metadata. A real `is a subcommand` function at `app`
 declares an executable root action. A literal `app root` remains a child, including

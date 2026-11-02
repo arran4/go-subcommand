@@ -2,6 +2,7 @@ package model
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -141,6 +142,36 @@ func TestFunctionParameterGenerationHelpers(t *testing.T) {
 	p.Required = true
 	if got := p.DefaultString(); got != "(required)" {
 		t.Errorf("DefaultString() = %q", got)
+	}
+}
+
+func TestGeneratorDependenciesRejectUnknownAndCycles(t *testing.T) {
+	provider := func(name string, inputs ...string) *FunctionParameter {
+		return &FunctionParameter{Name: name, Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: inputs}}
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "missing")}, "app"); err == nil {
+		t.Fatal("unknown dependency accepted")
+	}
+	if err := validateParameters([]*FunctionParameter{provider("a", "b"), provider("b", "a")}, "app"); err == nil {
+		t.Fatal("cycle accepted")
+	}
+	ordered := OrderedGenerators([]*FunctionParameter{provider("label", "prefix"), provider("prefix")})
+	if len(ordered) != 2 || ordered[0].Name != "prefix" || ordered[1].Name != "label" {
+		t.Fatalf("ordered providers = %#v", ordered)
+	}
+}
+
+func TestOrderedGeneratorsExcludeFlagPresence(t *testing.T) {
+	seen := &FunctionParameter{Name: "seen", Type: "map[string]bool", Generator: GeneratorConfig{Type: SourceTypeFlagPresence}}
+	first := &FunctionParameter{Name: "first", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"seen"}}}
+	second := &FunctionParameter{Name: "second", Generator: GeneratorConfig{Type: SourceTypeGenerator, Inputs: []string{"first", "seen"}}}
+	parameters := []*FunctionParameter{second, first, seen}
+	if err := validateParameters(parameters, "app"); err != nil {
+		t.Fatal(err)
+	}
+	ordered := OrderedGenerators(parameters)
+	if len(ordered) != 2 || ordered[0] != first || ordered[1] != second {
+		t.Fatalf("providers=%v", ordered)
 	}
 }
 
@@ -336,6 +367,26 @@ func TestEffectiveCLIParser(t *testing.T) {
 	}
 }
 
+func TestCommandValidateNoCommand(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		command Command
+		valid   bool
+	}{
+		{"default", Command{MainCmdName: "app"}, true},
+		{"error", Command{MainCmdName: "app", NoCommand: NoCommandError}, true},
+		{"unknown", Command{MainCmdName: "app", NoCommand: "unknown"}, false},
+		{"action", Command{MainCmdName: "app", NoCommand: NoCommandError, FunctionName: "Run"}, false},
+		{"route", Command{MainCmdName: "app", NoCommand: NoCommandError, DefaultRoute: "help"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.command.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("error=%v valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
 	t.Run("aliases without action rejected", func(t *testing.T) {
 		cmd := &Command{
@@ -370,4 +421,58 @@ func TestCommandValidate_AliasesAndDefaultRoutes(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+}
+
+func TestOptionalValueSourceDiagnostics(t *testing.T) {
+	tests := []struct {
+		name  string
+		param FunctionParameter
+		want  []string
+	}{
+		{
+			name: "positional",
+			param: FunctionParameter{Name: "path", Type: "string", IsPositional: true, PositionalArgIndex: 1, OptionalValue: true},
+			want: []string{`command "app list"`, `parameter "path"`, "(optional value)", "named flags", "positional @N", "(default:"},
+		},
+		{
+			name: "variadic positional",
+			param: FunctionParameter{Name: "files", Type: "[]string", IsPositional: true, IsVarArg: true, OptionalValue: true},
+			want: []string{`command "app list"`, `parameter "files"`, "(optional value)", "variadic positional", "zero-minimum"},
+		},
+		{
+			name: "generator same parameter",
+			param: FunctionParameter{
+				Name: "dest", Type: "string", OptionalValue: true,
+				Generator: GeneratorConfig{Type: SourceTypeGenerator, Func: &FuncRef{FunctionName: "Convert"}, Inputs: []string{"raw"}},
+			},
+			want: []string{`command "app list"`, `parameter "dest"`, "conflicting value sources", "same parameter", "separate parameters", "Convert(raw)"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateParameters([]*FunctionParameter{&tt.param}, "app list")
+			if err == nil {
+				t.Fatal("expected invalid source combination")
+			}
+			for _, part := range tt.want {
+				if !strings.Contains(err.Error(), part) {
+					t.Errorf("diagnostic %q missing %q", err, part)
+				}
+			}
+		})
+	}
+}
+
+func TestOptionalValueValidSeparateSourcesAndOmittablePositionals(t *testing.T) {
+	// A positional default and a zero-minimum variadic tail are omittable,
+	// but neither needs the optional-value flag annotation.
+	params := []*FunctionParameter{
+		{Name: "path", Type: "string", IsPositional: true, PositionalArgIndex: 1, HasDefaultValue: true, Default: "."},
+		{Name: "files", Type: "[]string", IsPositional: true, IsVarArg: true, VarArgMin: 0},
+		{Name: "raw", Type: "[]*string", OptionalValue: true},
+		{Name: "dest", Type: "*Result", Generator: GeneratorConfig{Type: SourceTypeGenerator, Func: &FuncRef{FunctionName: "Convert"}, Inputs: []string{"raw"}}},
+	}
+	if err := validateParameters(params, "app list"); err != nil {
+		t.Fatalf("valid optional positional and generator conversion rejected: %v", err)
+	}
 }
