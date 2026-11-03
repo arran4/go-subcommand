@@ -139,6 +139,12 @@ func FormatSourceComments(dir string, paths []string, recursive bool) error {
 							if len(parsed.Flags) > 0 {
 								fp.FlagAliases = parsed.Flags
 							}
+							if len(parsed.ShortFlags) > 0 {
+								fp.ShortAliases = parsed.ShortFlags
+							}
+							if len(parsed.LongFlags) > 0 {
+								fp.LongAliases = parsed.LongFlags
+							}
 							if parsed.Default != "" {
 								fp.Default = parsed.Default
 							}

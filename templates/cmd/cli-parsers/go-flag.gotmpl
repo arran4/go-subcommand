@@ -17,6 +17,9 @@
 	{{- end }}
 	{{- if $hasTrackedFlags }}
 	seenFlags := make(map[string]bool)
+	{{- if .HasPlusMinusInHierarchy }}
+	c.seenFlags = seenFlags
+	{{- end }}
 	{{- end }}
 
 	// Create a local flagset so it doesn't ExitOnError or panic

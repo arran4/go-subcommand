@@ -178,6 +178,41 @@ func TestParseAttributes(t *testing.T) {
 				Required: true,
 			},
 		},
+		{
+			name:  "Plus Bare Reset",
+			attrs: `plus: reset`,
+			wantParam: ParsedParam{
+				PlusBare: model.PlusOperationConfig{Mode: "reset"},
+			},
+		},
+		{
+			name:  "Plus Bare Zero",
+			attrs: `plus-bare: zero`,
+			wantParam: ParsedParam{
+				PlusBare: model.PlusOperationConfig{Mode: "zero"},
+			},
+		},
+		{
+			name:  "Plus Bare Func",
+			attrs: `plus: ResetCount`,
+			wantParam: ParsedParam{
+				PlusBare: model.PlusOperationConfig{Mode: "func", Func: &model.FuncRef{FunctionName: "ResetCount"}},
+			},
+		},
+		{
+			name:  "Plus Value Set",
+			attrs: `plus-value: set`,
+			wantParam: ParsedParam{
+				PlusValue: model.PlusOperationConfig{Mode: "set"},
+			},
+		},
+		{
+			name:  "Plus Value Func",
+			attrs: `plus-value: AddCount`,
+			wantParam: ParsedParam{
+				PlusValue: model.PlusOperationConfig{Mode: "func", Func: &model.FuncRef{FunctionName: "AddCount"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {

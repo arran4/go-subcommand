@@ -10,6 +10,9 @@
 	{{- end }}
 	{{- if $hasTrackedFlags }}
 	seenFlags := make(map[string]bool)
+	{{- if .HasPlusMinusInHierarchy }}
+	c.seenFlags = seenFlags
+	{{- end }}
 	{{- end }}
 	dashDashSeen := false
 	for i := 0; i < len(args); i++ {

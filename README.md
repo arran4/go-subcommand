@@ -1039,6 +1039,57 @@ mixture of mutually exclusive platform implementations. Compile or package the
 result using the same target values. Empty target fields retain the generator
 host defaults.
 
+#### `plus-minus` runtime parser
+
+Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
+This backend implements a dedicated command-scoped parser with atomic staging and validation (#464):
+
+| Token | Meaning |
+| --- | --- |
+| `-a`, `+a` | Enable/disable short boolean `a`. |
+| `-ab`, `+ab` | Enable/disable short booleans `a` and `b` in a cluster. |
+| `--a`, `++a` | One-character long option named `a`, distinct from short namespace. |
+| `--ab`, `++ab` | Long options named `ab`, independent of short clusters. |
+| `-n 5`, `-n5`, `-n=5` | Value-taking short option. |
+| `-abn5`, `-abn=5` | Short cluster with trailing attached value. |
+| `--count=3`, `--count 3` | Value-taking long option. |
+| `++count`, `++count=3` | Explicitly configured nonboolean plus operation (#531). |
+| `--` | Delimiter terminating option scanning and routing; remaining tokens are literal. |
+
+Scalar toggles are last-wins, preserve absent defaults, and track explicit
+presence for both polarities and all aliases. A long boolean may take an explicit
+Go boolean value such as `--enabled=false`. Short booleans reject `=` assignments.
+When values resemble options, attached assignment is required (`--label=--verbose`).
+Interspersed options after positional arguments are accepted within the same command scope
+while preserving positional argument ordering (#534). Subcommand boundaries yield
+unconsumed arguments to the child command. Unambiguous parent options can be supplied
+before or after child commands; child-declared options shadow parent options without conflict.
+Required parent flags are validated across the selected command path: supplying the flag either
+before or after child dispatch satisfies the requirement, while omitting it reports typed
+`cmd.UsageMissingRequiredFlag` from the selected leaf command without premature mutation or acquisition.
+
+In mixed parser trees (e.g. plus-minus root with GNU or Go-flag child commands), staged parent
+option mutations are committed only after child option parsing, required-flag validation, and
+positional argument validation all succeed. Any child failure or missing child positional argument
+prevents parent commits and prevents parent I/O side effects.
+
+Nonboolean plus operations have no implicit behavior and require explicit consumer
+configuration (#531):
+- `(plus: reset)` or `(plus-bare: reset)`: resets to declared default.
+- `(plus-bare: zero)`: sets to zero value.
+- `(plus: FuncName)` or `(plus-bare: FuncName)`: calls consumer function `func() (T, error)`.
+- `(plus-value: set)`: standard value assignment under `+`/`++` prefix.
+- `(plus-value: FuncName)`: calls consumer function `func(string) (T, error)`.
+
+Standalone `++` after `--` is intentionally undefined in this release (#532).
+Generated Go code remains strictly compatible with Go 1.22 (#542).
+
+See the [grammar, audit and architecture decision](docs/content/docs/advanced/plus-minus-parser.md).
+`templates/testdata/runtime/issue464.txtar` records source comments, complete
+generated artifacts/help and exact compiled invocations, including mixed-backend
+subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
+remain separate work and are not implied by this backend.
+
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 
@@ -1066,7 +1117,7 @@ A parent parsing its argv according to its own backend scopes the argv entirely 
 The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it strictly ignores GNU-style clustered short options. A flag invoked as `-abc` evaluates specifically as the exact declared flag named `abc` if it exists. If `abc` is undeclared, it strictly returns an unknown flag error rather than being parsed as `-a -b -c`. It handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
 All arguments preceding an explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` return FlagSet help behavior if undeclared, but explicitly declared `h` / `help` are treated as ordinary registered flags.
 
-`plus-minus` is a reserved parser name for tracking future `+x`/`-x` style toggle parser additions (tracked via #464).
+The optional `plus-minus` proposal is described above and tracked under #464.
 
 
 #### Replace CLI-Parser Backends

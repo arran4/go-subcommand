@@ -499,7 +499,7 @@ func resolveCLIParser(local, fallback string) (string, error) {
 	case "go-flag":
 		return backend, nil
 	case "plus-minus":
-		return "", fmt.Errorf("cli-parser %q is reserved for issue #464 and is not implemented", backend)
+		return backend, nil
 	default:
 		return "", fmt.Errorf("unsupported cli-parser %q", backend)
 	}
@@ -512,27 +512,38 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 			return fmt.Errorf("command %q: %w", cmd.MainCmdName, err)
 		}
 		cmd.ResolvedCLIParser = resolved
+		if resolved == "plus-minus" {
+			if err := validatePlusMinusParameters(cmd.MainCmdName, cmd.Parameters); err != nil {
+				return err
+			}
+		}
 		if err := validateOptionalValueParser(cmd.Parameters, resolved, cmd.MainCmdName); err != nil {
 			return err
 		}
-		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved); err != nil {
+		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved, cmd.Parameters); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited string) error {
+func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited string, ancestors []*model.FunctionParameter) error {
 	for _, subCommand := range subCommands {
 		resolved, err := resolveCLIParser(subCommand.CLIParser, inherited)
 		if err != nil {
 			return fmt.Errorf("subcommand %q: %w", subCommand.SubCommandName, err)
 		}
 		subCommand.ResolvedCLIParser = resolved
+		if resolved == "plus-minus" {
+			if err := validatePlusMinusParameters(subCommand.ProgName(), subCommand.Parameters, ancestors); err != nil {
+				return err
+			}
+		}
 		if err := validateOptionalValueParser(subCommand.Parameters, resolved, subCommand.SubCommandName); err != nil {
 			return err
 		}
-		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved); err != nil {
+		currentAncestors := append(append([]*model.FunctionParameter(nil), ancestors...), subCommand.Parameters...)
+		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved, currentAncestors); err != nil {
 			return err
 		}
 	}
@@ -639,6 +650,11 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		if err := generateFile(collector, cmdOutDir, "flag_helpers.go", "flag_helpers.go.gotmpl", cmd, true); err != nil {
 			return err
 		}
+		if commandUsesPlusMinus(cmd) {
+			if err := generateFile(collector, cmdOutDir, "plus_minus.go", "plus_minus.go.gotmpl", cmd, true); err != nil {
+				return err
+			}
+		}
 		if err := generateFile(collector, filepath.Join(dir, "cmd"), "AGENTS.md", "agents.md.gotmpl", cmd, false); err != nil {
 			return err
 		}
@@ -664,6 +680,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 			SubCommandPackageName:  cmd.CommandPackageName,
 			SubCommandStructName:   "RootCmd",
 			SubCommandName:         "",
+			ResolvedCLIParser:      cmd.ResolvedCLIParser,
 		}
 		if err := generateFile(collector, cmdTemplatesDir, rootUsage.UsageFileName, "usage.txt.gotmpl", rootUsage, false); err != nil {
 			return err
@@ -817,6 +834,10 @@ func subCommandFileBaseName(subCmd *model.SubCommand) string {
 		switch fileName {
 		case "root", "main", "process", "flag_helpers", "errors":
 			return fileName + "2"
+		case "plus_minus":
+			if subCmd.Command != nil && commandUsesPlusMinus(subCmd.Command) {
+				return fileName + "2"
+			}
 		}
 	}
 	return fileName
@@ -885,7 +906,9 @@ func escapeUsageText(s string) string {
 
 func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 	tmpl := template.New("").Funcs(template.FuncMap{
-		"lower":           strings.ToLower,
+		"plusMinusNames":      plusMinusParameterNames,
+		"plusMinusAllOptions": plusMinusAllParameters,
+		"lower":               strings.ToLower,
 		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"upper":           strings.ToUpper,
 		"replace":         strings.ReplaceAll,
@@ -1222,7 +1245,11 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
 		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
 	}
-	imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, cmd.Parameters)...)
+	if cmd.ResolvedCLIParser == "plus-minus" {
+		imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, plusMinusAllParameters(cmd))...)
+	} else {
+		imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, cmd.Parameters)...)
+	}
 	return deduplicateAndSortImports(imports)
 }
 
@@ -1251,11 +1278,21 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 	if cmd.ImportPath != "" && cmd.CallPackage() != "" && cmd.CallPackage() != "main" && cmd.ImportPath != excludedPath {
 		imports = append(imports, templateImport{Alias: cmd.ImportAlias(), Path: cmd.ImportPath})
 	}
-	imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, cmd.Parameters)...)
+	if cmd.ResolvedCLIParser == "plus-minus" {
+		imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, plusMinusAllParameters(cmd))...)
+	} else {
+		imports = append(imports, runtimeParserImports(cmd.ResolvedCLIParser, cmd.Parameters)...)
+	}
 	return deduplicateAndSortImports(imports)
 }
 
 func runtimeParserImports(parser string, params []*model.FunctionParameter) []templateImport {
+	if parser == "plus-minus" {
+		if plusMinusConversionNeedsStrconv(params) {
+			return []templateImport{{Path: "strconv"}}
+		}
+		return nil
+	}
 	imports := []templateImport{}
 
 	needsStrconv := false

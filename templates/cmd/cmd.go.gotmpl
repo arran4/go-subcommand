@@ -30,7 +30,41 @@ type {{.SubCommandStructName}} struct {
 	{{- end}}
 	SubCommands map[string]func() Cmd
 	CommandAction func(c *{{.SubCommandStructName}}) error
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	plusMinusCommit func() error
+	{{- end }}
+	{{- if .HasPlusMinusInHierarchy }}
+	seenFlags map[string]bool
+	{{- end }}
 }
+
+{{- if .HasPlusMinusInHierarchy }}
+func (c *{{.SubCommandStructName}}) commitAll() error {
+	{{- if .Parent }}
+	{{- if .Parent.HasPlusMinusInHierarchy }}
+	if err := c.{{.Parent.SubCommandStructName}}.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
+	{{- else if eq .Command.ResolvedCLIParser "plus-minus" }}
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	{{- end }}
+	return nil
+}
+
+func (c *{{.SubCommandStructName}}) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+{{- end }}
 
 type UsageData{{.SubCommandStructName}} struct {
 	*{{.SubCommandStructName}}
@@ -64,6 +98,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- $hasFileExec = true }}
 	{{- end }}
 	{{- end }}
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	{{- range plusMinusAllOptions . }}
+	{{- if or .IsWriter .IsReader }}
+	{{- $hasFileExec = true }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 	{{- if $hasFileExec }}
 	var cleanups []func() error
 	defer func() {
@@ -84,8 +125,48 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- template "cli_parser_gnu" . }}
 	{{- else if eq .ResolvedCLIParser "go-flag" }}
 	{{- template "cli_parser_go-flag" . }}
+	{{- else if eq .ResolvedCLIParser "plus-minus" }}
+	{{- template "cli_parser_plus-minus" . }}
 	{{- end }}
 
+	{{- if .HasPlusMinusInHierarchy }}
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		{{- if and .SubCommandFunctionName .SubCommands (not $needsRemainingArgs) (ne .ResolvedCLIParser "go-flag") }}
+		c.Usage()
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+		{{- end }}
+	}
+
+	{{- if or .HasRequiredFlags (gt (len .PathRequiredFlags) 0) }}
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+	if !isHelpRequest {
+		{{- range .PathRequiredFlags }}
+		if !(
+			{{- range $i, $s := .Satisfiers -}}
+			{{- if gt $i 0 }} || {{ end -}}
+			{{- if $s.Accessor }}c.{{$s.Accessor}}.{{else}}c.{{end}}hasSeenFlag("{{$s.FlagKey}}")
+			{{- end -}}
+		) {
+			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
+		}
+		{{- end }}
+	}
+	{{- end }}
+	{{- else }}
 	{{- if .HasRequiredFlags }}
 	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
 	if !isHelpRequest && !dashDashSeen {
@@ -119,8 +200,15 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 		{{- end }}
 	}
+	{{- end }}
 
 {{- template "positional_args_parsing" .Parameters }}
+
+	{{- if .HasPlusMinusInHierarchy }}
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+	{{- end }}
 
 	{{if .SubCommandFunctionName}}
 	{{- range $param := .Parameters }}
