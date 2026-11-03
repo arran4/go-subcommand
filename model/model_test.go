@@ -277,9 +277,9 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	// Test scope identity for shadowed vs inherited required flags
 	rootToken := &FunctionParameter{Name: "token", Type: "string", Required: true, DeclaredIn: "app"}
 	rootScopeCmd := &Command{
-		MainCmdName:        "app",
-		ResolvedCLIParser:  "plus-minus",
-		Parameters:         []*FunctionParameter{rootToken},
+		MainCmdName:       "app",
+		ResolvedCLIParser: "plus-minus",
+		Parameters:        []*FunctionParameter{rootToken},
 	}
 	// Case A: child shadows token with independent optional parameter
 	shadowParam := &FunctionParameter{Name: "token", Type: "string", Required: false, DeclaredIn: "shadow"}
@@ -287,7 +287,7 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 		Command:              rootScopeCmd,
 		SubCommandName:       "shadow",
 		SubCommandStructName: "ShadowCmd",
-		ResolvedCLIParser:   "plus-minus",
+		ResolvedCLIParser:    "plus-minus",
 		Parameters:           []*FunctionParameter{shadowParam},
 	}
 	shadowReqs := shadowChild.PathRequiredFlags()
@@ -304,7 +304,7 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 		Command:              rootScopeCmd,
 		SubCommandName:       "bothreq",
 		SubCommandStructName: "BothReqCmd",
-		ResolvedCLIParser:   "plus-minus",
+		ResolvedCLIParser:    "plus-minus",
 		Parameters:           []*FunctionParameter{bothReqParam},
 	}
 	bothReqs := bothReqChild.PathRequiredFlags()
@@ -324,7 +324,7 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 		Command:              rootScopeCmd,
 		SubCommandName:       "inherited",
 		SubCommandStructName: "InheritedCmd",
-		ResolvedCLIParser:   "plus-minus",
+		ResolvedCLIParser:    "plus-minus",
 		Parameters:           []*FunctionParameter{inheritedParam},
 	}
 	inheritedReqs := inheritedChild.PathRequiredFlags()
