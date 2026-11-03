@@ -82,10 +82,7 @@ func (c *ToggleCmd) commitAll() error {
 }
 
 func (c *ToggleCmd) hasSeenFlag(name string) bool {
-	if c.seenFlags != nil && c.seenFlags[name] {
-		return true
-	}
-	return false
+	return c.seenFlags != nil && c.seenFlags[name]
 }
 
 type UsageDataToggleCmd struct {

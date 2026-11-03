@@ -1276,15 +1276,41 @@ func (cmd *Command) HasPlusMinusInHierarchy() bool {
 	return cmd.ResolvedCLIParser == "plus-minus"
 }
 
+// RequiredFlagSatisfier specifies a command receiver in the active command hierarchy
+// and flag name that can satisfy a required parameter.
+type RequiredFlagSatisfier struct {
+	// Accessor is the receiver path relative to the executing subcommand struct (e.g. "RootCmd", "ParentCmd", or "" for self).
+	Accessor string
+	// FlagKey is the parameter key in seenFlags for that scope.
+	FlagKey string
+}
+
+// PathRequiredFlag describes a required flag along the active command path,
+// including its declaration command and the valid scope satisfiers.
+type PathRequiredFlag struct {
+	*FunctionParameter
+	DeclaringCommand string
+	Satisfiers       []RequiredFlagSatisfier
+}
+
 // PathRequiredFlags returns all non-positional required flags for the root command.
-func (cmd *Command) PathRequiredFlags() []*FunctionParameter {
+func (cmd *Command) PathRequiredFlags() []*PathRequiredFlag {
 	if cmd == nil {
 		return nil
 	}
-	var result []*FunctionParameter
+	var result []*PathRequiredFlag
 	for _, p := range cmd.Parameters {
 		if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
-			result = append(result, p)
+			result = append(result, &PathRequiredFlag{
+				FunctionParameter: p,
+				DeclaringCommand:  cmd.MainCmdName,
+				Satisfiers: []RequiredFlagSatisfier{
+					{
+						Accessor: "",
+						FlagKey:  p.Name,
+					},
+				},
+			})
 		}
 	}
 	return result
@@ -1317,23 +1343,29 @@ func (sc *SubCommand) HasPlusMinusInHierarchy() bool {
 }
 
 // PathRequiredFlags returns all non-positional required flags across the command hierarchy
-// from root down to this subcommand, deduplicating flags that refer to the same parameter.
-func (sc *SubCommand) PathRequiredFlags() []*FunctionParameter {
+// from root down to this subcommand, tracking declaration ownership and all valid scope satisfiers.
+func (sc *SubCommand) PathRequiredFlags() []*PathRequiredFlag {
 	if sc == nil {
 		return nil
 	}
-	var result []*FunctionParameter
-	seen := make(map[string]bool)
 
+	type scopeInfo struct {
+		cmdName     string
+		structName  string
+		accessor    string
+		params      []*FunctionParameter
+		isPlusMinus bool
+	}
+
+	var scopes []scopeInfo
 	if sc.Command != nil {
-		for _, p := range sc.Command.Parameters {
-			if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
-				if !seen[p.Name] {
-					seen[p.Name] = true
-					result = append(result, p)
-				}
-			}
-		}
+		scopes = append(scopes, scopeInfo{
+			cmdName:     sc.MainCmdName,
+			structName:  "RootCmd",
+			accessor:    "RootCmd",
+			params:      sc.Command.Parameters,
+			isPlusMinus: sc.Command.ResolvedCLIParser == "plus-minus",
+		})
 	}
 
 	var ancestors []*SubCommand
@@ -1341,31 +1373,150 @@ func (sc *SubCommand) PathRequiredFlags() []*FunctionParameter {
 		ancestors = append([]*SubCommand{curr}, ancestors...)
 	}
 	for _, a := range ancestors {
-		for _, p := range a.Parameters {
-			if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
-				target := p.Name
-				if p.Inherited && p.InheritedFrom != "" {
-					target = p.InheritedFrom
+		scopes = append(scopes, scopeInfo{
+			cmdName:     a.SubCommandName,
+			structName:  a.SubCommandStructName,
+			accessor:    a.SubCommandStructName,
+			params:      a.Parameters,
+			isPlusMinus: a.ResolvedCLIParser == "plus-minus",
+		})
+	}
+
+	scopes = append(scopes, scopeInfo{
+		cmdName:     sc.SubCommandName,
+		structName:  sc.SubCommandStructName,
+		accessor:    "", // self
+		params:      sc.Parameters,
+		isPlusMinus: sc.ResolvedCLIParser == "plus-minus",
+	})
+
+	type paramDeclaration struct {
+		declaringScopeIndex int
+		paramName           string
+		primaryParam        *FunctionParameter
+		isRequired          bool
+	}
+
+	var decls []*paramDeclaration
+
+	for i, scope := range scopes {
+		for _, p := range scope.params {
+			if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+				continue
+			}
+
+			isInherited := p.Inherited || (p.DeclaredIn != "" && p.DeclaredIn != scope.cmdName)
+			if isInherited {
+				targetName := p.Name
+				if p.InheritedFrom != "" {
+					targetName = p.InheritedFrom
 				}
-				if !seen[target] {
-					seen[target] = true
-					result = append(result, p)
+				var matched *paramDeclaration
+				for idx := len(decls) - 1; idx >= 0; idx-- {
+					d := decls[idx]
+					if d.declaringScopeIndex < i {
+						if p.DeclaredIn != "" && scopes[d.declaringScopeIndex].cmdName == p.DeclaredIn && d.paramName == targetName {
+							matched = d
+							break
+						} else if p.DeclaredIn == "" && d.paramName == targetName {
+							matched = d
+							break
+						}
+					}
+				}
+				if matched != nil {
+					if p.Required {
+						matched.isRequired = true
+					}
+					continue
 				}
 			}
+
+			decls = append(decls, &paramDeclaration{
+				declaringScopeIndex: i,
+				paramName:           p.Name,
+				primaryParam:        p,
+				isRequired:          p.Required,
+			})
 		}
 	}
 
-	for _, p := range sc.Parameters {
-		if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
-			target := p.Name
-			if p.Inherited && p.InheritedFrom != "" {
-				target = p.InheritedFrom
+	var result []*PathRequiredFlag
+	for _, decl := range decls {
+		if !decl.isRequired {
+			continue
+		}
+
+		var satisfiers []RequiredFlagSatisfier
+		satisfiers = append(satisfiers, RequiredFlagSatisfier{
+			Accessor: scopes[decl.declaringScopeIndex].accessor,
+			FlagKey:  decl.paramName,
+		})
+
+		for k := decl.declaringScopeIndex + 1; k < len(scopes); k++ {
+			scope := scopes[k]
+			shadowed := false
+			for _, pk := range scope.params {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+					continue
+				}
+				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
+				if !pkInherited && pk.Name == decl.paramName {
+					shadowed = true
+					break
+				}
 			}
-			if !seen[target] {
-				seen[target] = true
-				result = append(result, p)
+			if shadowed {
+				break
+			}
+
+			explicitlyInherited := false
+			for _, pk := range scope.params {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+					continue
+				}
+				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
+				if pkInherited {
+					matches := false
+					if pk.DeclaredIn != "" && pk.DeclaredIn == scopes[decl.declaringScopeIndex].cmdName {
+						if pk.InheritedFrom != "" && pk.InheritedFrom == decl.paramName {
+							matches = true
+						} else if pk.InheritedFrom == "" && pk.Name == decl.paramName {
+							matches = true
+						}
+					} else if pk.InheritedFrom != "" && pk.InheritedFrom == decl.paramName {
+						matches = true
+					} else if pk.InheritedFrom == "" && pk.Name == decl.paramName {
+						matches = true
+					}
+					if matches {
+						explicitlyInherited = true
+						satisfiers = append(satisfiers, RequiredFlagSatisfier{
+							Accessor: scope.accessor,
+							FlagKey:  pk.Name,
+						})
+						break
+					}
+				}
+			}
+
+			if explicitlyInherited {
+				continue
+			}
+
+			if scope.isPlusMinus {
+				satisfiers = append(satisfiers, RequiredFlagSatisfier{
+					Accessor: scope.accessor,
+					FlagKey:  decl.paramName,
+				})
 			}
 		}
+
+		result = append(result, &PathRequiredFlag{
+			FunctionParameter: decl.primaryParam,
+			DeclaringCommand:  scopes[decl.declaringScopeIndex].cmdName,
+			Satisfiers:        satisfiers,
+		})
 	}
 
 	return result

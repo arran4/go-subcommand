@@ -54,3 +54,21 @@ func GnuChild(token string, target string) {
 func GoFlagChild(token string, item string) {
 	fmt.Printf("goflag: token=%s item=%s\n", token, item)
 }
+
+// Shadow is a subcommand `app shadow` -- Child with independent optional token.
+//
+// Flags:
+//
+//	token: --token Child independent token.
+func Shadow(token string) {
+	fmt.Printf("shadow: token=%s\n", token)
+}
+
+// BothReq is a subcommand `app bothreq` -- Child requiring its own independent token.
+//
+// Flags:
+//
+//	token: (required) --token Child required token.
+func BothReq(token string) {
+	fmt.Printf("bothreq: token=%s\n", token)
+}

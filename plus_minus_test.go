@@ -242,7 +242,34 @@ func TestCommandBoundaryAndMixedTrees(t *testing.T) {
 		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
 	}
 
-	// 1. Build executable
+	// 1. Run scope identity unit test verifying root preserves distinct value
+	scopeUnitTest := `package main
+
+import (
+	"testing"
+)
+
+func TestScopeIdentityDistinctValues(t *testing.T) {
+	root, err := NewRoot("app", "devel", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Execute([]string{"--token=root-distinct", "shadow", "--token=child-distinct"}); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if root.token != "root-distinct" {
+		t.Errorf("root.token = %q, want root-distinct", root.token)
+	}
+}
+`
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/scope_test.go"), scopeUnitTest)
+	testCmd := exec.Command("go", "test", "./cmd/app", "-run", "TestScopeIdentityDistinctValues")
+	testCmd.Dir = dir
+	if out, err := testCmd.CombinedOutput(); err != nil {
+		t.Fatalf("scope unit test failed: %v\n%s", err, out)
+	}
+
+	// 2. Build executable
 	binary := filepath.Join(dir, "app")
 	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
 	build.Dir = dir
@@ -350,6 +377,57 @@ func TestCommandBoundaryAndMixedTrees(t *testing.T) {
 		out, errOut, code = runCLI("child", "--help")
 		if code != 0 {
 			t.Fatalf("app child --help failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 13. Scope identity regression: app shadow --token=child (child-local optional token)
+		// Must not satisfy root's required token!
+		out, errOut, code = runCLI("shadow", "--token=child")
+		if code == 0 || !strings.Contains(errOut, "required flag --token not provided") {
+			t.Fatalf("app shadow --token=child should fail root required token: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 14. app --token=root shadow --token=child succeeds, preserving both distinct values
+		out, errOut, code = runCLI("--token=root-val", "shadow", "--token=child-val")
+		if code != 0 || !strings.Contains(out, "shadow: token=child-val") {
+			t.Fatalf("app --token=root-val shadow --token=child-val failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 15. If both root and child require token: satisfying child only fails root
+		out, errOut, code = runCLI("bothreq", "--token=child-val")
+		if code == 0 || !strings.Contains(errOut, "required flag --token not provided") {
+			t.Fatalf("app bothreq --token=child-val must fail root required token: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 16. If both root and child require token: satisfying root only fails child
+		out, errOut, code = runCLI("--token=root-val", "bothreq")
+		if code == 0 || !strings.Contains(errOut, "required flag --token not provided") {
+			t.Fatalf("app --token=root-val bothreq must fail child required token: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 17. If both root and child require token: satisfying both succeeds
+		out, errOut, code = runCLI("--token=root-val", "bothreq", "--token=child-val")
+		if code != 0 || !strings.Contains(out, "bothreq: token=child-val") {
+			t.Fatalf("app --token=root-val bothreq --token=child-val failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 18. Missing child required flag does not commit staged parent I/O or state
+		unwritten1 := filepath.Join(dir, "never_created_both.txt")
+		_, _, code = runCLI("--token=root-val", "--out="+unwritten1, "bothreq")
+		if code == 0 {
+			t.Fatalf("bothreq missing child token must fail")
+		}
+		if _, err := os.Stat(unwritten1); !os.IsNotExist(err) {
+			t.Fatalf("file %s was created despite child required flag failure", unwritten1)
+		}
+
+		// 19. Missing root required flag does not commit staged child I/O or state
+		unwritten2 := filepath.Join(dir, "never_created_shadow.txt")
+		_, _, code = runCLI("--out="+unwritten2, "shadow", "--token=child-val")
+		if code == 0 {
+			t.Fatalf("shadow missing root token must fail")
+		}
+		if _, err := os.Stat(unwritten2); !os.IsNotExist(err) {
+			t.Fatalf("file %s was created despite root required flag failure", unwritten2)
 		}
 	}
 }

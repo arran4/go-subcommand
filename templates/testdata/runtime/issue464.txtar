@@ -1603,10 +1603,7 @@ func (c *GnuPm) commitAll() error {
 }
 
 func (c *GnuPm) hasSeenFlag(name string) bool {
-	if c.seenFlags != nil && c.seenFlags[name] {
-		return true
-	}
-	return c.Gnu.hasSeenFlag(name)
+	return c.seenFlags != nil && c.seenFlags[name]
 }
 
 type UsageDataGnuPm struct {

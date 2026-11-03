@@ -273,6 +273,70 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	if got := child.ImportAlias(); got != "type" {
 		t.Errorf("SubCommand.ImportAlias() = %q, want type", got)
 	}
+
+	// Test scope identity for shadowed vs inherited required flags
+	rootToken := &FunctionParameter{Name: "token", Type: "string", Required: true, DeclaredIn: "app"}
+	rootScopeCmd := &Command{
+		MainCmdName:        "app",
+		ResolvedCLIParser:  "plus-minus",
+		Parameters:         []*FunctionParameter{rootToken},
+	}
+	// Case A: child shadows token with independent optional parameter
+	shadowParam := &FunctionParameter{Name: "token", Type: "string", Required: false, DeclaredIn: "shadow"}
+	shadowChild := &SubCommand{
+		Command:              rootScopeCmd,
+		SubCommandName:       "shadow",
+		SubCommandStructName: "ShadowCmd",
+		ResolvedCLIParser:   "plus-minus",
+		Parameters:           []*FunctionParameter{shadowParam},
+	}
+	shadowReqs := shadowChild.PathRequiredFlags()
+	if len(shadowReqs) != 1 || shadowReqs[0].Name != "token" {
+		t.Fatalf("shadowChild.PathRequiredFlags() = %#v, want 1 flag for root token", shadowReqs)
+	}
+	if len(shadowReqs[0].Satisfiers) != 1 || shadowReqs[0].Satisfiers[0].Accessor != "RootCmd" {
+		t.Fatalf("shadowChild Root token satisfiers = %#v, want only RootCmd satisfier", shadowReqs[0].Satisfiers)
+	}
+
+	// Case B: child shadows token with independent REQUIRED parameter
+	bothReqParam := &FunctionParameter{Name: "token", Type: "string", Required: true, DeclaredIn: "bothreq"}
+	bothReqChild := &SubCommand{
+		Command:              rootScopeCmd,
+		SubCommandName:       "bothreq",
+		SubCommandStructName: "BothReqCmd",
+		ResolvedCLIParser:   "plus-minus",
+		Parameters:           []*FunctionParameter{bothReqParam},
+	}
+	bothReqs := bothReqChild.PathRequiredFlags()
+	if len(bothReqs) != 2 {
+		t.Fatalf("bothReqChild.PathRequiredFlags() len = %d, want 2 distinct required flags", len(bothReqs))
+	}
+	if bothReqs[0].DeclaringCommand != "app" || len(bothReqs[0].Satisfiers) != 1 || bothReqs[0].Satisfiers[0].Accessor != "RootCmd" {
+		t.Fatalf("bothReqs[0] = %#v, want app declaration with RootCmd satisfier", bothReqs[0])
+	}
+	if bothReqs[1].DeclaringCommand != "bothreq" || len(bothReqs[1].Satisfiers) != 1 || bothReqs[1].Satisfiers[0].Accessor != "" {
+		t.Fatalf("bothReqs[1] = %#v, want bothreq declaration with self satisfier", bothReqs[1])
+	}
+
+	// Case C: child inherits token from parent
+	inheritedParam := &FunctionParameter{Name: "token", Type: "string", Inherited: true, InheritedFrom: "token", DeclaredIn: "app"}
+	inheritedChild := &SubCommand{
+		Command:              rootScopeCmd,
+		SubCommandName:       "inherited",
+		SubCommandStructName: "InheritedCmd",
+		ResolvedCLIParser:   "plus-minus",
+		Parameters:           []*FunctionParameter{inheritedParam},
+	}
+	inheritedReqs := inheritedChild.PathRequiredFlags()
+	if len(inheritedReqs) != 1 {
+		t.Fatalf("inheritedChild.PathRequiredFlags() len = %d, want 1", len(inheritedReqs))
+	}
+	if len(inheritedReqs[0].Satisfiers) != 2 {
+		t.Fatalf("inheritedChild Root token satisfiers len = %d, want 2 (RootCmd and self)", len(inheritedReqs[0].Satisfiers))
+	}
+	if inheritedReqs[0].Satisfiers[0].Accessor != "RootCmd" || inheritedReqs[0].Satisfiers[1].Accessor != "" {
+		t.Fatalf("inheritedChild satisfiers = %#v, want RootCmd and self", inheritedReqs[0].Satisfiers)
+	}
 	if got := child.SubCommandSequence(); got != "parent child" {
 		t.Errorf("SubCommandSequence() = %q", got)
 	}

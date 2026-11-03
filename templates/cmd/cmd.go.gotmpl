@@ -62,30 +62,7 @@ func (c *{{.SubCommandStructName}}) commitAll() error {
 }
 
 func (c *{{.SubCommandStructName}}) hasSeenFlag(name string) bool {
-	if c.seenFlags != nil && c.seenFlags[name] {
-		return true
-	}
-	{{- range .Parameters }}
-	{{- if and .Inherited .InheritedFrom }}
-	if name == "{{.InheritedFrom}}" && c.seenFlags != nil && c.seenFlags["{{.Name}}"] {
-		return true
-	}
-	if name == "{{.Name}}" && c.seenFlags != nil && c.seenFlags["{{.InheritedFrom}}"] {
-		return true
-	}
-	{{- end }}
-	{{- end }}
-	{{- if .Parent }}
-	{{- if .Parent.HasPlusMinusInHierarchy }}
-	return c.{{.Parent.SubCommandStructName}}.hasSeenFlag(name)
-	{{- else }}
-	return false
-	{{- end }}
-	{{- else if eq .Command.ResolvedCLIParser "plus-minus" }}
-	return c.RootCmd.hasSeenFlag(name)
-	{{- else }}
-	return false
-	{{- end }}
+	return c.seenFlags != nil && c.seenFlags[name]
 }
 {{- end }}
 
@@ -178,7 +155,12 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	if !isHelpRequest {
 		{{- range .PathRequiredFlags }}
-		if !c.hasSeenFlag("{{.Name}}") {
+		if !(
+			{{- range $i, $s := .Satisfiers -}}
+			{{- if gt $i 0 }} || {{ end -}}
+			{{- if $s.Accessor }}c.{{$s.Accessor}}.{{else}}c.{{end}}hasSeenFlag("{{$s.FlagKey}}")
+			{{- end -}}
+		) {
 			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
 		}
 		{{- end }}
