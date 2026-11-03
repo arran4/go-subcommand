@@ -1268,8 +1268,112 @@ func (cmd *Command) HasRequiredFlags() bool {
 	return requiredFlagPresent(cmd.Parameters)
 }
 
+// HasPlusMinusInHierarchy reports whether the root command uses the plus-minus runtime CLI parser backend.
+func (cmd *Command) HasPlusMinusInHierarchy() bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.ResolvedCLIParser == "plus-minus"
+}
+
+// PathRequiredFlags returns all non-positional required flags for the root command.
+func (cmd *Command) PathRequiredFlags() []*FunctionParameter {
+	if cmd == nil {
+		return nil
+	}
+	var result []*FunctionParameter
+	for _, p := range cmd.Parameters {
+		if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// HasPathRequiredFlags reports whether there are required flags for the root command.
+func (cmd *Command) HasPathRequiredFlags() bool {
+	return len(cmd.PathRequiredFlags()) > 0
+}
+
 func (sc *SubCommand) HasRequiredFlags() bool {
 	return requiredFlagPresent(sc.Parameters)
+}
+
+// HasPlusMinusInHierarchy reports whether this subcommand or any of its ancestors uses plus-minus.
+func (sc *SubCommand) HasPlusMinusInHierarchy() bool {
+	if sc == nil {
+		return false
+	}
+	if sc.ResolvedCLIParser == "plus-minus" {
+		return true
+	}
+	if sc.Parent != nil {
+		return sc.Parent.HasPlusMinusInHierarchy()
+	}
+	if sc.Command != nil {
+		return sc.Command.ResolvedCLIParser == "plus-minus"
+	}
+	return false
+}
+
+// PathRequiredFlags returns all non-positional required flags across the command hierarchy
+// from root down to this subcommand, deduplicating flags that refer to the same parameter.
+func (sc *SubCommand) PathRequiredFlags() []*FunctionParameter {
+	if sc == nil {
+		return nil
+	}
+	var result []*FunctionParameter
+	seen := make(map[string]bool)
+
+	if sc.Command != nil {
+		for _, p := range sc.Command.Parameters {
+			if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+				if !seen[p.Name] {
+					seen[p.Name] = true
+					result = append(result, p)
+				}
+			}
+		}
+	}
+
+	var ancestors []*SubCommand
+	for curr := sc.Parent; curr != nil; curr = curr.Parent {
+		ancestors = append([]*SubCommand{curr}, ancestors...)
+	}
+	for _, a := range ancestors {
+		for _, p := range a.Parameters {
+			if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+				target := p.Name
+				if p.Inherited && p.InheritedFrom != "" {
+					target = p.InheritedFrom
+				}
+				if !seen[target] {
+					seen[target] = true
+					result = append(result, p)
+				}
+			}
+		}
+	}
+
+	for _, p := range sc.Parameters {
+		if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+			target := p.Name
+			if p.Inherited && p.InheritedFrom != "" {
+				target = p.InheritedFrom
+			}
+			if !seen[target] {
+				seen[target] = true
+				result = append(result, p)
+			}
+		}
+	}
+
+	return result
+}
+
+// HasPathRequiredFlags reports whether there are required flags across the path.
+func (sc *SubCommand) HasPathRequiredFlags() bool {
+	return len(sc.PathRequiredFlags()) > 0
 }
 
 func (sc *SubCommand) ResolveInheritance() {

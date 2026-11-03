@@ -838,6 +838,7 @@ type RootCmd struct {
 	args            []string
 	CommandAction   func(c *RootCmd) error
 	plusMinusCommit func() error
+	seenFlags       map[string]bool
 }
 
 func (c *RootCmd) commitAll() error {
@@ -847,6 +848,10 @@ func (c *RootCmd) commitAll() error {
 		return fn()
 	}
 	return nil
+}
+
+func (c *RootCmd) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
 }
 
 func (c *RootCmd) Usage() {
@@ -1224,8 +1229,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
-	_ = seenFlags
-
+	c.seenFlags = seenFlags
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
@@ -1583,15 +1587,26 @@ type GnuPm struct {
 	SubCommands     map[string]func() Cmd
 	CommandAction   func(c *GnuPm) error
 	plusMinusCommit func() error
+	seenFlags       map[string]bool
 }
 
 func (c *GnuPm) commitAll() error {
+	if err := c.Gnu.commitAll(); err != nil {
+		return err
+	}
 	if c.plusMinusCommit != nil {
 		fn := c.plusMinusCommit
 		c.plusMinusCommit = nil
 		return fn()
 	}
 	return nil
+}
+
+func (c *GnuPm) hasSeenFlag(name string) bool {
+	if c.seenFlags != nil && c.seenFlags[name] {
+		return true
+	}
+	return c.Gnu.hasSeenFlag(name)
 }
 
 type UsageDataGnuPm struct {
@@ -1920,8 +1935,7 @@ func (c *GnuPm) Execute(args []string) (err error) {
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
-	_ = seenFlags
-
+	c.seenFlags = seenFlags
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])

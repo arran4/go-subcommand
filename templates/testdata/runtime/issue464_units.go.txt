@@ -457,6 +457,61 @@ func TestPlusMinusAtomicityBoundaries(t *testing.T) {
 	// Scenario E: option assignment + missing required flag -> valid flag not mutated
 	// When root or child has a required flag and it is missing, earlier options are not committed
 	// (Tested via compiled app execution in TestPlusMinusManifestErrors / TestPlusMinusGenerationAndRuntime)
+
+	// Scenario F: Plus-minus root with GNU child observing staged parent value
+	root, err = NewRoot("app", "dev", "none", "unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.count = 7
+	err = root.Execute([]string{"--count=42", "gnu"})
+	if err != nil {
+		t.Fatalf("root + gnu execution failed: %v", err)
+	}
+	if root.count != 42 {
+		t.Fatalf("gnu child did not commit root count: %d (expected 42)", root.count)
+	}
+
+	// Scenario G: Plus-minus root with go-flag child observing staged parent value
+	root, err = NewRoot("app", "dev", "none", "unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.count = 7
+	err = root.Execute([]string{"--count=55", "legacy"})
+	if err != nil {
+		t.Fatalf("root + legacy execution failed: %v", err)
+	}
+	if root.count != 55 {
+		t.Fatalf("legacy child did not commit root count: %d (expected 55)", root.count)
+	}
+
+	// Scenario H: Child validation failure leaves parent fields untouched
+	root, err = NewRoot("app", "dev", "none", "unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.count = 7
+	err = root.Execute([]string{"--count=99", "gnu", "--invalid-flag"})
+	if err == nil {
+		t.Fatalf("expected error for invalid gnu child flag")
+	}
+	if root.count != 7 {
+		t.Fatalf("parent count mutated after gnu child flag error: %d (expected 7)", root.count)
+	}
+
+	root, err = NewRoot("app", "dev", "none", "unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.count = 7
+	err = root.Execute([]string{"--count=99", "legacy", "-unknown-flag"})
+	if err == nil {
+		t.Fatalf("expected error for invalid legacy child flag")
+	}
+	if root.count != 7 {
+		t.Fatalf("parent count mutated after legacy child flag error: %d (expected 7)", root.count)
+	}
 }
 
 func TestPlusMinusHelpUsageVersionSemantics(t *testing.T) {

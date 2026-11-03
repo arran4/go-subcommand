@@ -257,6 +257,16 @@ func TestCommandAndSubCommandHelpers(t *testing.T) {
 	if !root.HasRequiredFlags() || parent.HasRequiredFlags() {
 		t.Fatal("required flag detection did not distinguish root and parent flags")
 	}
+	if pathReq := child.PathRequiredFlags(); len(pathReq) != 1 || pathReq[0].Name != "rootDir" {
+		t.Fatalf("child.PathRequiredFlags() = %#v, want [rootDir]", pathReq)
+	}
+	if !child.HasPathRequiredFlags() {
+		t.Fatal("child.HasPathRequiredFlags() = false, want true")
+	}
+	root.ResolvedCLIParser = "plus-minus"
+	if !child.HasPlusMinusInHierarchy() || !root.HasPlusMinusInHierarchy() {
+		t.Fatal("HasPlusMinusInHierarchy() should be true when root is plus-minus")
+	}
 	if got := root.ImportAlias(); got != "command" {
 		t.Errorf("Command.ImportAlias() = %q, want command", got)
 	}

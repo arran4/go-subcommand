@@ -69,6 +69,7 @@ type ToggleCmd struct {
 	SubCommands     map[string]func() Cmd
 	CommandAction   func(c *ToggleCmd) error
 	plusMinusCommit func() error
+	seenFlags       map[string]bool
 }
 
 func (c *ToggleCmd) commitAll() error {
@@ -78,6 +79,13 @@ func (c *ToggleCmd) commitAll() error {
 		return fn()
 	}
 	return nil
+}
+
+func (c *ToggleCmd) hasSeenFlag(name string) bool {
+	if c.seenFlags != nil && c.seenFlags[name] {
+		return true
+	}
+	return false
 }
 
 type UsageDataToggleCmd struct {
@@ -235,8 +243,7 @@ func (c *ToggleCmd) Execute(args []string) (err error) {
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
-	_ = seenFlags
-
+	c.seenFlags = seenFlags
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])

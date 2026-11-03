@@ -19,6 +19,9 @@ import (
 //go:embed templates/testdata/runtime/issue464.txtar
 var plusMinusFixture []byte
 
+//go:embed templates/testdata/runtime/issue534_command_boundary.txtar
+var commandBoundaryFixture []byte
+
 //go:embed templates/testdata/runtime/issue464_units.go.txt
 var plusMinusUnitTests string
 
@@ -84,7 +87,7 @@ func TestPlusMinusGenerationAndRuntime(t *testing.T) {
 				t.Fatal("source/default selection differ")
 			}
 			for _, name := range []string{"root.go", "plus_minus.go", "gnu_pm.go", "templates/app_usage.txt"} {
-				if selection == "gnu-root" && (name == "root.go" || name == "templates/app_usage.txt") {
+				if selection == "gnu-root" && (name == "root.go" || name == "templates/app_usage.txt" || name == "gnu_pm.go") {
 					continue
 				}
 				if expected[name] == nil {
@@ -210,5 +213,143 @@ func TestValidatePlusMinusParameters(t *testing.T) {
 				t.Fatalf("error=%v valid=%t", err, tc.valid)
 			}
 		})
+	}
+}
+
+func TestCommandBoundaryAndMixedTrees(t *testing.T) {
+	input, _ := splitInputExpected(txtar.Parse(commandBoundaryFixture))
+	scenario := fstest.MapFS{}
+	for name, file := range input {
+		scenario[name] = file
+	}
+	generate := func() map[string][]byte {
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(scenario, writer, ".", "man", "commentv1", nil, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "plus-minus"}); err != nil {
+			t.Fatal(err)
+		}
+		return writer.Files
+	}
+	files := generate()
+	if !reflect.DeepEqual(files, generate()) {
+		t.Fatal("nondeterministic generation")
+	}
+
+	dir := t.TempDir()
+	for name, file := range scenario {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+	}
+	for name, data := range files {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
+
+	// 1. Build executable
+	binary := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build error: %v\n%s", err, out)
+	}
+	build122 := exec.Command("go", "build", "-o", binary+"-122", "./cmd/app")
+	build122.Dir = dir
+	build122.Env = append(os.Environ(), "GOTOOLCHAIN=go1.22.12")
+	if out, err := build122.CombinedOutput(); err != nil {
+		t.Fatalf("go 1.22.12 build error: %v\n%s", err, out)
+	}
+
+	for _, bin := range []string{binary, binary + "-122"} {
+		runCLI := func(args ...string) (stdout string, stderr string, exitCode int) {
+			cmd := exec.Command(bin, args...)
+			cmd.Dir = dir
+			var outBuf, errBuf bytes.Buffer
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			err := cmd.Run()
+			code := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					code = exitErr.ExitCode()
+				} else {
+					code = -1
+				}
+			}
+			return outBuf.String(), errBuf.String(), code
+		}
+
+		// 1. app --token=alpha child -> succeeds
+		out, errOut, code := runCLI("--token=alpha", "child")
+		if code != 0 || !strings.Contains(out, "child: token=alpha") {
+			t.Fatalf("app --token=alpha child failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 2. app child --token=beta -> succeeds (inherited flag after child)
+		out, errOut, code = runCLI("child", "--token=beta")
+		if code != 0 || !strings.Contains(out, "child: token=beta") {
+			t.Fatalf("app child --token=beta failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 3. app child (missing required token) -> fails with typed missing-required-flag
+		out, errOut, code = runCLI("child")
+		if code == 0 || !strings.Contains(errOut, "required flag --token not provided") {
+			t.Fatalf("app child should fail with missing required flag: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 4. app --token=gamma gnu target1 (plus-minus root + GNU child) -> succeeds, observes parent token
+		out, errOut, code = runCLI("--token=gamma", "gnu", "target1")
+		if code != 0 || !strings.Contains(out, "gnu: token=gamma target=target1") {
+			t.Fatalf("app --token=gamma gnu target1 failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 5. app --token=delta gnu (missing child positional argument) -> fails
+		out, errOut, code = runCLI("--token=delta", "gnu")
+		if code == 0 || !strings.Contains(errOut, "expected at least 1 positional arguments") {
+			t.Fatalf("app --token=delta gnu should fail missing positional: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 6. app --token=delta --out=/nonexistent/path/out.txt gnu (missing child positional argument)
+		// Must fail before any parent action or file write
+		outPath := filepath.Join(dir, "never_created_dir", "out.txt")
+		_, _, code = runCLI("--token=delta", "--out="+outPath, "gnu")
+		if code == 0 {
+			t.Fatalf("app with missing child positional must fail")
+		}
+		if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+			t.Fatalf("out.txt was created despite child positional failure: %v", err)
+		}
+
+		// 7. app --token=epsilon goflag item1 (plus-minus root + go-flag child) -> succeeds
+		out, errOut, code = runCLI("--token=epsilon", "goflag", "item1")
+		if code != 0 || !strings.Contains(out, "goflag: token=epsilon item=item1") {
+			t.Fatalf("app --token=epsilon goflag item1 failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 8. app --token=epsilon goflag (missing child positional argument) -> fails
+		out, errOut, code = runCLI("--token=epsilon", "goflag")
+		if code == 0 || !strings.Contains(errOut, "expected at least 1 positional arguments") {
+			t.Fatalf("app --token=epsilon goflag should fail missing positional: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 9. Root directly with token -> succeeds
+		out, errOut, code = runCLI("--token=root-token")
+		if code != 0 || !strings.Contains(out, "root: token=root-token") {
+			t.Fatalf("app --token=root-token failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 10. Root directly without token -> fails with missing required flag
+		out, errOut, code = runCLI()
+		if code == 0 || !strings.Contains(errOut, "required flag --token not provided") {
+			t.Fatalf("app without token should fail: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 11. Root help -> succeeds with status 0 without requiring token
+		out, errOut, code = runCLI("--help")
+		if code != 0 {
+			t.Fatalf("app --help failed: code=%d out=%q err=%q", code, out, errOut)
+		}
+
+		// 12. Child help -> succeeds with status 0 without requiring token
+		out, errOut, code = runCLI("child", "--help")
+		if code != 0 {
+			t.Fatalf("app child --help failed: code=%d out=%q err=%q", code, out, errOut)
+		}
 	}
 }

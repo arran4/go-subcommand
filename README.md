@@ -1063,7 +1063,15 @@ When values resemble options, attached assignment is required (`--label=--verbos
 Interspersed options after positional arguments are accepted within the same command scope
 while preserving positional argument ordering (#534). Subcommand boundaries yield
 unconsumed arguments to the child command. Unambiguous parent options can be supplied
-after child commands; child-declared options shadow parent options without conflict.
+before or after child commands; child-declared options shadow parent options without conflict.
+Required parent flags are validated across the selected command path: supplying the flag either
+before or after child dispatch satisfies the requirement, while omitting it reports typed
+`cmd.UsageMissingRequiredFlag` from the selected leaf command without premature mutation or acquisition.
+
+In mixed parser trees (e.g. plus-minus root with GNU or Go-flag child commands), staged parent
+option mutations are committed only after child option parsing, required-flag validation, and
+positional argument validation all succeed. Any child failure or missing child positional argument
+prevents parent commits and prevents parent I/O side effects.
 
 Nonboolean plus operations have no implicit behavior and require explicit consumer
 configuration (#531):

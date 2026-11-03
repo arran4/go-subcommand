@@ -90,6 +90,7 @@ type RootCmd struct {
 	CommandAction func(c *RootCmd) error
 	{{- if eq .ResolvedCLIParser "plus-minus" }}
 	plusMinusCommit func() error
+	seenFlags       map[string]bool
 	{{- end }}
 }
 
@@ -101,6 +102,10 @@ func (c *RootCmd) commitAll() error {
 		return fn()
 	}
 	return nil
+}
+
+func (c *RootCmd) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
 }
 {{- end }}
 
@@ -347,6 +352,62 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- template "cli_parser_plus-minus" . }}
 	{{- end }}
 
+	{{- if eq .ResolvedCLIParser "plus-minus" }}
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		{{- if and .FunctionName .SubCommands (not $needsRemainingArgs) }}
+		c.Usage()
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+		{{- end }}
+	}
+	{{- if .DefaultRoute }}
+	{{- $routeParts := .DefaultRouteParts }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		{{- if gt (len $routeParts) 1 }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+		{{- else }}
+		return c.Commands["{{index $routeParts 0 | lower}}"]().Execute(nil)
+		{{- end }}
+	}
+	{{- else }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		if sub, ok := c.Commands["{{index $routeParts 0 | lower}}"]; ok {
+			{{- if gt (len $routeParts) 1 }}
+			return sub().Execute([]string{ {{range $i, $p := slice $routeParts 1}}{{if $i}}, {{end}}"{{$p}}"{{end}} })
+			{{- else }}
+			return sub().Execute(nil)
+			{{- end }}
+		}
+	}
+	{{- end }}
+	{{- end }}
+	{{- if .HasRequiredFlags }}
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+	if !isHelpRequest {
+		{{- range .Parameters }}
+		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
+		if !c.hasSeenFlag("{{.Name}}") {
+			return c.usageError(cmd.UsageMissingRequiredFlag, "{{.Name}}", nil, "required flag {{.PrimaryFlagName}} not provided")
+		}
+		{{- end }}
+		{{- end }}
+	}
+	{{- end }}
+	{{- else }}
 	{{- if .HasRequiredFlags }}
 	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
 	if !isHelpRequest && !dashDashSeen {
@@ -387,6 +448,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
 		{{- end }}
 	}
+	{{- end }}
 
 	{{- if .FunctionName }}
 
