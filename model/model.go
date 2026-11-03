@@ -90,6 +90,11 @@ type ParserConfig struct {
 	Func *FuncRef
 }
 
+type PlusOperationConfig struct {
+	Mode string   `json:",omitempty"`
+	Func *FuncRef `json:",omitempty"`
+}
+
 // Command represents a top-level command.
 type Command struct {
 	*DataModel
@@ -224,6 +229,15 @@ type FunctionParameter struct {
 	// InheritedFrom is the parent parameter name referenced by a differently named child parameter.
 	// It is parser metadata and is intentionally excluded from serialized models.
 	InheritedFrom string `json:"-"`
+
+	// ShortAliases is the list of short option names (e.g., "v", "q") distinct from long names.
+	ShortAliases []string `json:",omitempty"`
+	// LongAliases is the list of long option names (e.g., "verbose", "quiet", "a") distinct from short names.
+	LongAliases []string `json:",omitempty"`
+	// PlusBare configures an explicit bare plus operation (+flag or ++flag without a value).
+	PlusBare PlusOperationConfig `json:",omitempty"`
+	// PlusValue configures an explicit assigned plus operation (+flag=val or ++flag=val).
+	PlusValue PlusOperationConfig `json:",omitempty"`
 
 	TypeImportPath  string
 	TypePackageName string
@@ -749,6 +763,82 @@ func (p *FunctionParameter) BareValueCode() string {
 	return fmt.Sprintf("*new(%s)", base)
 }
 
+// ZeroValueCode returns the Go expression representing the zero value of the parameter.
+func (p *FunctionParameter) ZeroValueCode() string {
+	if p.IsBool() {
+		return "false"
+	}
+	if p.IsString() {
+		return `""`
+	}
+	if p.IsDuration() {
+		return "0"
+	}
+	base := p.BaseType()
+	switch base {
+	case "int", "int64", "int32", "int16", "int8",
+		"uint", "uint64", "uint32", "uint16", "uint8",
+		"float64", "float32":
+		return "0"
+	}
+	return fmt.Sprintf("*new(%s)", base)
+}
+
+// DefaultValueCode returns the Go expression representing the default value or zero value.
+func (p *FunctionParameter) DefaultValueCode() string {
+	if p.HasDefaultValue && p.Default != "" {
+		if p.IsString() && !strings.HasPrefix(p.Default, `"`) {
+			return fmt.Sprintf("%q", p.Default)
+		}
+		return p.Default
+	}
+	return p.ZeroValueCode()
+}
+
+// SupportsBarePlus returns true if the parameter supports a bare plus operation (+flag or ++flag).
+func (p *FunctionParameter) SupportsBarePlus() bool {
+	if p.IsBool() {
+		return true
+	}
+	return p.PlusBare.Mode != "" || (p.PlusBare.Func != nil && p.PlusBare.Func.FunctionName != "")
+}
+
+// SupportsValuePlus returns true if the parameter supports an assigned plus operation (+flag=val or ++flag=val).
+func (p *FunctionParameter) SupportsValuePlus() bool {
+	return p.PlusValue.Mode != "" || (p.PlusValue.Func != nil && p.PlusValue.Func.FunctionName != "")
+}
+
+// BarePlusCall returns the expression to evaluate for a bare plus operation.
+func (p *FunctionParameter) BarePlusCall() string {
+	if p.PlusBare.Func != nil && p.PlusBare.Func.FunctionName != "" {
+		if p.PlusBare.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s()", p.PlusBare.Func.CommandPackageName, p.PlusBare.Func.FunctionName)
+		}
+		return fmt.Sprintf("%s()", p.PlusBare.Func.FunctionName)
+	}
+	if p.PlusBare.Mode == "zero" {
+		return p.ZeroValueCode()
+	}
+	if p.PlusBare.Mode == "reset" {
+		return p.DefaultValueCode()
+	}
+	return ""
+}
+
+// ValuePlusCall returns the expression to evaluate for an assigned plus operation.
+func (p *FunctionParameter) ValuePlusCall(valName string) string {
+	if p.PlusValue.Func != nil && p.PlusValue.Func.FunctionName != "" {
+		if p.PlusValue.Func.CommandPackageName != "" {
+			return fmt.Sprintf("%s.%s(%s)", p.PlusValue.Func.CommandPackageName, p.PlusValue.Func.FunctionName, valName)
+		}
+		return fmt.Sprintf("%s(%s)", p.PlusValue.Func.FunctionName, valName)
+	}
+	if p.PlusValue.Mode == "set" {
+		return valName
+	}
+	return valName
+}
+
 // IsSupportedOptionalValueType returns true if the parameter type is supported
 // by the optional-value flag contract.
 func (p *FunctionParameter) IsSupportedOptionalValueType() bool {
@@ -1178,8 +1268,263 @@ func (cmd *Command) HasRequiredFlags() bool {
 	return requiredFlagPresent(cmd.Parameters)
 }
 
+// HasPlusMinusInHierarchy reports whether the root command uses the plus-minus runtime CLI parser backend.
+func (cmd *Command) HasPlusMinusInHierarchy() bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.ResolvedCLIParser == "plus-minus"
+}
+
+// RequiredFlagSatisfier specifies a command receiver in the active command hierarchy
+// and flag name that can satisfy a required parameter.
+type RequiredFlagSatisfier struct {
+	// Accessor is the receiver path relative to the executing subcommand struct (e.g. "RootCmd", "ParentCmd", or "" for self).
+	Accessor string
+	// FlagKey is the parameter key in seenFlags for that scope.
+	FlagKey string
+}
+
+// PathRequiredFlag describes a required flag along the active command path,
+// including its declaration command and the valid scope satisfiers.
+type PathRequiredFlag struct {
+	*FunctionParameter
+	DeclaringCommand string
+	Satisfiers       []RequiredFlagSatisfier
+}
+
+// PathRequiredFlags returns all non-positional required flags for the root command.
+func (cmd *Command) PathRequiredFlags() []*PathRequiredFlag {
+	if cmd == nil {
+		return nil
+	}
+	var result []*PathRequiredFlag
+	for _, p := range cmd.Parameters {
+		if p.Required && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+			result = append(result, &PathRequiredFlag{
+				FunctionParameter: p,
+				DeclaringCommand:  cmd.MainCmdName,
+				Satisfiers: []RequiredFlagSatisfier{
+					{
+						Accessor: "",
+						FlagKey:  p.Name,
+					},
+				},
+			})
+		}
+	}
+	return result
+}
+
+// HasPathRequiredFlags reports whether there are required flags for the root command.
+func (cmd *Command) HasPathRequiredFlags() bool {
+	return len(cmd.PathRequiredFlags()) > 0
+}
+
 func (sc *SubCommand) HasRequiredFlags() bool {
 	return requiredFlagPresent(sc.Parameters)
+}
+
+// HasPlusMinusInHierarchy reports whether this subcommand or any of its ancestors uses plus-minus.
+func (sc *SubCommand) HasPlusMinusInHierarchy() bool {
+	if sc == nil {
+		return false
+	}
+	if sc.ResolvedCLIParser == "plus-minus" {
+		return true
+	}
+	if sc.Parent != nil {
+		return sc.Parent.HasPlusMinusInHierarchy()
+	}
+	if sc.Command != nil {
+		return sc.Command.ResolvedCLIParser == "plus-minus"
+	}
+	return false
+}
+
+// PathRequiredFlags returns all non-positional required flags across the command hierarchy
+// from root down to this subcommand, tracking declaration ownership and all valid scope satisfiers.
+func (sc *SubCommand) PathRequiredFlags() []*PathRequiredFlag {
+	if sc == nil {
+		return nil
+	}
+
+	type scopeInfo struct {
+		cmdName     string
+		structName  string
+		accessor    string
+		params      []*FunctionParameter
+		isPlusMinus bool
+	}
+
+	var scopes []scopeInfo
+	if sc.Command != nil {
+		scopes = append(scopes, scopeInfo{
+			cmdName:     sc.MainCmdName,
+			structName:  "RootCmd",
+			accessor:    "RootCmd",
+			params:      sc.Command.Parameters,
+			isPlusMinus: sc.Command.ResolvedCLIParser == "plus-minus",
+		})
+	}
+
+	var ancestors []*SubCommand
+	for curr := sc.Parent; curr != nil; curr = curr.Parent {
+		ancestors = append([]*SubCommand{curr}, ancestors...)
+	}
+	for _, a := range ancestors {
+		scopes = append(scopes, scopeInfo{
+			cmdName:     a.SubCommandName,
+			structName:  a.SubCommandStructName,
+			accessor:    a.SubCommandStructName,
+			params:      a.Parameters,
+			isPlusMinus: a.ResolvedCLIParser == "plus-minus",
+		})
+	}
+
+	scopes = append(scopes, scopeInfo{
+		cmdName:     sc.SubCommandName,
+		structName:  sc.SubCommandStructName,
+		accessor:    "", // self
+		params:      sc.Parameters,
+		isPlusMinus: sc.ResolvedCLIParser == "plus-minus",
+	})
+
+	type paramDeclaration struct {
+		declaringScopeIndex int
+		paramName           string
+		primaryParam        *FunctionParameter
+		isRequired          bool
+	}
+
+	var decls []*paramDeclaration
+
+	for i, scope := range scopes {
+		for _, p := range scope.params {
+			if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+				continue
+			}
+
+			isInherited := p.Inherited || (p.DeclaredIn != "" && p.DeclaredIn != scope.cmdName)
+			if isInherited {
+				targetName := p.Name
+				if p.InheritedFrom != "" {
+					targetName = p.InheritedFrom
+				}
+				var matched *paramDeclaration
+				for idx := len(decls) - 1; idx >= 0; idx-- {
+					d := decls[idx]
+					if d.declaringScopeIndex < i {
+						if p.DeclaredIn != "" && scopes[d.declaringScopeIndex].cmdName == p.DeclaredIn && d.paramName == targetName {
+							matched = d
+							break
+						} else if p.DeclaredIn == "" && d.paramName == targetName {
+							matched = d
+							break
+						}
+					}
+				}
+				if matched != nil {
+					if p.Required {
+						matched.isRequired = true
+					}
+					continue
+				}
+			}
+
+			decls = append(decls, &paramDeclaration{
+				declaringScopeIndex: i,
+				paramName:           p.Name,
+				primaryParam:        p,
+				isRequired:          p.Required,
+			})
+		}
+	}
+
+	var result []*PathRequiredFlag
+	for _, decl := range decls {
+		if !decl.isRequired {
+			continue
+		}
+
+		var satisfiers []RequiredFlagSatisfier
+		satisfiers = append(satisfiers, RequiredFlagSatisfier{
+			Accessor: scopes[decl.declaringScopeIndex].accessor,
+			FlagKey:  decl.paramName,
+		})
+
+		for k := decl.declaringScopeIndex + 1; k < len(scopes); k++ {
+			scope := scopes[k]
+			shadowed := false
+			for _, pk := range scope.params {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+					continue
+				}
+				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
+				if !pkInherited && pk.Name == decl.paramName {
+					shadowed = true
+					break
+				}
+			}
+			if shadowed {
+				break
+			}
+
+			explicitlyInherited := false
+			for _, pk := range scope.params {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+					continue
+				}
+				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
+				if pkInherited {
+					matches := false
+					if pk.DeclaredIn != "" && pk.DeclaredIn == scopes[decl.declaringScopeIndex].cmdName {
+						if pk.InheritedFrom != "" && pk.InheritedFrom == decl.paramName {
+							matches = true
+						} else if pk.InheritedFrom == "" && pk.Name == decl.paramName {
+							matches = true
+						}
+					} else if pk.InheritedFrom != "" && pk.InheritedFrom == decl.paramName {
+						matches = true
+					} else if pk.InheritedFrom == "" && pk.Name == decl.paramName {
+						matches = true
+					}
+					if matches {
+						explicitlyInherited = true
+						satisfiers = append(satisfiers, RequiredFlagSatisfier{
+							Accessor: scope.accessor,
+							FlagKey:  pk.Name,
+						})
+						break
+					}
+				}
+			}
+
+			if explicitlyInherited {
+				continue
+			}
+
+			if scope.isPlusMinus {
+				satisfiers = append(satisfiers, RequiredFlagSatisfier{
+					Accessor: scope.accessor,
+					FlagKey:  decl.paramName,
+				})
+			}
+		}
+
+		result = append(result, &PathRequiredFlag{
+			FunctionParameter: decl.primaryParam,
+			DeclaringCommand:  scopes[decl.declaringScopeIndex].cmdName,
+			Satisfiers:        satisfiers,
+		})
+	}
+
+	return result
+}
+
+// HasPathRequiredFlags reports whether there are required flags across the path.
+func (sc *SubCommand) HasPathRequiredFlags() bool {
+	return len(sc.PathRequiredFlags()) > 0
 }
 
 func (sc *SubCommand) ResolveInheritance() {

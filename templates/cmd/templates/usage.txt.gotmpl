@@ -70,6 +70,10 @@ Flags:
 {{- end}}
 {{- end}}
 {{- end}}
+{{- if eq .ResolvedCLIParser "plus-minus"}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+{{- end}}
 {{- $maxPositional := .MaxPositionalLength}}
 {{- if gt $maxPositional 0}}
 

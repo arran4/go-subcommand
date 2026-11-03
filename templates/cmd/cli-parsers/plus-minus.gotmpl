@@ -1,0 +1,225 @@
+{{- define "cli_parser_plus-minus" }}
+	{{- $allParams := plusMinusAllOptions . }}
+	plusMinusOptions := map[string]plusMinusOption{
+	{{- range $allParams }}
+	"{{.Name}}": {
+		Key: "{{.Name}}",
+		Boolean: {{.IsBool}},
+		IO: {{or .IsWriter .IsReader}},
+		SupportsBarePlus: {{.SupportsBarePlus}},
+		SupportsValuePlus: {{.SupportsValuePlus}},
+		Set: func(value string) error {
+			{{- if or .IsWriter .IsReader }}
+			{{- template "acquire_io" (list . "value") }}
+			{{- else }}
+			{{- if and .IsString (not .HasCustomParser) }}
+			v := value
+			{{- else }}
+			v, err := {{.ParserCall "value"}}
+			if err != nil { return err }
+			{{- end }}
+			{{- if .HasPointer }}
+			val := {{.CastCode "v"}}
+			{{- if .IsSlice }}
+			c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+			{{- else }}
+			c.{{.ValueFieldName}} = &val
+			{{- end }}
+			{{- else if .IsSlice }}
+			c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+			{{- else }}
+			c.{{.ValueFieldName}} = {{.CastCode "v"}}
+			{{- end }}
+			{{- end }}
+			return nil
+		},
+		StageMinus: func(value string) (func() error, error) {
+			{{- if or .IsWriter .IsReader }}
+			return func() error {
+				{{- template "acquire_io" (list . "value") }}
+				return nil
+			}, nil
+			{{- else }}
+			{{- if and .IsString (not .HasCustomParser) }}
+			v := value
+			{{- else }}
+			v, err := {{.ParserCall "value"}}
+			if err != nil { return nil, err }
+			{{- end }}
+			return func() error {
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- end }}
+		},
+		StageBarePlus: func() (func() error, error) {
+			{{- if .IsBool }}
+			v := false
+			return func() error {
+				{{- if .HasPointer }}
+				val := v
+				c.{{.ValueFieldName}} = &val
+				{{- else }}
+				c.{{.ValueFieldName}} = v
+				{{- end }}
+				return nil
+			}, nil
+			{{- else if .SupportsBarePlus }}
+			{{- if and .PlusBare.Func (ne .PlusBare.Func.FunctionName "") }}
+			return func() error {
+				v, err := {{.BarePlusCall}}
+				if err != nil { return err }
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- else if eq .PlusBare.Mode "reset" }}
+			var v {{.BaseType}} = {{.DefaultValueCode}}
+			return func() error {
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- else if eq .PlusBare.Mode "zero" }}
+			var v {{.BaseType}} = {{.ZeroValueCode}}
+			return func() error {
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- else }}
+			return nil, nil
+			{{- end }}
+			{{- else }}
+			return nil, nil
+			{{- end }}
+		},
+		StageValuePlus: func(value string) (func() error, error) {
+			{{- if .SupportsValuePlus }}
+			{{- if and .IsString (not .HasCustomParser) }}
+			raw := value
+			{{- else }}
+			raw, err := {{.ParserCall "value"}}
+			if err != nil { return nil, err }
+			{{- end }}
+			{{- if and .PlusValue.Func (ne .PlusValue.Func.FunctionName "") }}
+			return func() error {
+				v, err := {{.ValuePlusCall "raw"}}
+				if err != nil { return err }
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- else }}
+			v := raw
+			return func() error {
+				{{- if .HasPointer }}
+				val := {{.CastCode "v"}}
+				{{- if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, &val)
+				{{- else }}
+				c.{{.ValueFieldName}} = &val
+				{{- end }}
+				{{- else if .IsSlice }}
+				c.{{.ValueFieldName}} = append(c.{{.ValueFieldName}}, {{.CastCode "v"}})
+				{{- else }}
+				c.{{.ValueFieldName}} = {{.CastCode "v"}}
+				{{- end }}
+				return nil
+			}, nil
+			{{- end }}
+			{{- else }}
+			return nil, nil
+			{{- end }}
+		},
+	},
+	{{- end }}
+	}
+	plusMinusShort := map[string]plusMinusOption{
+	{{- range $allParams }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Short }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	}
+	plusMinusLong := map[string]plusMinusOption{
+	{{- range $allParams }}
+	{{- $param := . }}
+	{{- range (plusMinusNames .).Long }}
+	"{{.}}": plusMinusOptions["{{$param.Name}}"],
+	{{- end }}
+	{{- end }}
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	{{- if .IsAppRoot }}
+	for name := range c.Commands {
+		subcmdMap[name] = true
+	}
+	{{- else }}
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	{{- end }}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	if err != nil { return err }
+	if pmSpecial == "help" || pmSpecial == "usage" { c.Usage(); return nil }
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+{{- end }}

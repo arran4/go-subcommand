@@ -1,0 +1,74 @@
+-- input/go.mod --
+module example.com/boundary
+
+go 1.22
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+	"io"
+)
+
+// Root is a subcommand `app` -- Root with required flag.
+// CLI-Parser: plus-minus
+//
+// Flags:
+//
+//	token: (required) --token Auth token.
+//	out: --out Output writer.
+func Root(token string, out io.Writer) {
+	fmt.Printf("root: token=%s\n", token)
+	if out != nil {
+		fmt.Fprintf(out, "token=%s\n", token)
+	}
+}
+
+// Child is a subcommand `app child` -- Plus-minus child inheriting parent options.
+//
+// Flags:
+//
+//	token: (from parent) Inherited token.
+func Child(token string) {
+	fmt.Printf("child: token=%s\n", token)
+}
+
+// GnuChild is a subcommand `app gnu` -- GNU child with required positional.
+// CLI-Parser: gnu
+//
+// Flags:
+//
+//	token: (from parent) Inherited token.
+//	target: @1 Positional target.
+func GnuChild(token string, target string) {
+	fmt.Printf("gnu: token=%s target=%s\n", token, target)
+}
+
+// GoFlagChild is a subcommand `app goflag` -- Go-flag child with required positional.
+// CLI-Parser: go-flag
+//
+// Flags:
+//
+//	token: (from parent) Inherited token.
+//	item: @1 Positional item.
+func GoFlagChild(token string, item string) {
+	fmt.Printf("goflag: token=%s item=%s\n", token, item)
+}
+
+// Shadow is a subcommand `app shadow` -- Child with independent optional token.
+//
+// Flags:
+//
+//	token: --token Child independent token.
+func Shadow(token string) {
+	fmt.Printf("shadow: token=%s\n", token)
+}
+
+// BothReq is a subcommand `app bothreq` -- Child requiring its own independent token.
+//
+// Flags:
+//
+//	token: (required) --token Child required token.
+func BothReq(token string) {
+	fmt.Printf("bothreq: token=%s\n", token)
+}
