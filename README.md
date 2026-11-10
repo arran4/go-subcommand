@@ -449,6 +449,18 @@ input. For `io.Writer` and `io.WriteCloser`, pass `-` to select standard
 output. Generated usage repeats this direction-specific meaning, including for
 `default: -`. Names such as `stdin` and `stdout` remain ordinary file paths.
 
+### Invocation-Scoped Streams
+
+Generated command trees support per-invocation stream redirection without mutable package-global state:
+
+*   `root.SetStreams(stdout, stderr io.Writer)`: Configures invocation-scoped standard output and standard error writers on `*RootCmd`.
+*   `root.SetIO(stdin io.Reader, stdout, stderr io.Writer)`: Configures stdin, stdout, and stderr on `*RootCmd`.
+*   `generatedRunWithStreams(args []string, stdout, stderr io.Writer) int`: Executes the generated runner capturing generator help, usage, errors, and version in the supplied writers.
+*   `generatedRunWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) int`: Executes the runner with custom input and output streams.
+
+When streams are redirected, generator-produced usage, help, version, and diagnostics are sent to the configured writers. When `-` is passed for an `io.Reader` or `io.Writer` parameter, it borrows the invocation's configured stream.
+
+
 ### Nesting Commands
 
 Nesting is implicit based on the command path string.

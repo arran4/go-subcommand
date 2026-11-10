@@ -31,9 +31,9 @@ type UsageDataSkillList struct {
 }
 
 func (c *SkillList) Usage() {
-	err := executeUsage(os.Stderr, "skill_list_usage.txt", UsageDataSkillList{c, false})
+	err := executeUsage(c.outputStderr(), "skill_list_usage.txt", UsageDataSkillList{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -44,9 +44,9 @@ func (c *SkillList) usageError(kind cmd.UsageErrorKind, flag string, cause error
 func (c *SkillList) commandPath() string { return "gosubc skill list" }
 
 func (c *SkillList) UsageRecursive() {
-	err := executeUsage(os.Stderr, "skill_list_usage.txt", UsageDataSkillList{c, true})
+	err := executeUsage(c.outputStderr(), "skill_list_usage.txt", UsageDataSkillList{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -147,6 +147,7 @@ func (c *Skill) NewSkillList() *SkillList {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.scope, "scope", "user", "The installation scope ('user' or 'project')")
 
@@ -166,7 +167,7 @@ func (c *Skill) NewSkillList() *SkillList {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

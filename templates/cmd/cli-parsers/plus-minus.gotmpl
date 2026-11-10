@@ -217,7 +217,7 @@
 	if err != nil { return err }
 	if pmSpecial == "help" || pmSpecial == "usage" { c.Usage(); return nil }
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags

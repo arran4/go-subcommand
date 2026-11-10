@@ -34,9 +34,9 @@ type UsageDataList struct {
 }
 
 func (c *List) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, false})
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataList{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -47,9 +47,9 @@ func (c *List) usageError(kind cmd.UsageErrorKind, flag string, cause error, for
 func (c *List) commandPath() string { return "gosubc list" }
 
 func (c *List) UsageRecursive() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataList{c, true})
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataList{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,6 +172,7 @@ func (c *RootCmd) NewList() *List {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
@@ -195,7 +196,7 @@ func (c *RootCmd) NewList() *List {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

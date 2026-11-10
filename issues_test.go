@@ -95,7 +95,7 @@ func TestIssue350_388_GeneratedRequirements(t *testing.T) {
 	}
 
 	rootGo := string(mustGeneratedFile(t, writer, "cmd/app/root.go"))
-	assertContains(t, rootGo, `executeUsage(os.Stderr, "app_usage.txt"`, "root usage should use embedded usage template")
+	assertContains(t, rootGo, `executeUsage(c.outputStderr(), "app_usage.txt"`, "root usage should use embedded usage template")
 	assertContains(t, rootGo, `seenFlags := make(map[string]bool)`, "required root flag should create seenFlags")
 	assertContains(t, rootGo, `required flag --config not provided`, "required root flag should be validated")
 	if action := strings.Index(rootGo, "if c.CommandAction != nil"); action == -1 {

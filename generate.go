@@ -1075,12 +1075,6 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		if p.DefaultExpr != nil {
 			add(p.DefaultExpr)
 		}
-		if p.IsWriter() || p.IsReader() {
-			if !seen["os"] {
-				seen["os"] = true
-				imports = append(imports, templateImport{Path: "os"})
-			}
-		}
 	}
 	return imports
 }
@@ -1219,11 +1213,11 @@ func sanitizeImportIdentifier(identifier string) string {
 
 func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
-	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"}, templateImport{Path: "os"})
+	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"})
 	imports = append(imports, templateImport{Path: cmd.PackagePath + "/cmd", Fixed: true})
 
 	if cmd.SubCommandFunctionName != "" && cmd.ReturnsError {
-		imports = append(imports, templateImport{Path: "errors"})
+		imports = append(imports, templateImport{Path: "errors"}, templateImport{Path: "os"})
 	}
 
 	for _, p := range cmd.Parameters {

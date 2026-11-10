@@ -829,6 +829,9 @@ type RootCmd struct {
 	Version         string
 	Commit          string
 	Date            string
+	Stdin           io.Reader
+	Stdout          io.Writer
+	Stderr          io.Writer
 	alpha           bool
 	beta            bool
 	ab              bool
@@ -841,6 +844,43 @@ type RootCmd struct {
 	seenFlags       map[string]bool
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+func (c *RootCmd) SetStreams(stdout, stderr io.Writer) {
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
+func (c *RootCmd) SetIO(stdin io.Reader, stdout, stderr io.Writer) {
+	c.Stdin = stdin
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
 func (c *RootCmd) commitAll() error {
 	if c.plusMinusCommit != nil {
 		fn := c.plusMinusCommit
@@ -855,9 +895,9 @@ func (c *RootCmd) hasSeenFlag(name string) bool {
 }
 
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -868,9 +908,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -887,6 +927,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Commit:   commit,
 		Date:     date,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.BoolVar(&c.alpha, "enable", true, "Alpha toggle.")
@@ -1023,11 +1064,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -1225,7 +1266,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1568,7 +1609,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 
@@ -1612,9 +1652,9 @@ type UsageDataGnuPm struct {
 }
 
 func (c *GnuPm) Usage() {
-	err := executeUsage(os.Stderr, "pm_usage.txt", UsageDataGnuPm{c, false})
+	err := executeUsage(c.outputStderr(), "pm_usage.txt", UsageDataGnuPm{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1625,9 +1665,9 @@ func (c *GnuPm) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *GnuPm) commandPath() string { return "app gnu pm" }
 
 func (c *GnuPm) UsageRecursive() {
-	err := executeUsage(os.Stderr, "pm_usage.txt", UsageDataGnuPm{c, true})
+	err := executeUsage(c.outputStderr(), "pm_usage.txt", UsageDataGnuPm{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1928,7 +1968,7 @@ func (c *GnuPm) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1970,6 +2010,7 @@ func (c *Gnu) NewGnuPm() *GnuPm {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.child, "child", true, "Child-only toggle.")
 	set.BoolVar(&v.child, "c", true, "Child-only toggle.")

@@ -33,9 +33,9 @@ type UsageDataFormatSourceComments struct {
 }
 
 func (c *FormatSourceComments) Usage() {
-	err := executeUsage(os.Stderr, "format-source-comments_usage.txt", UsageDataFormatSourceComments{c, false})
+	err := executeUsage(c.outputStderr(), "format-source-comments_usage.txt", UsageDataFormatSourceComments{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -46,9 +46,9 @@ func (c *FormatSourceComments) usageError(kind cmd.UsageErrorKind, flag string, 
 func (c *FormatSourceComments) commandPath() string { return "gosubc format-source-comments" }
 
 func (c *FormatSourceComments) UsageRecursive() {
-	err := executeUsage(os.Stderr, "format-source-comments_usage.txt", UsageDataFormatSourceComments{c, true})
+	err := executeUsage(c.outputStderr(), "format-source-comments_usage.txt", UsageDataFormatSourceComments{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -160,6 +160,7 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
@@ -181,7 +182,7 @@ func (c *RootCmd) NewFormatSourceComments() *FormatSourceComments {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

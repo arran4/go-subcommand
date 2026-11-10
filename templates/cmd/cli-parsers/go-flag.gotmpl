@@ -4,6 +4,7 @@
 
 
 	c.FlagSet = flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 
@@ -24,6 +25,7 @@
 
 	// Create a local flagset so it doesn't ExitOnError or panic
 	fs := flag.NewFlagSet(c.FlagSet.Name(), flag.ContinueOnError)
+	fs.SetOutput(c.outputStderr())
 	fs.Usage = c.Usage
 
 	{{- range .Parameters }}

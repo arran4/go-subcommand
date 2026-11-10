@@ -34,9 +34,9 @@ type UsageDataValidate struct {
 }
 
 func (c *Validate) Usage() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, false})
+	err := executeUsage(c.outputStderr(), "validate_usage.txt", UsageDataValidate{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -47,9 +47,9 @@ func (c *Validate) usageError(kind cmd.UsageErrorKind, flag string, cause error,
 func (c *Validate) commandPath() string { return "gosubc validate" }
 
 func (c *Validate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "validate_usage.txt", UsageDataValidate{c, true})
+	err := executeUsage(c.outputStderr(), "validate_usage.txt", UsageDataValidate{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,6 +172,7 @@ func (c *RootCmd) NewValidate() *Validate {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory containing go.mod")
 
@@ -195,7 +196,7 @@ func (c *RootCmd) NewValidate() *Validate {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

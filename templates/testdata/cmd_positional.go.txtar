@@ -36,7 +36,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -61,9 +60,9 @@ type UsageDataMyCmd struct {
 }
 
 func (c *MyCmd) Usage() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataMyCmd{c, false})
+	err := executeUsage(c.outputStderr(), "mycmd_usage.txt", UsageDataMyCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -74,9 +73,9 @@ func (c *MyCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *MyCmd) commandPath() string { return "mycmd" }
 
 func (c *MyCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataMyCmd{c, true})
+	err := executeUsage(c.outputStderr(), "mycmd_usage.txt", UsageDataMyCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -118,6 +117,7 @@ func (c *RootCmd) NewMyCmd() *MyCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.verbose, "v", false, "Enable verbose output")
 	set.Usage = v.Usage

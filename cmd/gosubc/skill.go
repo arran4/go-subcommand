@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -27,9 +26,9 @@ type UsageDataSkill struct {
 }
 
 func (c *Skill) Usage() {
-	err := executeUsage(os.Stderr, "skill_usage.txt", UsageDataSkill{c, false})
+	err := executeUsage(c.outputStderr(), "skill_usage.txt", UsageDataSkill{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -40,9 +39,9 @@ func (c *Skill) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Skill) commandPath() string { return "gosubc skill" }
 
 func (c *Skill) UsageRecursive() {
-	err := executeUsage(os.Stderr, "skill_usage.txt", UsageDataSkill{c, true})
+	err := executeUsage(c.outputStderr(), "skill_usage.txt", UsageDataSkill{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -117,6 +116,7 @@ func (c *RootCmd) NewSkill() *Skill {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	{

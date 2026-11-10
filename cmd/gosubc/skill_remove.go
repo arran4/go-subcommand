@@ -32,9 +32,9 @@ type UsageDataSkillRemove struct {
 }
 
 func (c *SkillRemove) Usage() {
-	err := executeUsage(os.Stderr, "remove_usage.txt", UsageDataSkillRemove{c, false})
+	err := executeUsage(c.outputStderr(), "remove_usage.txt", UsageDataSkillRemove{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -45,9 +45,9 @@ func (c *SkillRemove) usageError(kind cmd.UsageErrorKind, flag string, cause err
 func (c *SkillRemove) commandPath() string { return "gosubc skill remove" }
 
 func (c *SkillRemove) UsageRecursive() {
-	err := executeUsage(os.Stderr, "remove_usage.txt", UsageDataSkillRemove{c, true})
+	err := executeUsage(c.outputStderr(), "remove_usage.txt", UsageDataSkillRemove{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -160,6 +160,7 @@ func (c *Skill) NewSkillRemove() *SkillRemove {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.scope, "scope", "user", "The installation scope ('user' or 'project')")
 
@@ -179,7 +180,7 @@ func (c *Skill) NewSkillRemove() *SkillRemove {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

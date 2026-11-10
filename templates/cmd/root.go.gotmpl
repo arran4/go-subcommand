@@ -27,6 +27,19 @@ var generatedOpenReader = func(name string) (io.ReadCloser, error) {
 var generatedOpenWriter = func(name string) (io.WriteCloser, error) {
 	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 }
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error { return nil }
+
+func toWriteCloser(w io.Writer) io.WriteCloser {
+	if wc, ok := w.(io.WriteCloser); ok {
+		return wc
+	}
+	return nopWriteCloser{w}
+}
 {{- end}}
 
 type Cmd interface {
@@ -84,6 +97,9 @@ type RootCmd struct {
 	Version  string
 	Commit   string
 	Date     string
+	Stdin    io.Reader
+	Stdout   io.Writer
+	Stderr   io.Writer
 	{{- range .Parameters}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
@@ -92,6 +108,44 @@ type RootCmd struct {
 	plusMinusCommit func() error
 	seenFlags       map[string]bool
 	{{- end }}
+}
+
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+func (c *RootCmd) SetStreams(stdout, stderr io.Writer) {
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
+func (c *RootCmd) SetIO(stdin io.Reader, stdout, stderr io.Writer) {
+	c.Stdin = stdin
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
 }
 
 {{- if eq .ResolvedCLIParser "plus-minus" }}
@@ -110,9 +164,9 @@ func (c *RootCmd) hasSeenFlag(name string) bool {
 {{- end }}
 
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -123,9 +177,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "{{.MainCmdName}}" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "{{.MainCmdName | lower}}_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -158,6 +212,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		{{.Name}}: {{.Name}},
 		{{- end}}
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 {{- template "flag_definitions" (list "c" "c" .Parameters) }}
 	{{if .FunctionName}}
@@ -176,7 +231,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
         return nil
       }
       if errors.Is(err, cmd.ErrHelp) {
-        fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+        fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
 			if errors.Is(err, cmd.ErrUsage) { return err }
@@ -312,11 +367,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}

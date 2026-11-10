@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -28,9 +27,9 @@ type UsageDataTemplate struct {
 }
 
 func (c *Template) Usage() {
-	err := executeUsage(os.Stderr, "template_usage.txt", UsageDataTemplate{c, false})
+	err := executeUsage(c.outputStderr(), "template_usage.txt", UsageDataTemplate{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -41,9 +40,9 @@ func (c *Template) usageError(kind cmd.UsageErrorKind, flag string, cause error,
 func (c *Template) commandPath() string { return "gosubc template" }
 
 func (c *Template) UsageRecursive() {
-	err := executeUsage(os.Stderr, "template_usage.txt", UsageDataTemplate{c, true})
+	err := executeUsage(c.outputStderr(), "template_usage.txt", UsageDataTemplate{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -123,6 +122,7 @@ func (c *RootCmd) NewTemplate() *Template {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Template) error {

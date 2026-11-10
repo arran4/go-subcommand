@@ -51,7 +51,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 
 	"example.com/plusminus/cmd"
@@ -91,9 +90,9 @@ type UsageDataToggleCmd struct {
 }
 
 func (c *ToggleCmd) Usage() {
-	err := executeUsage(os.Stderr, "toggle_usage.txt", UsageDataToggleCmd{c, false})
+	err := executeUsage(c.outputStderr(), "toggle_usage.txt", UsageDataToggleCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -104,9 +103,9 @@ func (c *ToggleCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error
 func (c *ToggleCmd) commandPath() string { return "app toggle" }
 
 func (c *ToggleCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "toggle_usage.txt", UsageDataToggleCmd{c, true})
+	err := executeUsage(c.outputStderr(), "toggle_usage.txt", UsageDataToggleCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -236,7 +235,7 @@ func (c *ToggleCmd) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -277,6 +276,7 @@ func (c *RootCmd) NewToggleCmd() *ToggleCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.x, "x", false, "Short flag x")
 

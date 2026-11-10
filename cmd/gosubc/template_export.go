@@ -33,9 +33,9 @@ type UsageDataTemplateExport struct {
 }
 
 func (c *TemplateExport) Usage() {
-	err := executeUsage(os.Stderr, "export_usage.txt", UsageDataTemplateExport{c, false})
+	err := executeUsage(c.outputStderr(), "export_usage.txt", UsageDataTemplateExport{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -46,9 +46,9 @@ func (c *TemplateExport) usageError(kind cmd.UsageErrorKind, flag string, cause 
 func (c *TemplateExport) commandPath() string { return "gosubc template export" }
 
 func (c *TemplateExport) UsageRecursive() {
-	err := executeUsage(os.Stderr, "export_usage.txt", UsageDataTemplateExport{c, true})
+	err := executeUsage(c.outputStderr(), "export_usage.txt", UsageDataTemplateExport{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -183,6 +183,7 @@ func (c *Template) NewTemplateExport() *TemplateExport {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.output, "output", "templates", "The destination directory or file.")
 	set.StringVar(&v.output, "o", "templates", "The destination directory or file.")
@@ -205,7 +206,7 @@ func (c *Template) NewTemplateExport() *TemplateExport {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

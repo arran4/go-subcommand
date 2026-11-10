@@ -91,13 +91,54 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 	CommandAction func(c *RootCmd) error
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+func (c *RootCmd) SetStreams(stdout, stderr io.Writer) {
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
+func (c *RootCmd) SetIO(stdin io.Reader, stdout, stderr io.Writer) {
+	c.Stdin = stdin
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "mycmd_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -108,9 +149,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "mycmd" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "mycmd_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "mycmd_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -127,6 +168,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Commit:   commit,
 		Date:     date,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	{
@@ -215,11 +257,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}

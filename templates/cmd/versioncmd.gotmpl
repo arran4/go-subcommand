@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 )
 
 var _ Cmd = (*RootCmd)(nil)
@@ -17,7 +16,7 @@ type VersionCmd struct {
 }
 
 func (c *VersionCmd) Usage() {
-	err := executeUsage(os.Stderr, "version_usage.txt", c)
+	err := executeUsage(c.outputStderr(), "version_usage.txt", c)
 	if err != nil {
 		log.Panicf("Error generating usage: %s", err)
 	}
@@ -28,7 +27,7 @@ func (c *VersionCmd) Execute(args []string) error {
 	if err != nil {
 		return NewUserError(err, fmt.Sprintf("flag parse error %s", err.Error()))
 	}
-	fmt.Printf("Version: %s\n", version)
+	fmt.Fprintf(c.outputStdout(), "Version: %s\n", version)
 	return nil
 }
 
@@ -38,6 +37,7 @@ func (c *RootCmd) NewVersionCmd() *VersionCmd {
 		RootCmd: c,
 		Flags:   set,
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 	return v
 }
