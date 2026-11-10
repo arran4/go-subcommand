@@ -591,6 +591,56 @@ func TestOptionalPositionalValidation(t *testing.T) {
 			t.Fatalf("expected valid, got: %v", err)
 		}
 	})
+
+	t.Run("named flag cannot be marked optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "flag", Type: "string", Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "(optional value)") {
+			t.Fatalf("expected error directing to (optional value), got: %v", err)
+		}
+	})
+
+	t.Run("variadic cannot be marked optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "args", Type: "[]string", IsPositional: true, IsVarArg: true, Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "cannot be used on a variadic parameter") {
+			t.Fatalf("expected variadic optional error, got: %v", err)
+		}
+	})
+
+	t.Run("inherited parameter cannot be marked optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "parent", Type: "string", Inherited: true, Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "cannot be used on an inherited parameter") {
+			t.Fatalf("expected inherited optional error, got: %v", err)
+		}
+	})
+
+	t.Run("constructor parameter cannot be marked optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "state", Type: "string", Generator: GeneratorConfig{Type: SourceTypeConstructor}, Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "cannot be used on a constructor parameter") {
+			t.Fatalf("expected constructor optional error, got: %v", err)
+		}
+	})
+
+	t.Run("generator parameter cannot be marked optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "dep", Type: "string", Generator: GeneratorConfig{Type: SourceTypeGenerator}, Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "cannot be used on a generator/provider parameter") {
+			t.Fatalf("expected generator optional error, got: %v", err)
+		}
+	})
 }
 
 func TestPositionalString(t *testing.T) {

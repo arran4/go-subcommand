@@ -494,8 +494,25 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 		if p.IsFlagPresence() && (p.Type != "map[string]bool" || p.IsPositional || p.IsVarArg || p.Required || p.HasDefaultValue || p.Inherited || len(p.FlagAliases) != 0 || p.Parser.Type != "" || p.Generator.Func != nil) {
 			return fmt.Errorf("parameter %q: flag presence requires map[string]bool without positional, inherited, required, default, parser or provider options", p.Name)
 		}
-		if p.Required && p.Optional {
-			return fmt.Errorf("command %s: parameter %s cannot be both required and optional", cmdName, p.Name)
+		if p.Optional {
+			if p.Required {
+				return fmt.Errorf("command %s: parameter %s cannot be both required and optional", cmdName, p.Name)
+			}
+			if p.Inherited {
+				return fmt.Errorf("command %s: parameter %s: (optional) annotation cannot be used on an inherited parameter", cmdName, p.Name)
+			}
+			if p.HasConstructor() {
+				return fmt.Errorf("command %s: parameter %s: (optional) annotation cannot be used on a constructor parameter", cmdName, p.Name)
+			}
+			if p.HasGenerator() {
+				return fmt.Errorf("command %s: parameter %s: (optional) annotation cannot be used on a generator/provider parameter", cmdName, p.Name)
+			}
+			if p.IsVarArg {
+				return fmt.Errorf("command %s: parameter %s: (optional) annotation cannot be used on a variadic parameter; variadic arguments are already omittable", cmdName, p.Name)
+			}
+			if !p.IsPositional {
+				return fmt.Errorf("command %s: parameter %s: (optional) annotation applies only to positional parameters; for named flags with optional values use (optional value)", cmdName, p.Name)
+			}
 		}
 		if !p.IsPositional {
 			continue
