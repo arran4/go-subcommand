@@ -1,0 +1,51 @@
+Regression test for Issue #548: Explicitly optional root positionals.
+When a positional argument is marked (optional), it must not be treated as mandatory.
+Bare invocation runs the root action with zero-value without requiring positional count checks.
+Required positionals remain enforced.
+Explicit subcommands work.
+
+-- input/go.mod --
+module example.com/optionalpos
+
+go 1.22
+
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+)
+
+// Root is a subcommand `app` -- Application with optional root positional.
+//
+// Flags:
+//
+//	url: @1 (optional) URL to extract
+//	verbose: -v --verbose Verbose output
+func Root(url string, verbose bool) error {
+	if url == "" {
+		fmt.Println("Usage policy: displaying root help")
+		return nil
+	}
+	fmt.Printf("extracted: %s (verbose=%t)\n", url, verbose)
+	return nil
+}
+
+// Sub is a subcommand `app sub` -- Explicit subcommand with required positional.
+//
+// Flags:
+//
+//	target: @1 (required) Required target
+func Sub(target string) error {
+	fmt.Printf("sub: %s\n", target)
+	return nil
+}
+
+-- expected/invocations.json --
+[
+  {"args": [], "stdout": "Usage policy: displaying root help\n"},
+  {"args": ["https://example.com"], "stdout": "extracted: https://example.com (verbose=false)\n"},
+  {"args": ["-v", "https://example.com"], "stdout": "extracted: https://example.com (verbose=true)\n"},
+  {"args": ["sub", "my-target"], "stdout": "sub: my-target\n"},
+  {"args": ["sub"], "status": 1, "stderr": "Error: expected at least 1 positional arguments, got 0\n"}
+]

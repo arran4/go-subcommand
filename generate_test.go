@@ -4109,3 +4109,96 @@ func TestOptionalValueInvalidConfigurations(t *testing.T) {
 		})
 	}
 }
+
+//go:embed templates/testdata/runtime/issue548_optional_positional.txtar
+var issue548OptionalPositionalFixture []byte
+
+func TestGenerateIssue548OptionalPositional(t *testing.T) {
+	archive := txtar.Parse(issue548OptionalPositionalFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     string
+		StderrFile string
+		Status     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
+					t.Fatalf("process exit outside main in %s", name)
+				}
+			}
+
+			// Verify generated root.go does NOT require positional arguments check
+			rootGo := string(files["cmd/app/root.go"])
+			if strings.Contains(rootGo, "expected at least 1 positional arguments") {
+				t.Fatalf("root.go unexpectedly requires positional arguments check: %s", rootGo)
+			}
+
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+
+				wantStderr := invocation.Stderr
+				if invocation.StderrFile != "" {
+					file, ok := expected[invocation.StderrFile]
+					if !ok {
+						t.Fatalf("missing expected stderr file %s", invocation.StderrFile)
+					}
+					wantStderr = string(file.Data)
+				}
+				gotStderr := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || gotStderr != wantStderr {
+					t.Errorf("%s %v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q",
+						backend, invocation.Args, status, stdout.String(), gotStderr, invocation.Status, invocation.Stdout, wantStderr)
+				}
+			}
+		})
+	}
+}

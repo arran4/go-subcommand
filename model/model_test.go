@@ -550,3 +550,67 @@ func TestOptionalValueValidSeparateSourcesAndOmittablePositionals(t *testing.T) 
 		t.Fatalf("valid optional positional and generator conversion rejected: %v", err)
 	}
 }
+
+func TestOptionalPositionalValidation(t *testing.T) {
+	t.Run("valid optional positional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "url", Type: "string", IsPositional: true, PositionalArgIndex: 1, Optional: true},
+		}
+		if err := validateParameters(params, "app"); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+	})
+
+	t.Run("cannot be both required and optional", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "url", Type: "string", IsPositional: true, PositionalArgIndex: 1, Required: true, Optional: true},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "cannot be both required and optional") {
+			t.Fatalf("expected both required and optional error, got: %v", err)
+		}
+	})
+
+	t.Run("required after optional is rejected", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "opt", Type: "string", IsPositional: true, PositionalArgIndex: 1, Optional: true},
+			{Name: "req", Type: "string", IsPositional: true, PositionalArgIndex: 2},
+		}
+		err := validateParameters(params, "app")
+		if err == nil || !strings.Contains(err.Error(), "required positional argument req appears after an optional positional argument") {
+			t.Fatalf("expected required after optional error, got: %v", err)
+		}
+	})
+
+	t.Run("optional after required is valid", func(t *testing.T) {
+		params := []*FunctionParameter{
+			{Name: "req", Type: "string", IsPositional: true, PositionalArgIndex: 1},
+			{Name: "opt", Type: "string", IsPositional: true, PositionalArgIndex: 2, Optional: true},
+		}
+		if err := validateParameters(params, "app"); err != nil {
+			t.Fatalf("expected valid, got: %v", err)
+		}
+	})
+}
+
+func TestPositionalString(t *testing.T) {
+	req := &FunctionParameter{Name: "target", IsPositional: true}
+	if got := req.PositionalString(); got != "<target>" {
+		t.Errorf("PositionalString() = %q, want %q", got, "<target>")
+	}
+
+	opt := &FunctionParameter{Name: "url", IsPositional: true, Optional: true}
+	if got := opt.PositionalString(); got != "[url]" {
+		t.Errorf("PositionalString() = %q, want %q", got, "[url]")
+	}
+
+	def := &FunctionParameter{Name: "out", IsPositional: true, HasDefaultValue: true, Default: "a.txt"}
+	if got := def.PositionalString(); got != "[out]" {
+		t.Errorf("PositionalString() = %q, want %q", got, "[out]")
+	}
+
+	va := &FunctionParameter{Name: "files", IsPositional: true, IsVarArg: true}
+	if got := va.PositionalString(); got != "[files...]" {
+		t.Errorf("PositionalString() = %q, want %q", got, "[files...]")
+	}
+}

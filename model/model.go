@@ -213,6 +213,8 @@ type FunctionParameter struct {
 	DeclaredIn string
 	// Required indicates if the parameter is mandatory.
 	Required bool
+	// Optional indicates if the parameter is explicitly optional (e.g. via `(optional)`).
+	Optional bool
 	// OptionalValue marks a flag whose durable value observes whether it was
 	// omitted, supplied without a value, or supplied with an explicit value.
 	// It binds directly to native Go scalar types, pointers, and slices, preserving
@@ -480,12 +482,20 @@ func validateSubCommandCollisions(parentName string, isRoot bool, subCommands []
 	return nil
 }
 
+// IsRequiredPositional reports whether this positional parameter is strictly mandatory.
+func (p *FunctionParameter) IsRequiredPositional() bool {
+	return p.IsPositional && !p.IsVarArg && !p.HasDefaultValue && !p.Optional
+}
+
 func validateParameters(params []*FunctionParameter, cmdName string) error {
 	var hasOptionalPos bool
 	var hasVarArg bool
 	for _, p := range params {
 		if p.IsFlagPresence() && (p.Type != "map[string]bool" || p.IsPositional || p.IsVarArg || p.Required || p.HasDefaultValue || p.Inherited || len(p.FlagAliases) != 0 || p.Parser.Type != "" || p.Generator.Func != nil) {
 			return fmt.Errorf("parameter %q: flag presence requires map[string]bool without positional, inherited, required, default, parser or provider options", p.Name)
+		}
+		if p.Required && p.Optional {
+			return fmt.Errorf("command %s: parameter %s cannot be both required and optional", cmdName, p.Name)
 		}
 		if !p.IsPositional {
 			continue
@@ -500,7 +510,7 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 			return fmt.Errorf("command %s: positional argument %s appears after a variadic argument", cmdName, p.Name)
 		}
 
-		if p.HasDefaultValue {
+		if !p.IsRequiredPositional() {
 			hasOptionalPos = true
 		} else {
 			if hasOptionalPos {
@@ -1771,7 +1781,7 @@ func (p *FunctionParameter) PositionalString() string {
 	if p.IsVarArg {
 		return fmt.Sprintf("[%s...]", p.Name)
 	}
-	if p.HasDefaultValue {
+	if p.HasDefaultValue || p.Optional {
 		return fmt.Sprintf("[%s]", p.Name)
 	}
 	return fmt.Sprintf("<%s>", p.Name)
