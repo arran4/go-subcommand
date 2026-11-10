@@ -34,9 +34,9 @@ type UsageDataGoreleaser struct {
 }
 
 func (c *Goreleaser) Usage() {
-	err := executeUsage(os.Stderr, "goreleaser_usage.txt", UsageDataGoreleaser{c, false})
+	err := executeUsage(c.outputStderr(), "goreleaser_usage.txt", UsageDataGoreleaser{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -47,9 +47,9 @@ func (c *Goreleaser) usageError(kind cmd.UsageErrorKind, flag string, cause erro
 func (c *Goreleaser) commandPath() string { return "gosubc goreleaser" }
 
 func (c *Goreleaser) UsageRecursive() {
-	err := executeUsage(os.Stderr, "goreleaser_usage.txt", UsageDataGoreleaser{c, true})
+	err := executeUsage(c.outputStderr(), "goreleaser_usage.txt", UsageDataGoreleaser{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,6 +172,7 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
@@ -195,7 +196,7 @@ func (c *RootCmd) NewGoreleaser() *Goreleaser {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

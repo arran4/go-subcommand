@@ -29,9 +29,9 @@ type UsageDataSyntax struct {
 }
 
 func (c *Syntax) Usage() {
-	err := executeUsage(os.Stderr, "syntax_usage.txt", UsageDataSyntax{c, false})
+	err := executeUsage(c.outputStderr(), "syntax_usage.txt", UsageDataSyntax{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -42,9 +42,9 @@ func (c *Syntax) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Syntax) commandPath() string { return "gosubc syntax" }
 
 func (c *Syntax) UsageRecursive() {
-	err := executeUsage(os.Stderr, "syntax_usage.txt", UsageDataSyntax{c, true})
+	err := executeUsage(c.outputStderr(), "syntax_usage.txt", UsageDataSyntax{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -122,6 +122,7 @@ func (c *RootCmd) NewSyntax() *Syntax {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Syntax) error {
@@ -137,7 +138,7 @@ func (c *RootCmd) NewSyntax() *Syntax {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

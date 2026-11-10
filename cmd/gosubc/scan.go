@@ -34,9 +34,9 @@ type UsageDataScan struct {
 }
 
 func (c *Scan) Usage() {
-	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, false})
+	err := executeUsage(c.outputStderr(), "scan_usage.txt", UsageDataScan{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -47,9 +47,9 @@ func (c *Scan) usageError(kind cmd.UsageErrorKind, flag string, cause error, for
 func (c *Scan) commandPath() string { return "gosubc scan" }
 
 func (c *Scan) UsageRecursive() {
-	err := executeUsage(os.Stderr, "scan_usage.txt", UsageDataScan{c, true})
+	err := executeUsage(c.outputStderr(), "scan_usage.txt", UsageDataScan{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,6 +172,7 @@ func (c *RootCmd) NewScan() *Scan {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
@@ -195,7 +196,7 @@ func (c *RootCmd) NewScan() *Scan {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

@@ -60,7 +60,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -89,9 +88,9 @@ type UsageDataConfigCmd struct {
 }
 
 func (c *ConfigCmd) Usage() {
-	err := executeUsage(os.Stderr, "config_usage.txt", UsageDataConfigCmd{c, false})
+	err := executeUsage(c.outputStderr(), "config_usage.txt", UsageDataConfigCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -102,9 +101,9 @@ func (c *ConfigCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error
 func (c *ConfigCmd) commandPath() string { return "app config" }
 
 func (c *ConfigCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "config_usage.txt", UsageDataConfigCmd{c, true})
+	err := executeUsage(c.outputStderr(), "config_usage.txt", UsageDataConfigCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -352,6 +351,7 @@ func (c *RootCmd) NewConfigCmd() *ConfigCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *ConfigCmd) error {

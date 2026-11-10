@@ -72,9 +72,9 @@ type UsageData{{.SubCommandStructName}} struct {
 }
 
 func (c *{{.SubCommandStructName}}) Usage() {
-	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, false})
+	err := executeUsage(c.outputStderr(), "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -85,9 +85,9 @@ func (c *{{.SubCommandStructName}}) usageError(kind cmd.UsageErrorKind, flag str
 func (c *{{.SubCommandStructName}}) commandPath() string { return "{{.ProgName}}" }
 
 func (c *{{.SubCommandStructName}}) UsageRecursive() {
-	err := executeUsage(os.Stderr, "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, true})
+	err := executeUsage(c.outputStderr(), "{{.UsageFileName}}", UsageData{{.SubCommandStructName}}{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -261,6 +261,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
 		Flags:   set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 {{- template "flag_definitions" (list "set" "v" .Parameters) }}
 	set.Usage = v.Usage
 	{{if .SubCommandFunctionName}}
@@ -279,7 +280,7 @@ func (c *{{if .Parent}}{{.Parent.SubCommandStructName}}{{else}}RootCmd{{end}}) {
         return nil
       }
       if errors.Is(err, cmd.ErrHelp) {
-        fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+        fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
         return nil
       }
 			if errors.Is(err, cmd.ErrUsage) { return err }

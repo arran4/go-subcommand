@@ -19,7 +19,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"example.com/fixture/cmd"
@@ -40,9 +39,9 @@ type UsageDataTestCmd struct {
 }
 
 func (c *TestCmd) Usage() {
-	err := executeUsage(os.Stderr, "", UsageDataTestCmd{c, false})
+	err := executeUsage(c.outputStderr(), "", UsageDataTestCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -53,9 +52,9 @@ func (c *TestCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *TestCmd) commandPath() string { return "testcmd" }
 
 func (c *TestCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "", UsageDataTestCmd{c, true})
+	err := executeUsage(c.outputStderr(), "", UsageDataTestCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -79,6 +78,7 @@ func (c *RootCmd) NewTestCmd() *TestCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.SubCommands["help"] = func() Cmd {

@@ -213,7 +213,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -241,9 +240,9 @@ type UsageDataChild struct {
 }
 
 func (c *Child) Usage() {
-	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, false})
+	err := executeUsage(c.outputStderr(), "child_usage.txt", UsageDataChild{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -254,9 +253,9 @@ func (c *Child) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Child) commandPath() string { return "child" }
 
 func (c *Child) UsageRecursive() {
-	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, true})
+	err := executeUsage(c.outputStderr(), "child_usage.txt", UsageDataChild{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -434,6 +433,7 @@ func (c *RootCmd) NewChild() *Child {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.enabled, "enabled", true, "TODO: Add usage text")
 	set.BoolVar(&v.enabled, "e", true, "TODO: Add usage text")

@@ -32,9 +32,9 @@ type UsageDataSkillInspect struct {
 }
 
 func (c *SkillInspect) Usage() {
-	err := executeUsage(os.Stderr, "inspect_usage.txt", UsageDataSkillInspect{c, false})
+	err := executeUsage(c.outputStderr(), "inspect_usage.txt", UsageDataSkillInspect{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -45,9 +45,9 @@ func (c *SkillInspect) usageError(kind cmd.UsageErrorKind, flag string, cause er
 func (c *SkillInspect) commandPath() string { return "gosubc skill inspect" }
 
 func (c *SkillInspect) UsageRecursive() {
-	err := executeUsage(os.Stderr, "inspect_usage.txt", UsageDataSkillInspect{c, true})
+	err := executeUsage(c.outputStderr(), "inspect_usage.txt", UsageDataSkillInspect{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -160,6 +160,7 @@ func (c *Skill) NewSkillInspect() *SkillInspect {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.scope, "scope", "user", "The installation scope ('user' or 'project')")
 
@@ -179,7 +180,7 @@ func (c *Skill) NewSkillInspect() *SkillInspect {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

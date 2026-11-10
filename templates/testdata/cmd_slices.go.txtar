@@ -48,7 +48,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -76,9 +75,9 @@ type UsageDataMySliceCmd struct {
 }
 
 func (c *MySliceCmd) Usage() {
-	err := executeUsage(os.Stderr, "myslicecmd_usage.txt", UsageDataMySliceCmd{c, false})
+	err := executeUsage(c.outputStderr(), "myslicecmd_usage.txt", UsageDataMySliceCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -89,9 +88,9 @@ func (c *MySliceCmd) usageError(kind cmd.UsageErrorKind, flag string, cause erro
 func (c *MySliceCmd) commandPath() string { return "myslicecmd" }
 
 func (c *MySliceCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "myslicecmd_usage.txt", UsageDataMySliceCmd{c, true})
+	err := executeUsage(c.outputStderr(), "myslicecmd_usage.txt", UsageDataMySliceCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -121,6 +120,7 @@ func (c *RootCmd) NewMySliceCmd() *MySliceCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.Var((*StringSlice)(&v.files), "f", "Files list")
 

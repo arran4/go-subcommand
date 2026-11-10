@@ -351,15 +351,56 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 	label         string
 	verbose       bool
 	CommandAction func(c *RootCmd) error
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+func (c *RootCmd) SetStreams(stdout, stderr io.Writer) {
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
+func (c *RootCmd) SetIO(stdin io.Reader, stdout, stderr io.Writer) {
+	c.Stdin = stdin
+	c.Stdout = stdout
+	c.Stderr = stderr
+	if c.FlagSet != nil {
+		c.FlagSet.SetOutput(c.outputStderr())
+	}
+}
+
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -370,9 +411,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -389,6 +430,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 		Commit:   commit,
 		Date:     date,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.CommandAction = func(c *RootCmd) error {
@@ -511,11 +553,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -656,7 +698,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -683,9 +724,9 @@ type UsageDataScalar struct {
 }
 
 func (c *Scalar) Usage() {
-	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, false})
+	err := executeUsage(c.outputStderr(), "scalar_usage.txt", UsageDataScalar{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -696,9 +737,9 @@ func (c *Scalar) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Scalar) commandPath() string { return "app scalar" }
 
 func (c *Scalar) UsageRecursive() {
-	err := executeUsage(os.Stderr, "scalar_usage.txt", UsageDataScalar{c, true})
+	err := executeUsage(c.outputStderr(), "scalar_usage.txt", UsageDataScalar{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -849,6 +890,7 @@ func (c *RootCmd) NewScalar() *Scalar {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	v.def = "fallback"
 	set.Usage = v.Usage
 
@@ -894,7 +936,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -921,9 +962,9 @@ type UsageDataPointers struct {
 }
 
 func (c *Pointers) Usage() {
-	err := executeUsage(os.Stderr, "pointers_usage.txt", UsageDataPointers{c, false})
+	err := executeUsage(c.outputStderr(), "pointers_usage.txt", UsageDataPointers{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -934,9 +975,9 @@ func (c *Pointers) usageError(kind cmd.UsageErrorKind, flag string, cause error,
 func (c *Pointers) commandPath() string { return "app pointers" }
 
 func (c *Pointers) UsageRecursive() {
-	err := executeUsage(os.Stderr, "pointers_usage.txt", UsageDataPointers{c, true})
+	err := executeUsage(c.outputStderr(), "pointers_usage.txt", UsageDataPointers{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1093,6 +1134,7 @@ func (c *RootCmd) NewPointers() *Pointers {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Pointers) error {
@@ -1137,7 +1179,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -1162,9 +1203,9 @@ type UsageDataSlices struct {
 }
 
 func (c *Slices) Usage() {
-	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, false})
+	err := executeUsage(c.outputStderr(), "slices_usage.txt", UsageDataSlices{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1175,9 +1216,9 @@ func (c *Slices) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Slices) commandPath() string { return "app slices" }
 
 func (c *Slices) UsageRecursive() {
-	err := executeUsage(os.Stderr, "slices_usage.txt", UsageDataSlices{c, true})
+	err := executeUsage(c.outputStderr(), "slices_usage.txt", UsageDataSlices{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1313,6 +1354,7 @@ func (c *RootCmd) NewSlices() *Slices {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Slices) error {
@@ -1357,7 +1399,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -1382,9 +1423,9 @@ type UsageDataScope struct {
 }
 
 func (c *Scope) Usage() {
-	err := executeUsage(os.Stderr, "scope_usage.txt", UsageDataScope{c, false})
+	err := executeUsage(c.outputStderr(), "scope_usage.txt", UsageDataScope{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1395,9 +1436,9 @@ func (c *Scope) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Scope) commandPath() string { return "app scope" }
 
 func (c *Scope) UsageRecursive() {
-	err := executeUsage(os.Stderr, "scope_usage.txt", UsageDataScope{c, true})
+	err := executeUsage(c.outputStderr(), "scope_usage.txt", UsageDataScope{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1517,6 +1558,7 @@ func (c *RootCmd) NewScope() *Scope {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Scope) error {
@@ -1562,7 +1604,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 
@@ -1587,9 +1628,9 @@ type UsageDataConvert struct {
 }
 
 func (c *Convert) Usage() {
-	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, false})
+	err := executeUsage(c.outputStderr(), "convert_usage.txt", UsageDataConvert{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1600,9 +1641,9 @@ func (c *Convert) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *Convert) commandPath() string { return "app convert" }
 
 func (c *Convert) UsageRecursive() {
-	err := executeUsage(os.Stderr, "convert_usage.txt", UsageDataConvert{c, true})
+	err := executeUsage(c.outputStderr(), "convert_usage.txt", UsageDataConvert{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1726,6 +1767,7 @@ func (c *RootCmd) NewConvert() *Convert {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Convert) error {
@@ -1770,7 +1812,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -1794,9 +1835,9 @@ type UsageDataCustom struct {
 }
 
 func (c *Custom) Usage() {
-	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, false})
+	err := executeUsage(c.outputStderr(), "custom_usage.txt", UsageDataCustom{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1807,9 +1848,9 @@ func (c *Custom) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Custom) commandPath() string { return "app custom" }
 
 func (c *Custom) UsageRecursive() {
-	err := executeUsage(os.Stderr, "custom_usage.txt", UsageDataCustom{c, true})
+	err := executeUsage(c.outputStderr(), "custom_usage.txt", UsageDataCustom{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1925,6 +1966,7 @@ func (c *RootCmd) NewCustom() *Custom {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Custom) error {
@@ -1969,7 +2011,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -2001,9 +2042,9 @@ type UsageDataNumeric struct {
 }
 
 func (c *Numeric) Usage() {
-	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, false})
+	err := executeUsage(c.outputStderr(), "numeric_usage.txt", UsageDataNumeric{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -2014,9 +2055,9 @@ func (c *Numeric) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *Numeric) commandPath() string { return "app numeric" }
 
 func (c *Numeric) UsageRecursive() {
-	err := executeUsage(os.Stderr, "numeric_usage.txt", UsageDataNumeric{c, true})
+	err := executeUsage(c.outputStderr(), "numeric_usage.txt", UsageDataNumeric{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -2311,6 +2352,7 @@ func (c *RootCmd) NewNumeric() *Numeric {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Numeric) error {

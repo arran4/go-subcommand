@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -28,9 +27,9 @@ type UsageDataTemplateLayout struct {
 }
 
 func (c *TemplateLayout) Usage() {
-	err := executeUsage(os.Stderr, "layout_usage.txt", UsageDataTemplateLayout{c, false})
+	err := executeUsage(c.outputStderr(), "layout_usage.txt", UsageDataTemplateLayout{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -41,9 +40,9 @@ func (c *TemplateLayout) usageError(kind cmd.UsageErrorKind, flag string, cause 
 func (c *TemplateLayout) commandPath() string { return "gosubc template layout" }
 
 func (c *TemplateLayout) UsageRecursive() {
-	err := executeUsage(os.Stderr, "layout_usage.txt", UsageDataTemplateLayout{c, true})
+	err := executeUsage(c.outputStderr(), "layout_usage.txt", UsageDataTemplateLayout{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -121,6 +120,7 @@ func (c *Template) NewTemplateLayout() *TemplateLayout {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *TemplateLayout) error {

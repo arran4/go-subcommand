@@ -218,9 +218,9 @@
 {{- if $param.IsWriter }}
 if {{$argVar}} == "-" {
 	{{- if $param.IsSlice }}
-	c.{{$param.Name}} = append(c.{{$param.Name}}, os.Stdout)
+	c.{{$param.Name}} = append(c.{{$param.Name}}, {{if eq $param.CanonicalBaseType "io.WriteCloser"}}toWriteCloser(c.outputStdout()){{else}}c.outputStdout(){{end}})
 	{{- else }}
-	c.{{$param.Name}} = os.Stdout
+	c.{{$param.Name}} = {{if eq $param.CanonicalBaseType "io.WriteCloser"}}toWriteCloser(c.outputStdout()){{else}}c.outputStdout(){{end}}
 	{{- end }}
 } else {
 	f, err := generatedOpenWriter({{$argVar}})
@@ -237,9 +237,9 @@ if {{$argVar}} == "-" {
 {{- else if $param.IsReader }}
 if {{$argVar}} == "-" {
 	{{- if $param.IsSlice }}
-	c.{{$param.Name}} = append(c.{{$param.Name}}, os.Stdin)
+	c.{{$param.Name}} = append(c.{{$param.Name}}, {{if eq $param.CanonicalBaseType "io.ReadCloser"}}io.NopCloser(c.inputStdin()){{else}}c.inputStdin(){{end}})
 	{{- else }}
-	c.{{$param.Name}} = os.Stdin
+	c.{{$param.Name}} = {{if eq $param.CanonicalBaseType "io.ReadCloser"}}io.NopCloser(c.inputStdin()){{else}}c.inputStdin(){{end}}
 	{{- end }}
 } else {
 	f, err := generatedOpenReader({{$argVar}})

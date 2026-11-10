@@ -34,9 +34,9 @@ type UsageDataFormat struct {
 }
 
 func (c *Format) Usage() {
-	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, false})
+	err := executeUsage(c.outputStderr(), "format_usage.txt", UsageDataFormat{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -47,9 +47,9 @@ func (c *Format) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Format) commandPath() string { return "gosubc format" }
 
 func (c *Format) UsageRecursive() {
-	err := executeUsage(os.Stderr, "format_usage.txt", UsageDataFormat{c, true})
+	err := executeUsage(c.outputStderr(), "format_usage.txt", UsageDataFormat{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,6 +172,7 @@ func (c *RootCmd) NewFormat() *Format {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "The project root directory")
 
@@ -195,7 +196,7 @@ func (c *RootCmd) NewFormat() *Format {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

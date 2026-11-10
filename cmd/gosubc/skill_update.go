@@ -35,9 +35,9 @@ type UsageDataSkillUpdate struct {
 }
 
 func (c *SkillUpdate) Usage() {
-	err := executeUsage(os.Stderr, "update_usage.txt", UsageDataSkillUpdate{c, false})
+	err := executeUsage(c.outputStderr(), "update_usage.txt", UsageDataSkillUpdate{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -48,9 +48,9 @@ func (c *SkillUpdate) usageError(kind cmd.UsageErrorKind, flag string, cause err
 func (c *SkillUpdate) commandPath() string { return "gosubc skill update" }
 
 func (c *SkillUpdate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "update_usage.txt", UsageDataSkillUpdate{c, true})
+	err := executeUsage(c.outputStderr(), "update_usage.txt", UsageDataSkillUpdate{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -183,6 +183,7 @@ func (c *Skill) NewSkillUpdate() *SkillUpdate {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.all, "all", false, "Update all installed skills")
 
@@ -206,7 +207,7 @@ func (c *Skill) NewSkillUpdate() *SkillUpdate {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

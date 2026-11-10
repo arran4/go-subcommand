@@ -54,7 +54,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -76,9 +75,9 @@ type UsageDataServiceCmd struct {
 }
 
 func (c *ServiceCmd) Usage() {
-	err := executeUsage(os.Stderr, "service_usage.txt", UsageDataServiceCmd{c, false})
+	err := executeUsage(c.outputStderr(), "service_usage.txt", UsageDataServiceCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -89,9 +88,9 @@ func (c *ServiceCmd) usageError(kind cmd.UsageErrorKind, flag string, cause erro
 func (c *ServiceCmd) commandPath() string { return "app service" }
 
 func (c *ServiceCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "service_usage.txt", UsageDataServiceCmd{c, true})
+	err := executeUsage(c.outputStderr(), "service_usage.txt", UsageDataServiceCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -209,6 +208,7 @@ func (c *RootCmd) NewServiceCmd() *ServiceCmd {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.prefix, "prefix", "", "Prefix string flag")
 	set.Usage = v.Usage
