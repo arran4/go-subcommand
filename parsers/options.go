@@ -4,12 +4,14 @@ package parsers
 // Kind is command, text, markdown or man. Line is the first content line.
 // Executable actions are always discovered from Go functions, never these blocks.
 type CommandDeclaration struct {
-	Kind     string
-	Path     string
-	Text     string
-	Section  string
-	Filename string
-	Line     int
+	Kind        string
+	Path        string
+	Text        string
+	Section     string
+	Filename    string
+	Line        int
+	ImportPath  string
+	PackageName string
 }
 
 type ParseOptions struct {

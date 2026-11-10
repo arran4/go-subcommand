@@ -21,7 +21,7 @@ func declarationError(source parsers.CommandDeclaration, offset int, format stri
 	return fmt.Errorf("%s:%d: %s", source.Filename, source.Line+offset, fmt.Sprintf(format, args...))
 }
 
-func collectGoMetadata(fset *token.FileSet, file *ast.File, tree *CommandsTree) error {
+func collectGoMetadata(fset *token.FileSet, file *ast.File, importPath string, tree *CommandsTree) error {
 	functionDocs := make(map[token.Pos]bool)
 	for _, decl := range file.Decls {
 		if function, ok := decl.(*ast.FuncDecl); ok && function.Doc != nil {
@@ -34,7 +34,7 @@ func collectGoMetadata(fset *token.FileSet, file *ast.File, tree *CommandsTree) 
 			continue
 		}
 		position := fset.Position(group.Pos())
-		source := parsers.CommandDeclaration{Kind: "command", Filename: position.Filename, Line: position.Line}
+		source := parsers.CommandDeclaration{Kind: "command", Filename: position.Filename, Line: position.Line, ImportPath: importPath, PackageName: file.Name.Name}
 		if functionDocs[group.Pos()] {
 			// This spelling on functions was ignored by the legacy grammar.
 			// Keep it non-executable, with a diagnostic rather than a breaking reinterpretation.
@@ -87,6 +87,8 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 	seen := make(map[string]bool)
 	var short string
 	var noCommand model.NoCommandPolicy
+	var initializers []*model.InitializerConfig
+	var sharedProviders []*model.SharedProviderConfig
 	for index, line := range lines[1:] {
 		index += lineOffset
 		trimmed := strings.TrimSpace(line)
@@ -102,6 +104,77 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 			canonical = "aliases"
 		case "default command", "default":
 			canonical = "default route"
+		case "initializer", "initializers":
+			canonical = "initializer"
+		case "shared provider", "provider":
+			canonical = "shared provider"
+		}
+		if hasColon && canonical == "initializer" {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				return nil, declarationError(source, index, "empty metadata directive %q", key)
+			}
+			for _, item := range splitSafe(value, ',') {
+				item = strings.TrimSpace(item)
+				if item == "" {
+					continue
+				}
+				fnName, inputs := parseGeneratorInputs(item)
+				ref := parseFuncRef(fnName)
+				if ref.ImportPath == "" && source.PackageName != "" && source.PackageName != "main" {
+					ref.ImportPath = source.ImportPath
+					ref.PackagePath = source.ImportPath
+					ref.CommandPackageName = source.PackageName
+				}
+				initializers = append(initializers, &model.InitializerConfig{
+					Name:         ref.FunctionName,
+					Func:         ref,
+					Inputs:       inputs,
+					ReturnsError: true,
+				})
+			}
+			continue
+		}
+		if hasColon && canonical == "shared provider" {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				return nil, declarationError(source, index, "empty metadata directive %q", key)
+			}
+			var name, fn string
+			if strings.Contains(value, "=") {
+				namePart, fnPart, _ := strings.Cut(value, "=")
+				name = strings.TrimSpace(namePart)
+				fn = strings.TrimSpace(fnPart)
+			} else {
+				fn = strings.TrimSpace(value)
+				name = fn
+				if open := strings.IndexByte(name, '('); open != -1 {
+					name = name[:open]
+				}
+				if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
+					name = name[lastDot+1:]
+				}
+				name = strings.TrimPrefix(name, "Open")
+				name = strings.TrimPrefix(name, "New")
+				name = strings.TrimPrefix(name, "Get")
+				if len(name) > 0 {
+					name = strings.ToLower(name[:1]) + name[1:]
+				}
+			}
+			fnName, inputs := parseGeneratorInputs(fn)
+			ref := parseFuncRef(fnName)
+			if ref.ImportPath == "" && source.PackageName != "" && source.PackageName != "main" {
+				ref.ImportPath = source.ImportPath
+				ref.PackagePath = source.ImportPath
+				ref.CommandPackageName = source.PackageName
+			}
+			sharedProviders = append(sharedProviders, &model.SharedProviderConfig{
+				Name:         name,
+				Func:         ref,
+				Inputs:       inputs,
+				ReturnsError: true,
+			})
+			continue
 		}
 		if hasColon && (canonical == "description" || canonical == "aliases" || canonical == "cli-parser" || canonical == "default route" || canonical == "no command") {
 			if seen[canonical] {
@@ -147,7 +220,19 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 		description = short
 	}
 	route, _ := parseDefaultDirective(text)
-	return &model.CommandMetadata{Path: strings.Join(parts, " "), Description: description, ExtendedHelp: help, Aliases: aliases, CLIParser: parseCliParserDirective(text), DefaultRoute: route, NoCommand: noCommand, Filename: source.Filename, Line: source.Line}, nil
+	return &model.CommandMetadata{
+		Path:            strings.Join(parts, " "),
+		Description:     description,
+		ExtendedHelp:    help,
+		Aliases:         aliases,
+		CLIParser:       parseCliParserDirective(text),
+		DefaultRoute:    route,
+		NoCommand:       noCommand,
+		Filename:        source.Filename,
+		Line:            source.Line,
+		Initializers:    initializers,
+		SharedProviders: sharedProviders,
+	}, nil
 }
 
 func appendHelp(existing, extra string) string {
@@ -217,6 +302,8 @@ func applyDeclarations(tree *CommandsTree) error {
 			if root.DefinitionFile == "" {
 				root.DefinitionFile = metadata.Filename
 			}
+			root.Initializers = append(root.Initializers, metadata.Initializers...)
+			root.SharedProviders = append(root.SharedProviders, metadata.SharedProviders...)
 		} else {
 			node := root.Find(parts[1:]).SubCommand
 			if node.CLIParser != "" && metadata.CLIParser != "" && node.CLIParser != metadata.CLIParser {
@@ -240,6 +327,8 @@ func applyDeclarations(tree *CommandsTree) error {
 			if node.DefinitionFile == "" {
 				node.DefinitionFile = metadata.Filename
 			}
+			node.Initializers = append(node.Initializers, metadata.Initializers...)
+			node.SharedProviders = append(node.SharedProviders, metadata.SharedProviders...)
 		}
 	}
 	for _, source := range tree.Declarations {

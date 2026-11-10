@@ -36,7 +36,39 @@ type {{.SubCommandStructName}} struct {
 	{{- if .HasPlusMinusInHierarchy }}
 	seenFlags map[string]bool
 	{{- end }}
+	{{- range .SharedProviders }}
+	{{.OnceFieldName}} sync.Once
+	{{.ValueFieldName}} {{.QualifiedType}}
+	{{.ErrorFieldName}} error
+	{{- end }}
 }
+{{- range .SharedProviders }}
+
+func (c *{{$.SubCommandStructName}}) {{.MethodName}}() ({{.QualifiedType}}, error) {
+	c.{{.OnceFieldName}}.Do(func() {
+		c.registerReset(func() {
+			c.{{.OnceFieldName}} = sync.Once{}
+			var zero {{.QualifiedType}}
+			c.{{.ValueFieldName}} = zero
+			c.{{.ErrorFieldName}} = nil
+		})
+		{{- if .ReturnsError }}
+		c.{{.ValueFieldName}}, c.{{.ErrorFieldName}} = {{.CallFor "c"}}
+		if c.{{.ErrorFieldName}} == nil {
+			if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+		{{- else }}
+		c.{{.ValueFieldName}} = {{.CallFor "c"}}
+		if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+			c.registerCleanup(closer.Close)
+		}
+		{{- end }}
+	})
+	return c.{{.ValueFieldName}}, c.{{.ErrorFieldName}}
+}
+{{- end }}
 
 {{- if .HasPlusMinusInHierarchy }}
 func (c *{{.SubCommandStructName}}) commitAll() error {
@@ -224,7 +256,28 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	c.{{.ValueFieldName}} = seenFlags
 	{{- end }}
 	{{- end }}
+	{{- range .HierarchyInitializers }}
+	if err := {{.CallFor "c"}}; err != nil {
+		return err
+	}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if .SharedProvider }}
+	{{- if .IsLazyCallable }}
+	c.{{.ValueFieldName}} = c.{{.SharedProvider.MethodName}}
+	{{- else }}
+	{
+		v, err := c.{{.SharedProvider.MethodName}}()
+		if err != nil {
+			return fmt.Errorf("failed to provide {{.Name}}: %w", err)
+		}
+		c.{{.ValueFieldName}} = v
+	}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 	{{- range orderedGenerators .Parameters }}
+	{{- if not .SharedProvider }}
 	{
 		v, err := {{.GeneratorCallFor "c" true}}
 		if err != nil {
@@ -235,6 +288,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 			cleanups = append(cleanups, closer.Close)
 		}
 	}
+	{{- end }}
 	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {

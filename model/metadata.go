@@ -13,15 +13,17 @@ const (
 // CommandMetadata describes a command without registering an executable action.
 // Metadata may enrich an action discovered independently from Go source.
 type CommandMetadata struct {
-	Path         string
-	Description  string
-	ExtendedHelp string
-	Aliases      []string
-	DefaultRoute string
-	NoCommand    NoCommandPolicy
-	CLIParser    string
-	Filename     string
-	Line         int
+	Path            string
+	Description     string
+	ExtendedHelp    string
+	Aliases         []string
+	DefaultRoute    string
+	NoCommand       NoCommandPolicy
+	CLIParser       string
+	Filename        string
+	Line            int
+	Initializers    []*InitializerConfig
+	SharedProviders []*SharedProviderConfig
 }
 
 // ManSection is a validated, command-scoped manual appendix.

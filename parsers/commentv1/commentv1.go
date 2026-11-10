@@ -73,6 +73,8 @@ type CommandTree struct {
 	NoCommand          model.NoCommandPolicy
 	CLIParser          string
 	ImportPath         string
+	Initializers       []*model.InitializerConfig
+	SharedProviders    []*model.SharedProviderConfig
 }
 
 type CommandsTree struct {
@@ -240,6 +242,11 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 					continue
 				}
 				leafName := segments[len(segments)-1]
+				clonedParams := make([]*model.FunctionParameter, len(cmdTree.Parameters))
+				for i, p := range cmdTree.Parameters {
+					cp := *p
+					clonedParams[i] = &cp
+				}
 				subCmd := &model.SubCommand{
 					SubCommandFunctionName: cmdTree.FunctionName,
 					SubCommandDescription:  cmdTree.Description,
@@ -249,7 +256,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 					DefinitionFile:         cmdTree.DefinitionFile,
 					DocStart:               cmdTree.DocStart,
 					DocEnd:                 cmdTree.DocEnd,
-					Parameters:             cmdTree.Parameters,
+					Parameters:             clonedParams,
 					ReturnsError:           cmdTree.ReturnsError,
 					ReturnCount:            cmdTree.ReturnCount,
 				}
@@ -285,6 +292,8 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		cmd := &model.Command{
 			Metadata:           cmdTree.Metadata,
 			ManSections:        cmdTree.ManSections,
+			Initializers:       cmdTree.Initializers,
+			SharedProviders:    cmdTree.SharedProviders,
 			DataModel:          d,
 			MainCmdName:        cmdName,
 			PackagePath:        rootCommands.PackagePath,
@@ -311,6 +320,9 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		commands = append(commands, cmd)
 
 		cmd.ResolveInheritance()
+		if err := cmd.ResolveSharedProviders(); err != nil {
+			return nil, err
+		}
 	}
 	d.Commands = commands
 	return d, nil
@@ -406,11 +418,16 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 	if err != nil {
 		return err
 	}
-	if err := collectGoMetadata(fset, f, cmdTree); err != nil {
+	if err := collectGoMetadata(fset, f, importPath, cmdTree); err != nil {
 		return err
 	}
 
-	// packageName := f.Name.Name
+	pkgFuncs := make(map[string]*ast.FuncDecl)
+	for _, decl := range f.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
+			pkgFuncs[fn.Name.Name] = fn
+		}
+	}
 	for _, s := range f.Decls {
 		switch s := s.(type) {
 		case *ast.FuncDecl:
@@ -447,7 +464,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 
 			var params []*model.FunctionParameter
 			usedFlagParams := make(map[string]bool)
+			allFuncParamNames := make(map[string]bool)
 			if s.Type.Params != nil {
+				for _, p := range s.Type.Params.List {
+					for _, name := range p.Names {
+						allFuncParamNames[name.Name] = true
+					}
+				}
 				for _, p := range s.Type.Params.List {
 					for _, name := range p.Names {
 						typeName := ""
@@ -537,7 +560,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						if !ok {
 							var names []string
 							for candidateName := range parsedParams {
-								if !usedFlagParams[candidateName] {
+								if !usedFlagParams[candidateName] && !allFuncParamNames[candidateName] {
 									names = append(names, candidateName)
 								}
 							}
@@ -879,6 +902,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				}
 			}
 
+			inits, shared := parseDirectivesFromDoc(s.Doc.Text(), importPath, f.Name.Name, pkgFuncs)
+
 			if len(subCommandSequence) == 0 {
 				ct, ok := cmdTree.Commands[cmdName]
 				if !ok {
@@ -900,6 +925,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.Description = description
 				ct.ExtendedHelp = extendedHelp
 				ct.Aliases = aliases
+				ct.Initializers = append(ct.Initializers, inits...)
+				ct.SharedProviders = append(ct.SharedProviders, shared...)
 				if defaultRoute != "" {
 					ct.DefaultRoute = defaultRoute
 				}
@@ -924,6 +951,8 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				Parameters:     params,
 				ReturnsError:   returnsError,
 				ReturnCount:    returnCount,
+				Initializers:   inits,
+				SharedProviders: shared,
 			})
 		}
 	}
@@ -1403,6 +1432,90 @@ func parseFuncRef(val string) *model.FuncRef {
 	return &model.FuncRef{FunctionName: val}
 }
 
+func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map[string]*ast.FuncDecl) ([]*model.InitializerConfig, []*model.SharedProviderConfig) {
+	var inits []*model.InitializerConfig
+	var shared []*model.SharedProviderConfig
+	for _, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		key, value, hasColon := strings.Cut(trimmed, ":")
+		if !hasColon {
+			continue
+		}
+		key = strings.ToLower(strings.TrimSpace(key))
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if key == "initializer" || key == "initializers" {
+			for _, item := range splitSafe(value, ',') {
+				item = strings.TrimSpace(item)
+				if item == "" {
+					continue
+				}
+				fnName, inputs := parseGeneratorInputs(item)
+				ref := parseFuncRef(fnName)
+				if ref.ImportPath == "" && pkgName != "" && pkgName != "main" {
+					ref.ImportPath = importPath
+					ref.PackagePath = importPath
+					ref.CommandPackageName = pkgName
+				}
+				inits = append(inits, &model.InitializerConfig{
+					Name:         ref.FunctionName,
+					Func:         ref,
+					Inputs:       inputs,
+					ReturnsError: true,
+				})
+			}
+		} else if key == "shared provider" || key == "provider" {
+			var name, fn string
+			if strings.Contains(value, "=") {
+				namePart, fnPart, _ := strings.Cut(value, "=")
+				name = strings.TrimSpace(namePart)
+				fn = strings.TrimSpace(fnPart)
+			} else {
+				fn = strings.TrimSpace(value)
+				name = fn
+				if open := strings.IndexByte(name, '('); open != -1 {
+					name = name[:open]
+				}
+				if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
+					name = name[lastDot+1:]
+				}
+				name = strings.TrimPrefix(name, "Open")
+				name = strings.TrimPrefix(name, "New")
+				name = strings.TrimPrefix(name, "Get")
+				if len(name) > 0 {
+					name = strings.ToLower(name[:1]) + name[1:]
+				}
+			}
+			fnName, inputs := parseGeneratorInputs(fn)
+			ref := parseFuncRef(fnName)
+			if ref.ImportPath == "" && pkgName != "" && pkgName != "main" {
+				ref.ImportPath = importPath
+				ref.PackagePath = importPath
+				ref.CommandPackageName = pkgName
+			}
+			sp := &model.SharedProviderConfig{
+				Name:         name,
+				Func:         ref,
+				Inputs:       inputs,
+				ReturnsError: true,
+			}
+			if pkgFuncs != nil {
+				if decl, ok := pkgFuncs[ref.FunctionName]; ok && decl.Type != nil && decl.Type.Results != nil && len(decl.Type.Results.List) > 0 {
+					retType, _ := formatType(decl.Type.Results.List[0].Type)
+					sp.Type = retType
+					sp.TypeImportPath = importPath
+					sp.TypePackageName = pkgName
+					sp.ReturnsError = len(decl.Type.Results.List) > 1
+				}
+			}
+			shared = append(shared, sp)
+		}
+	}
+	return inits, shared
+}
+
 func parseAttributes(attrs string, p *ParsedParam) {
 	parts := splitSafe(attrs, ';')
 	// Check if semicolon split looks valid (keys shouldn't contain commas)
@@ -1446,7 +1559,7 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Required = true
 		case AttributeOptionalValue:
 			p.OptionalValue = true
-		case AttributeGenerator:
+		case AttributeGenerator, AttributeProvider, AttributeInject:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
 				if idx := strings.LastIndex(val, "."); idx != -1 {
@@ -1674,6 +1787,36 @@ func formatType(expr ast.Expr) (string, error) {
 			return "", err
 		}
 		return "..." + s, nil
+	case *ast.FuncType:
+		var params []string
+		if t.Params != nil {
+			for _, p := range t.Params.List {
+				pt, err := formatType(p.Type)
+				if err != nil {
+					return "", err
+				}
+				params = append(params, pt)
+			}
+		}
+		var results []string
+		if t.Results != nil {
+			for _, r := range t.Results.List {
+				rt, err := formatType(r.Type)
+				if err != nil {
+					return "", err
+				}
+				results = append(results, rt)
+			}
+		}
+		resStr := ""
+		if len(results) == 0 {
+			resStr = ""
+		} else if len(results) == 1 && !strings.Contains(results[0], ",") {
+			resStr = " " + results[0]
+		} else {
+			resStr = " (" + strings.Join(results, ", ") + ")"
+		}
+		return "func(" + strings.Join(params, ", ") + ")" + resStr, nil
 	default:
 		return "", fmt.Errorf("unsupported type: %T", t)
 	}

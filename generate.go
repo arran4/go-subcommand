@@ -1226,8 +1226,46 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 		imports = append(imports, templateImport{Path: "errors"})
 	}
 
+	if len(cmd.SharedProviders) > 0 {
+		imports = append(imports, templateImport{Path: "sync"}, templateImport{Path: "io"})
+	}
+
+	for _, ic := range cmd.HierarchyInitializers() {
+		if ic.Func != nil && ic.Func.ImportPath != "" && ic.Func.ImportPath != excludedPath {
+			alias := ""
+			if ic.Func.CommandPackageName != "" && ic.Func.CommandPackageName != path.Base(ic.Func.ImportPath) {
+				alias = ic.Func.CommandPackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: ic.Func.ImportPath})
+		}
+	}
+
+	for _, sp := range cmd.SharedProviders {
+		if sp.Func != nil && sp.Func.ImportPath != "" && sp.Func.ImportPath != excludedPath {
+			alias := ""
+			if sp.Func.CommandPackageName != "" && sp.Func.CommandPackageName != path.Base(sp.Func.ImportPath) {
+				alias = sp.Func.CommandPackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: sp.Func.ImportPath})
+		}
+		if sp.TypeImportPath != "" && sp.TypeImportPath != excludedPath {
+			alias := ""
+			if sp.TypePackageName != "" && sp.TypePackageName != path.Base(sp.TypeImportPath) {
+				alias = sp.TypePackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: sp.TypeImportPath})
+		}
+	}
+
 	for _, p := range cmd.Parameters {
-		if p.HasGenerator() && !p.IsFlagPresence() {
+		if p.SharedProvider != nil && p.SharedProvider.TypeImportPath != "" && p.SharedProvider.TypeImportPath != excludedPath {
+			alias := ""
+			if p.SharedProvider.TypePackageName != "" && p.SharedProvider.TypePackageName != path.Base(p.SharedProvider.TypeImportPath) {
+				alias = p.SharedProvider.TypePackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: p.SharedProvider.TypeImportPath})
+		}
+		if p.HasGenerator() && !p.IsFlagPresence() && p.SharedProvider == nil {
 			imports = append(imports, templateImport{Path: "io"})
 		}
 		if p.IsDuration() {
@@ -1262,7 +1300,41 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 		imports = append(imports, templateImport{Path: "errors"})
 	}
 
+	for _, ic := range cmd.Initializers {
+		if ic.Func != nil && ic.Func.ImportPath != "" && ic.Func.ImportPath != excludedPath {
+			alias := ""
+			if ic.Func.CommandPackageName != "" && ic.Func.CommandPackageName != path.Base(ic.Func.ImportPath) {
+				alias = ic.Func.CommandPackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: ic.Func.ImportPath})
+		}
+	}
+
+	for _, sp := range cmd.SharedProviders {
+		if sp.Func != nil && sp.Func.ImportPath != "" && sp.Func.ImportPath != excludedPath {
+			alias := ""
+			if sp.Func.CommandPackageName != "" && sp.Func.CommandPackageName != path.Base(sp.Func.ImportPath) {
+				alias = sp.Func.CommandPackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: sp.Func.ImportPath})
+		}
+		if sp.TypeImportPath != "" && sp.TypeImportPath != excludedPath {
+			alias := ""
+			if sp.TypePackageName != "" && sp.TypePackageName != path.Base(sp.TypeImportPath) {
+				alias = sp.TypePackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: sp.TypeImportPath})
+		}
+	}
+
 	for _, p := range cmd.Parameters {
+		if p.SharedProvider != nil && p.SharedProvider.TypeImportPath != "" && p.SharedProvider.TypeImportPath != excludedPath {
+			alias := ""
+			if p.SharedProvider.TypePackageName != "" && p.SharedProvider.TypePackageName != path.Base(p.SharedProvider.TypeImportPath) {
+				alias = p.SharedProvider.TypePackageName
+			}
+			imports = append(imports, templateImport{Alias: alias, Path: p.SharedProvider.TypeImportPath})
+		}
 		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
 		}
