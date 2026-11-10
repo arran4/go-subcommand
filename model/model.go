@@ -1213,6 +1213,9 @@ func displayWidth(s string) int {
 // listings use direct child names. Built-in help rows participate when they
 // are displayed so their descriptions align with generated commands.
 func (sc *SubCommand) UsageSubcommandWidth(recursive bool) int {
+	if len(sc.SubCommands) == 0 {
+		return 0
+	}
 	max := 0
 	consider := func(label string) {
 		if l := displayWidth(label); l > max {
@@ -1254,11 +1257,16 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.HasGenerator() || p.HasConstructor() {
+		if p.HasGenerator() || p.HasConstructor() || p.IsPositional {
 			continue
 		}
 		l := displayWidth(p.FlagString())
 		if l > max {
+			max = l
+		}
+	}
+	if len(sc.SubCommands) == 0 && sc.HasAction() {
+		if l := displayWidth("-h, --help"); l > max {
 			max = l
 		}
 	}
@@ -1663,6 +1671,39 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
 	}
 
+	if len(sc.SubCommands) == 0 && sc.HasAction() {
+		leafName := sc.SubCommandName
+		if leafName == "" && sc.MainCmdName != "" {
+			leafName = sc.MainCmdName
+		}
+		hasHelp := false
+		for _, p := range allParams {
+			if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+				continue
+			}
+			if p.Name == "help" || p.Name == "h" {
+				hasHelp = true
+				break
+			}
+			for _, a := range p.FlagAliases {
+				if a == "help" || a == "h" {
+					hasHelp = true
+					break
+				}
+			}
+		}
+		if !hasHelp {
+			helpParam := &FunctionParameter{
+				Name:        "help",
+				Type:        "bool",
+				FlagAliases: []string{"h", "help"},
+				Description: "Print this help message",
+				DeclaredIn:  leafName,
+			}
+			grouped[leafName] = append(grouped[leafName], helpParam)
+		}
+	}
+
 	var groups []ParameterGroup
 
 	// Traverse from root to current to ensure order
@@ -1674,7 +1715,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	}
 
 	// Add root command (SubCommand.Command)
-	if sc.Command != nil {
+	if sc.MainCmdName != "" {
 		name := sc.MainCmdName
 		if params, ok := grouped[name]; ok {
 			groups = append(groups, ParameterGroup{
@@ -1689,6 +1730,9 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	for i := len(stack) - 1; i >= 0; i-- {
 		cmd := stack[i]
 		name := cmd.SubCommandName
+		if name == "" {
+			continue
+		}
 		if params, ok := grouped[name]; ok {
 			groups = append(groups, ParameterGroup{
 				CommandName: name,
@@ -1707,6 +1751,9 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 
 	for _, name := range keys {
 		params := grouped[name]
+		if name == "" {
+			name = sc.MainCmdName
+		}
 		if name == "" {
 			name = "unknown"
 		}

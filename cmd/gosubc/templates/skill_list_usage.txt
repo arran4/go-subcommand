@@ -5,11 +5,8 @@ lists installed AI agent skills.
 
 Lists installed AI agent skills.
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
-
 
 Flags:
     {{formatFlagRow 16 19 "--scope string" "(default: \"user\")" "The installation scope ('user' or 'project')"}}
     {{formatFlagRow 16 19 "--agent string" "(default: \"\")" "Explicitly target a specific agent (e.g. 'codex', 'claude')"}}
+    {{formatFlagRow 16 19 "-h, --help" "" "Print this help message"}}
