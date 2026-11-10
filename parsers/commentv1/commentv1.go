@@ -643,6 +643,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.Optional {
+								fp.Optional = true
+							}
 							if len(c.ShortFlags) > 0 {
 								fp.ShortAliases = c.ShortFlags
 							}
@@ -694,6 +697,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.Required {
 								fp.Required = true
 							}
+							if c.Optional {
+								fp.Optional = true
+							}
 							if len(c.ShortFlags) > 0 {
 								fp.ShortAliases = c.ShortFlags
 							}
@@ -744,6 +750,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Required {
 								fp.Required = true
+							}
+							if c.Optional {
+								fp.Optional = true
 							}
 							if len(c.ShortFlags) > 0 {
 								fp.ShortAliases = c.ShortFlags
@@ -999,6 +1008,7 @@ type ParsedParam struct {
 	VarArgMax          int
 	Inherited          bool
 	Required           bool
+	Optional           bool
 	OptionalValue      bool
 	PlusBare           model.PlusOperationConfig
 	PlusValue          model.PlusOperationConfig
@@ -1257,7 +1267,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue}
+	knownSingles := []string{"required", AttributeOptional, "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1444,6 +1454,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Generator.Type = model.SourceTypeFlagPresence
 		case AttributeRequired:
 			p.Required = true
+		case AttributeOptional:
+			p.Optional = true
 		case AttributeOptionalValue:
 			p.OptionalValue = true
 		case AttributeGenerator:
@@ -1538,10 +1550,18 @@ func parseGeneratorInputs(function string) (string, []string) {
 func parseParamDetails(text string) ParsedParam {
 	var p ParsedParam
 
-	if attrs, clean := extractParamAttributes(text); attrs != "" {
-		parseAttributes(attrs, &p)
-		text = clean
+	extractAttrs := func() {
+		for {
+			attrs, clean := extractParamAttributes(text)
+			if attrs == "" {
+				break
+			}
+			parseAttributes(attrs, &p)
+			text = clean
+		}
 	}
+
+	extractAttrs()
 
 	if strings.Contains(text, "(from parent)") {
 		p.Inherited = true
@@ -1563,7 +1583,7 @@ func parseParamDetails(text string) ParsedParam {
 			// fallback/ignore, though usually this regex implies digits
 			p.PositionalArgIndex = 0
 		}
-		text = rePositionalArg.ReplaceAllString(text, "")
+		text = strings.TrimSpace(rePositionalArg.ReplaceAllString(text, ""))
 	}
 
 	// Varargs constraints: 1...3 or ...
@@ -1580,8 +1600,10 @@ func parseParamDetails(text string) ParsedParam {
 				p.VarArgMax = 0
 			}
 		}
-		text = reVarArgRange.ReplaceAllString(text, "")
+		text = strings.TrimSpace(reVarArgRange.ReplaceAllString(text, ""))
 	}
+
+	extractAttrs()
 
 	flagMatches := reFlag.FindAllStringSubmatch(text, -1)
 

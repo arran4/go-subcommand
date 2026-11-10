@@ -12,10 +12,6 @@ You can provide multiple replacements in the following formats:
 
 Available aliases for individual file replacement include 'usage' (for usage.txt.gotmpl), 'man' (for man.gotmpl), etc.
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
-
 
 Flags:
     {{formatFlagRow 33 24 "--dir string" "(default: \".\")" "Project root directory containing go.mod"}}
@@ -35,3 +31,4 @@ Flags:
     {{formatFlagRow 33 24 "--prov-commit string" "(default: \"\")" "Overwrite provenance commit"}}
     {{formatFlagRow 33 24 "--prov-date string" "(default: \"\")" "Overwrite provenance date"}}
     {{formatFlagRow 33 24 "--config string" "(default: \"\")" "Optional generation configuration file."}}
+    {{formatFlagRow 33 24 "-h, --help" "" "Print this help message"}}

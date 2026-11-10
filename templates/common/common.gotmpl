@@ -111,7 +111,7 @@
 		{{- if and .IsPositional (not .Inherited) }}
 			{{- if not .IsVarArg }}
 				{{- $posArgs = add $posArgs 1 }}
-				{{- if not .HasDefaultValue }}
+				{{- if not (or .HasDefaultValue .Optional) }}
 					{{- $reqPosArgs = add $reqPosArgs 1 }}
 				{{- end }}
 			{{- end }}
