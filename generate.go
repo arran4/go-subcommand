@@ -909,11 +909,11 @@ func ParseTemplates(fsys fs.FS) (*template.Template, error) {
 		"plusMinusNames":      plusMinusParameterNames,
 		"plusMinusAllOptions": plusMinusAllParameters,
 		"lower":               strings.ToLower,
-		"title":           func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
-		"upper":           strings.ToUpper,
-		"replace":         strings.ReplaceAll,
-		"escapeUsageText": escapeUsageText,
-		"add":             func(a, b int) int { return a + b },
+		"title":               func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
+		"upper":               strings.ToUpper,
+		"replace":             strings.ReplaceAll,
+		"escapeUsageText":     escapeUsageText,
+		"add":                 func(a, b int) int { return a + b },
 		"until": func(n int) []int {
 			res := make([]int, n)
 			for i := 0; i < n; i++ {
