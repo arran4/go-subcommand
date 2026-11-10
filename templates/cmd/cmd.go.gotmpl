@@ -116,10 +116,17 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}()
 	{{- end }}
 	{{- $needsRemainingArgs := false }}
+	{{- $hasStagedFlags := false }}
 	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
+	{{- if and (not .Inherited) (not .HasConstructor) (or .IsWriter .IsReader) }}
+	{{- $hasStagedFlags = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	var stagedIO []func() error
 	{{- end }}
 	{{- if eq .ResolvedCLIParser "gnu" }}
 	{{- template "cli_parser_gnu" . }}
@@ -128,6 +135,19 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- else if eq .ResolvedCLIParser "plus-minus" }}
 	{{- template "cli_parser_plus-minus" . }}
 	{{- end }}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 
 	{{- if .HasPlusMinusInHierarchy }}
 	if !dashDashSeen && len(remainingArgs) > 0 {
@@ -141,18 +161,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 
 	{{- if or .HasRequiredFlags (gt (len .PathRequiredFlags) 0) }}
-	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
-	if !isHelpRequest && !dashDashSeen {
-		for _, arg := range remainingArgs {
-			if arg == "--" {
-				break
-			}
-			if arg == "-h" || arg == "--help" {
-				isHelpRequest = true
-				break
-			}
-		}
-	}
 	if !isHelpRequest {
 		{{- range .PathRequiredFlags }}
 		if !(
@@ -168,18 +176,6 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- end }}
 	{{- else }}
 	{{- if .HasRequiredFlags }}
-	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
-	if !isHelpRequest && !dashDashSeen {
-		for _, arg := range remainingArgs {
-			if arg == "--" {
-				break
-			}
-			if arg == "-h" || arg == "--help" {
-				isHelpRequest = true
-				break
-			}
-		}
-	}
 	if !isHelpRequest {
 		{{- range .Parameters }}
 		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) }}
@@ -202,11 +198,23 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}
 	{{- end }}
 
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
 {{- template "positional_args_parsing" .Parameters }}
 
 	{{- if .HasPlusMinusInHierarchy }}
 	if err := c.commitAll(); err != nil {
 		return err
+	}
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	for _, fn := range stagedIO {
+		if err := fn(); err != nil {
+			return err
+		}
 	}
 	{{- end }}
 

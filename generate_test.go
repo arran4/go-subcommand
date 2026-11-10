@@ -817,6 +817,21 @@ func TestGenerateConstructorFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
+				if *updateGolden {
+					ar := txtar.Parse(constructorPresenceFixture)
+					for i, f := range ar.Files {
+						for _, name := range []string{"root.go", "child_grandchild.go"} {
+							if f.Name == "expected/"+name && files["cmd/app/"+name] != nil {
+								ar.Files[i].Data = files["cmd/app/"+name]
+							}
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue483_presence.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					constructorPresenceFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
 				for _, name := range []string{"root.go", "child_grandchild.go"} {
 					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
 						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
@@ -1612,6 +1627,21 @@ func TestGenerateProviderFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
+				if *updateGolden {
+					ar := txtar.Parse(providerPresenceFixture)
+					for i, f := range ar.Files {
+						for _, name := range []string{"root.go", "group_run.go"} {
+							if f.Name == "expected/"+name && files["cmd/app/"+name] != nil {
+								ar.Files[i].Data = files["cmd/app/"+name]
+							}
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue403_presence.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					providerPresenceFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
 				for _, name := range []string{"root.go", "group_run.go"} {
 					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
 						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
@@ -4108,4 +4138,337 @@ func TestOptionalValueInvalidConfigurations(t *testing.T) {
 			}
 		})
 	}
+}
+
+//go:embed templates/testdata/runtime/issue547_help.txtar
+var issue547HelpFixture []byte
+
+func TestGenerateIssue547Help(t *testing.T) {
+	archive := txtar.Parse(issue547HelpFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args          []string
+		Stdout        string
+		Stderr        string
+		StderrFile    string
+		Status        int
+		Help          bool
+		CheckSentinel bool
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
+					t.Fatalf("process exit outside main in %s", name)
+				}
+			}
+
+			if backend == "gnu" {
+				if *updateGolden {
+					ar := txtar.Parse(issue547HelpFixture)
+					for _, name := range []string{"root.go", "group_leaf.go"} {
+						found := false
+						for i, f := range ar.Files {
+							if f.Name == "expected/"+name {
+								ar.Files[i].Data = files["cmd/app/"+name]
+								found = true
+								break
+							}
+						}
+						if !found {
+							ar.Files = append(ar.Files, txtar.File{
+								Name: "expected/" + name,
+								Data: files["cmd/app/"+name],
+							})
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue547_help.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					issue547HelpFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
+				for _, name := range []string{"root.go", "group_leaf.go"} {
+					if expected[name] == nil || !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
+						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			build.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+
+			sideEffectsPath := filepath.Join(dir, "side_effects.log")
+			sentinelPath := filepath.Join(dir, "sentinel.txt")
+			const sentinelContent = "SENTINEL ORIGINAL CONTENTS\n"
+
+			for _, invocation := range invocations {
+				_ = os.Remove(sideEffectsPath)
+				_ = os.WriteFile(sentinelPath, []byte(sentinelContent), 0644)
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+
+				wantStderr := invocation.Stderr
+				if invocation.StderrFile != "" {
+					file, ok := expected[invocation.StderrFile]
+					if !ok {
+						t.Fatalf("missing expected stderr file %s", invocation.StderrFile)
+					}
+					wantStderr = string(file.Data)
+				}
+				gotStderr := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || gotStderr != wantStderr {
+					if *updateGolden && invocation.StderrFile != "" && status == invocation.Status && stdout.String() == invocation.Stdout {
+						ar := txtar.Parse(issue547HelpFixture)
+						for i, f := range ar.Files {
+							if f.Name == "expected/"+invocation.StderrFile {
+								ar.Files[i].Data = []byte(gotStderr)
+							}
+						}
+						_ = os.WriteFile("templates/testdata/runtime/issue547_help.txtar", txtar.Format(ar), 0644)
+						issue547HelpFixture = txtar.Format(ar)
+						_, expected = splitInputExpected(ar)
+					} else {
+						t.Errorf("%s %v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q",
+							backend, invocation.Args, status, stdout.String(), gotStderr, invocation.Status, invocation.Stdout, wantStderr)
+					}
+				}
+
+				if invocation.Help {
+					if _, err := os.Stat(sideEffectsPath); !os.IsNotExist(err) {
+						content, _ := os.ReadFile(sideEffectsPath)
+						t.Errorf("%s %v: expected no side effects on help request, got: %s",
+							backend, invocation.Args, string(content))
+					}
+					data, err := os.ReadFile(sentinelPath)
+					if err != nil || string(data) != sentinelContent {
+						t.Errorf("%s %v: sentinel file altered on help request: data=%q err=%v",
+							backend, invocation.Args, string(data), err)
+					}
+				}
+
+				if slices.Contains(invocation.Args, "--output=normal_out.txt") {
+					data, err := os.ReadFile(filepath.Join(dir, "normal_out.txt"))
+					if err != nil || string(data) != "written_data\n" {
+						t.Errorf("%s %v: expected normal_out.txt to contain written_data, got %q (err=%v)",
+							backend, invocation.Args, string(data), err)
+					}
+				}
+			}
+		})
+	}
+
+	t.Run("plus-minus", func(t *testing.T) {
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "plus-minus"}); err != nil {
+			t.Fatal(err)
+		}
+		files := writer.Files
+		dir := t.TempDir()
+		for name, file := range input {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+		}
+		for name, data := range files {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+		}
+		binary := filepath.Join(dir, "app")
+		build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+		build.Dir = dir
+		build.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build: %v\n%s", err, out)
+		}
+
+		sideEffectsPath := filepath.Join(dir, "side_effects.log")
+		sentinelPath := filepath.Join(dir, "sentinel.txt")
+		const sentinelContent = "SENTINEL ORIGINAL CONTENTS\n"
+
+		runCLI := func(args ...string) (stdout string, stderr string, exitCode int) {
+			_ = os.Remove(sideEffectsPath)
+			_ = os.WriteFile(sentinelPath, []byte(sentinelContent), 0644)
+			cmd := exec.Command(binary, args...)
+			cmd.Dir = dir
+			var outBuf, errBuf bytes.Buffer
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			err := cmd.Run()
+			code := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					code = exitErr.ExitCode()
+				} else {
+					code = -1
+				}
+			}
+			return outBuf.String(), errBuf.String(), code
+		}
+
+		// 1. Root help
+		_, errOut, code := runCLI("--help")
+		if code != 0 || !strings.Contains(errOut, "Root command with positional") {
+			t.Fatalf("plus-minus --help failed: code=%d err=%s", code, errOut)
+		}
+		if _, err := os.Stat(sideEffectsPath); !os.IsNotExist(err) {
+			t.Fatal("plus-minus --help triggered side effects")
+		}
+
+		// 2. Leaf help with late flag after positional
+		_, errOut, code = runCLI("group", "leaf", "mypos", "--help")
+		if code != 0 || !strings.Contains(errOut, "Leaf command demonstration") {
+			t.Fatalf("plus-minus leaf mypos --help failed: code=%d err=%s", code, errOut)
+		}
+		if _, err := os.Stat(sideEffectsPath); !os.IsNotExist(err) {
+			t.Fatal("plus-minus leaf mypos --help triggered side effects")
+		}
+
+		// 3. Leaf help with output sentinel and custom parser
+		_, errOut, code = runCLI("group", "leaf", "--output=sentinel.txt", "--custom=custom_val", "mypos", "--help")
+		if code != 0 || !strings.Contains(errOut, "Leaf command demonstration") {
+			t.Fatalf("plus-minus leaf with output and custom --help failed: code=%d err=%s", code, errOut)
+		}
+		if _, err := os.Stat(sideEffectsPath); !os.IsNotExist(err) {
+			t.Fatal("plus-minus leaf with output and custom --help triggered side effects")
+		}
+		data, err := os.ReadFile(sentinelPath)
+		if err != nil || string(data) != sentinelContent {
+			t.Fatalf("sentinel file modified in plus-minus: %q (err=%v)", string(data), err)
+		}
+
+		// 4. Literal terminator -- --help
+		out, _, code := runCLI("group", "leaf", "--", "mypos", "--help")
+		if code != 0 || !strings.Contains(out, "leaf pos=mypos tag=default custom= extra=--help") {
+			t.Fatalf("plus-minus leaf -- mypos --help failed: code=%d out=%s", code, out)
+		}
+
+		// 5. Normal execution writing output
+		outPath := filepath.Join(dir, "pm_normal.txt")
+		out, _, code = runCLI("group", "leaf", "--output="+outPath, "mypos")
+		if code != 0 || !strings.Contains(out, "leaf pos=mypos") {
+			t.Fatalf("plus-minus leaf execution failed: code=%d out=%s", code, out)
+		}
+		data, err = os.ReadFile(outPath)
+		if err != nil || string(data) != "written_data\n" {
+			t.Fatalf("plus-minus normal output failed: %q (err=%v)", string(data), err)
+		}
+	})
+
+	t.Run("mixed-hierarchy", func(t *testing.T) {
+		boundaryInput, _ := splitInputExpected(txtar.Parse(commandBoundaryFixture))
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(boundaryInput, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "plus-minus"}); err != nil {
+			t.Fatal(err)
+		}
+		files := writer.Files
+		dir := t.TempDir()
+		for name, file := range boundaryInput {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+		}
+		for name, data := range files {
+			writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+		}
+		binary := filepath.Join(dir, "app")
+		build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+		build.Dir = dir
+		build.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build: %v\n%s", err, out)
+		}
+
+		sentinelPath := filepath.Join(dir, "sentinel.txt")
+		const sentinelContent = "SENTINEL ORIGINAL CONTENTS\n"
+
+		runCLI := func(args ...string) (stdout string, stderr string, exitCode int) {
+			_ = os.WriteFile(sentinelPath, []byte(sentinelContent), 0644)
+			cmd := exec.Command(binary, args...)
+			cmd.Dir = dir
+			var outBuf, errBuf bytes.Buffer
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			err := cmd.Run()
+			code := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					code = exitErr.ExitCode()
+				} else {
+					code = -1
+				}
+			}
+			return outBuf.String(), errBuf.String(), code
+		}
+
+		// 1. Root --help in mixed tree
+		_, errOut, code := runCLI("--help")
+		if code != 0 || !strings.Contains(errOut, "Usage:") {
+			t.Fatalf("mixed root --help failed: code=%d err=%s", code, errOut)
+		}
+
+		// 2. Child help before and after positional in GNU child:
+		_, errOut, code = runCLI("gnu", "--help")
+		if code != 0 || !strings.Contains(errOut, "gnu") || !strings.Contains(errOut, "<target>") {
+			t.Fatalf("mixed gnu --help failed: code=%d err=%s", code, errOut)
+		}
+
+		_, errOut, code = runCLI("gnu", "target1", "--help")
+		if code != 0 || !strings.Contains(errOut, "gnu") || !strings.Contains(errOut, "<target>") {
+			t.Fatalf("mixed gnu target1 --help failed: code=%d err=%s", code, errOut)
+		}
+
+		// Root has out writer flag, child has late help: sentinel must remain untouched!
+		_, errOut, code = runCLI("--out="+sentinelPath, "gnu", "target1", "--help")
+		if code != 0 || !strings.Contains(errOut, "gnu") || !strings.Contains(errOut, "<target>") {
+			t.Fatalf("mixed late help with root out flag failed: code=%d err=%s", code, errOut)
+		}
+		data, err := os.ReadFile(sentinelPath)
+		if err != nil || string(data) != sentinelContent {
+			t.Fatalf("sentinel file modified in mixed tree: %q (err=%v)", string(data), err)
+		}
+
+		// 3. Child help in go-flag grandchild:
+		_, errOut, code = runCLI("goflag", "item1", "--help")
+		if code != 0 || !strings.Contains(errOut, "goflag") || !strings.Contains(errOut, "<item>") {
+			t.Fatalf("mixed goflag item1 --help failed: code=%d err=%s", code, errOut)
+		}
+	})
 }
