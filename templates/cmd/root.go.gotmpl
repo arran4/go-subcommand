@@ -326,12 +326,16 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 func (c *RootCmd) Execute(args []string) (err error) {
 	{{- $hasFile := false }}
 	{{- $needsRemainingArgs := false }}
+	{{- $hasStagedFlags := false }}
 	{{- range .Parameters }}
 	{{- if or .IsWriter .IsReader (and .HasGenerator (not .IsFlagPresence)) }}
 	{{- $hasFile = true }}
 	{{- end }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
+	{{- end }}
+	{{- if and (not .Inherited) (not .HasConstructor) (or .IsWriter .IsReader) }}
+	{{- $hasStagedFlags = true }}
 	{{- end }}
 	{{- end }}
 	{{- if $hasFile }}
@@ -343,6 +347,9 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			}
 		}
 	}()
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	var stagedIO []func() error
 	{{- end }}
 	{{- if eq .ResolvedCLIParser "gnu" }}
 	{{- template "cli_parser_gnu" . }}
@@ -451,6 +458,13 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- if eq .ResolvedCLIParser "plus-minus" }}
 	if err := c.commitAll(); err != nil {
 		return err
+	}
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	for _, fn := range stagedIO {
+		if err := fn(); err != nil {
+			return err
+		}
 	}
 	{{- end }}
 

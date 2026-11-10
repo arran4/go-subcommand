@@ -116,10 +116,17 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	}()
 	{{- end }}
 	{{- $needsRemainingArgs := false }}
+	{{- $hasStagedFlags := false }}
 	{{- range .Parameters }}
 	{{- if or .IsPositional .IsVarArg }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
+	{{- if and (not .Inherited) (not .HasConstructor) (or .IsWriter .IsReader) }}
+	{{- $hasStagedFlags = true }}
+	{{- end }}
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	var stagedIO []func() error
 	{{- end }}
 	{{- if eq .ResolvedCLIParser "gnu" }}
 	{{- template "cli_parser_gnu" . }}
@@ -201,6 +208,13 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- if .HasPlusMinusInHierarchy }}
 	if err := c.commitAll(); err != nil {
 		return err
+	}
+	{{- end }}
+	{{- if $hasStagedFlags }}
+	for _, fn := range stagedIO {
+		if err := fn(); err != nil {
+			return err
+		}
 	}
 	{{- end }}
 

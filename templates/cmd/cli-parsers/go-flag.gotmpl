@@ -41,8 +41,11 @@
 	{{- range $uniqueAliases }}
 	{{- if or $param.IsWriter $param.IsReader }}
 	fs.Var(goFlagIO(func(s string) error {
-		value := s
-		{{- template "acquire_io" (list $param "value") }}
+		val := s
+		stagedIO = append(stagedIO, func() error {
+			{{- template "acquire_io" (list $param "val") }}
+			return nil
+		})
 		return nil
 	}), "{{.}}", {{goString $param.Description}})
 	{{- else if $param.IsSlice }}
