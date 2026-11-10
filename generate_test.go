@@ -190,6 +190,9 @@ var optionalValueSource string
 //go:embed templates/testdata/runtime/issue401_optional_value.txtar
 var optionalValueRuntimeFixture []byte
 
+//go:embed templates/testdata/runtime/issue522_lifecycle.txtar
+var issue522LifecycleFixture []byte
+
 var updateGolden = flag.Bool("update", false, "update golden files")
 
 // oldStyleFileWriter models an external implementation compiled against the
@@ -4108,4 +4111,288 @@ func TestOptionalValueInvalidConfigurations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerateIssue522Lifecycle(t *testing.T) {
+	archive := txtar.Parse(issue522LifecycleFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     string
+		StderrFile string
+		Status     int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+
+			// Verify no runtime dependency on gosubc
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+			}
+
+			// Update golden files if requested
+			if *updateGolden && backend == "gnu" {
+				var buf bytes.Buffer
+				buf.WriteString(strings.TrimSpace(string(archive.Comment)) + "\n")
+				for _, f := range archive.Files {
+					if strings.HasPrefix(f.Name, "input/") || f.Name == "expected/invocations.json" {
+						buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+					}
+				}
+				for _, name := range []string{"root.go", "admin.go", "admin_list.go", "admin_delete.go", "admin_audit.go", "admin_about.go"} {
+					buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+						Name: "expected/" + name,
+						Data: files["cmd/app/"+name],
+					}}})))
+				}
+				if err := os.WriteFile("templates/testdata/runtime/issue522_lifecycle.txtar", buf.Bytes(), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Log("updated issue522_lifecycle.txtar")
+				return
+			}
+
+			if backend == "gnu" {
+				for _, name := range []string{"root.go", "admin.go", "admin_list.go", "admin_delete.go", "admin_audit.go", "admin_about.go"} {
+					golden, ok := expected[name]
+					if !ok {
+						t.Fatalf("missing expected golden %s", name)
+					}
+					if !bytes.Equal(files["cmd/app/"+name], golden.Data) {
+						t.Fatalf("generated %s differs from golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+
+			// Materialize and compile
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			build.Env = append(os.Environ(), "GOTOOLCHAIN=go1.22.12")
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+
+			// Run standard invocations
+			for _, invocation := range invocations {
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+				if status != invocation.Status || stdout.String() != invocation.Stdout {
+					t.Errorf("%v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q",
+						invocation.Args, status, stdout.String(), stderr.String(), invocation.Status, invocation.Stdout)
+				}
+			}
+
+			// Side-effect freedom on help: zero initializers or providers run
+			for _, helpArgs := range [][]string{
+				{"admin", "--help"},
+				{"admin", "list", "--help"},
+				{"admin", "audit", "--help"},
+			} {
+				command := exec.Command(binary, helpArgs...)
+				command.Dir = dir
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				_ = command.Run()
+				combined := stdout.String() + stderr.String()
+				if strings.Contains(combined, "init:require-admin") {
+					t.Errorf("%v: executed initializer during help", helpArgs)
+				}
+				if strings.Contains(combined, "provider:open-session") {
+					t.Errorf("%v: executed provider during help", helpArgs)
+				}
+			}
+
+			// Failures: FAIL_ADMIN=1
+			{
+				command := exec.Command(binary, "admin", "list")
+				command.Dir = dir
+				command.Env = append(os.Environ(), "FAIL_ADMIN=1")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				if err == nil {
+					t.Error("FAIL_ADMIN: expected error, got nil")
+				}
+				if !strings.Contains(stderr.String(), "admin authorization failed") {
+					t.Errorf("FAIL_ADMIN: stderr = %q, want 'admin authorization failed'", stderr.String())
+				}
+				if strings.Contains(stdout.String(), "provider:open-session") || strings.Contains(stdout.String(), "action:") {
+					t.Errorf("FAIL_ADMIN: unexpected execution in stdout: %q", stdout.String())
+				}
+			}
+
+			// Failures: FAIL_SESSION=1
+			{
+				command := exec.Command(binary, "admin", "list")
+				command.Dir = dir
+				command.Env = append(os.Environ(), "FAIL_SESSION=1")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				if err == nil {
+					t.Error("FAIL_SESSION: expected error, got nil")
+				}
+				if !strings.Contains(stderr.String(), "session connection failed") {
+					t.Errorf("FAIL_SESSION: stderr = %q, want 'session connection failed'", stderr.String())
+				}
+				if strings.Contains(stdout.String(), "action:") {
+					t.Errorf("FAIL_SESSION: unexpected action in stdout: %q", stdout.String())
+				}
+			}
+
+			// Failures: FAIL_CLOSE=1
+			{
+				command := exec.Command(binary, "admin", "list")
+				command.Dir = dir
+				command.Env = append(os.Environ(), "FAIL_CLOSE=1")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				if err == nil {
+					t.Error("FAIL_CLOSE: expected error, got nil")
+				}
+				if !strings.Contains(stderr.String(), "cleanup failure") {
+					t.Errorf("FAIL_CLOSE: stderr = %q, want 'cleanup failure'", stderr.String())
+				}
+			}
+
+			// In-process root reuse: calling rootCmd.Execute twice resets state and re-executes cleanly
+			{
+				testSrc := `package main
+
+import (
+	"testing"
+)
+
+func TestRootCmd_ReusedExecution(t *testing.T) {
+	rootCmd, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatalf("NewRoot failed: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := rootCmd.Execute([]string{"admin", "list"}); err != nil {
+			t.Fatalf("run %d: %v", i+1, err)
+		}
+	}
+}
+`
+				writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "root_reuse_test.go"), testSrc)
+				cmd := exec.Command("go", "test", "-v", "./cmd/app", "-run", "TestRootCmd_ReusedExecution")
+				cmd.Dir = dir
+				var stdout, stderr bytes.Buffer
+				cmd.Stdout, cmd.Stderr = &stdout, &stderr
+				if err := cmd.Run(); err != nil {
+					t.Fatalf("in-process root reuse test failed: %v\nstderr: %s\nstdout: %s", err, stderr.String(), stdout.String())
+				}
+				wantOutput := "init:require-admin\nprovider:open-session\naction:list:admin-user\nclose:session:admin-user\ninit:require-admin\nprovider:open-session\naction:list:admin-user\nclose:session:admin-user\n"
+				if !strings.Contains(stdout.String(), wantOutput) {
+					t.Errorf("in-process root reuse stdout = %q, want containing %q", stdout.String(), wantOutput)
+				}
+			}
+		})
+	}
+
+	// Validation tests: duplicate initializer or missing function
+	for _, tc := range []struct {
+		name string
+		cmd  *model.Command
+		want string
+	}{
+		{
+			name: "missing func",
+			cmd: &model.Command{
+				MainCmdName:  "app",
+				Initializers: []*model.InitializerConfig{{Name: "init1"}},
+			},
+			want: "initializer declaration has no function",
+		},
+		{
+			name: "duplicate initializer",
+			cmd: &model.Command{
+				MainCmdName: "app",
+				Initializers: []*model.InitializerConfig{
+					{Name: "init1", Func: &model.FuncRef{FunctionName: "Init1"}},
+					{Name: "init1", Func: &model.FuncRef{FunctionName: "Init1"}},
+				},
+			},
+			want: "duplicate initializer",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dm := &model.DataModel{Commands: []*model.Command{tc.cmd}}
+			err := dm.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected validation error containing %q, got: %v", tc.want, err)
+			}
+		})
+	}
+
+	t.Run("mdc_native_config", func(t *testing.T) {
+		mdcDecls := []parsers.CommandDeclaration{
+			{
+				Kind:     "command",
+				Path:     "app admin",
+				Text:     "Description: Administrative commands.\nInitializer: \"example.com/lifecycleapp/session\".RequireAdmin\nShared provider: session = \"example.com/lifecycleapp/session\".OpenAdminSession\n",
+				Filename: "commands.mdc",
+				Line:     1,
+			},
+		}
+		// Strip the metadata comments from input/app.go to ensure they come purely from .mdc
+		mdcInput := fstest.MapFS{}
+		for k, v := range input {
+			if k == "app.go" {
+				stripped := strings.Replace(string(v.Data), "// Admin is a command `app admin` -- Administrative commands.\n// Initializer: \"example.com/lifecycleapp/session\".RequireAdmin\n// Shared provider: session = \"example.com/lifecycleapp/session\".OpenAdminSession\n", "", 1)
+				mdcInput[k] = &fstest.MapFile{Data: []byte(stripped)}
+			} else {
+				mdcInput[k] = v
+			}
+		}
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(mdcInput, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu", CommandDeclarations: mdcDecls}); err != nil {
+			t.Fatalf("mdc generation failed: %v", err)
+		}
+		for _, name := range []string{"root.go", "admin.go", "admin_list.go", "admin_delete.go", "admin_audit.go", "admin_about.go"} {
+			if !bytes.Equal(writer.Files["cmd/app/"+name], expected[name].Data) {
+				t.Fatalf("mdc generated %s differs from golden:\n%s", name, writer.Files["cmd/app/"+name])
+			}
+		}
+	})
 }

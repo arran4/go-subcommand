@@ -68,6 +68,20 @@ const (
 	// Usage: (generator: MyGeneratorFunc)
 	AttributeGenerator = "generator"
 
+	// AttributeProvider is an alias for AttributeGenerator.
+	// Usage: (provider: MyProviderFunc)
+	AttributeProvider = "provider"
+
+	// AttributeInject specifies injection of a shared provider.
+	// Usage: (inject: session)
+	AttributeInject = "inject"
+
+	// AttributeInitializer specifies an initializer guard for a command.
+	AttributeInitializer = "initializer"
+
+	// AttributeInitializers specifies multiple initializer guards.
+	AttributeInitializers = "initializers"
+
 	// AttributeRootContext marks a root parameter as constructor supplied.
 	// Usage: (root context)
 	AttributeRootContext = "root context"

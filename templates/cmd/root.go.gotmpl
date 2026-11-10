@@ -92,7 +92,58 @@ type RootCmd struct {
 	plusMinusCommit func() error
 	seenFlags       map[string]bool
 	{{- end }}
+	{{- range .SharedProviders }}
+	{{.OnceFieldName}} sync.Once
+	{{.ValueFieldName}} {{.QualifiedType}}
+	{{.ErrorFieldName}} error
+	{{- end }}
+	{{- if .HasLifecycle }}
+	cleanups  []func() error
+	cleanupMu sync.Mutex
+	resets    []func()
+	{{- end }}
 }
+{{- if .HasLifecycle }}
+
+func (c *RootCmd) registerCleanup(fn func() error) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+	c.cleanups = append(c.cleanups, fn)
+}
+
+func (c *RootCmd) registerReset(fn func()) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+	c.resets = append(c.resets, fn)
+}
+{{- end }}
+{{- range .SharedProviders }}
+
+func (c *RootCmd) {{.MethodName}}() ({{.QualifiedType}}, error) {
+	c.{{.OnceFieldName}}.Do(func() {
+		c.registerReset(func() {
+			c.{{.OnceFieldName}} = sync.Once{}
+			var zero {{.QualifiedType}}
+			c.{{.ValueFieldName}} = zero
+			c.{{.ErrorFieldName}} = nil
+		})
+		{{- if .ReturnsError }}
+		c.{{.ValueFieldName}}, c.{{.ErrorFieldName}} = {{.CallFor "c"}}
+		if c.{{.ErrorFieldName}} == nil {
+			if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+		{{- else }}
+		c.{{.ValueFieldName}} = {{.CallFor "c"}}
+		if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+			c.registerCleanup(closer.Close)
+		}
+		{{- end }}
+	})
+	return c.{{.ValueFieldName}}, c.{{.ErrorFieldName}}
+}
+{{- end }}
 
 {{- if eq .ResolvedCLIParser "plus-minus" }}
 func (c *RootCmd) commitAll() error {
@@ -324,6 +375,22 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 func (c *RootCmd) Execute(args []string) (err error) {
+	{{- if .HasLifecycle }}
+	defer func() {
+		c.cleanupMu.Lock()
+		defer c.cleanupMu.Unlock()
+		for i := len(c.cleanups) - 1; i >= 0; i-- {
+			if cerr := c.cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+		c.cleanups = nil
+		for _, reset := range c.resets {
+			reset()
+		}
+		c.resets = nil
+	}()
+	{{- end }}
 	{{- $hasFile := false }}
 	{{- $needsRemainingArgs := false }}
 	{{- range .Parameters }}
@@ -473,7 +540,28 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	c.{{.Name}} = seenFlags
 	{{- end }}
 	{{- end }}
+	{{- range .HierarchyInitializers }}
+	if err := {{.CallFor "c"}}; err != nil {
+		return err
+	}
+	{{- end }}
+	{{- range .Parameters }}
+	{{- if .SharedProvider }}
+	{{- if .IsLazyCallable }}
+	c.{{.ValueFieldName}} = c.{{.SharedProvider.MethodName}}
+	{{- else }}
+	{
+		v, err := c.{{.SharedProvider.MethodName}}()
+		if err != nil {
+			return fmt.Errorf("failed to provide {{.Name}}: %w", err)
+		}
+		c.{{.ValueFieldName}} = v
+	}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 	{{- range orderedGenerators .Parameters }}
+	{{- if not .SharedProvider }}
 	{
 		v, err := {{.GeneratorCallFor "c" true}}
 		if err != nil {
@@ -484,6 +572,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 			cleanups = append(cleanups, closer.Close)
 		}
 	}
+	{{- end }}
 	{{- end }}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {

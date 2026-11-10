@@ -85,6 +85,138 @@ type GeneratorConfig struct {
 	Inputs []string
 }
 
+// InitializerConfig specifies a mandatory initialization guard attached to a command node.
+type InitializerConfig struct {
+	Name         string
+	Func         *FuncRef
+	Inputs       []string
+	ReturnsError bool
+}
+
+func (ic *InitializerConfig) CallFor(receiver string) string {
+	if ic.Func == nil || ic.Func.FunctionName == "" {
+		return ""
+	}
+	args := make([]string, 0, len(ic.Inputs))
+	for _, input := range ic.Inputs {
+		if receiver != "" {
+			args = append(args, receiver+"."+input)
+		} else {
+			args = append(args, input)
+		}
+	}
+	argumentList := strings.Join(args, ", ")
+	if ic.Func.CommandPackageName != "" {
+		return fmt.Sprintf("%s.%s(%s)", ic.Func.CommandPackageName, ic.Func.FunctionName, argumentList)
+	}
+	return fmt.Sprintf("%s(%s)", ic.Func.FunctionName, argumentList)
+}
+
+// SharedProviderConfig specifies a memoized, invocation-scoped typed provider hosted on a common ancestor.
+type SharedProviderConfig struct {
+	Name            string
+	Type            string
+	TypeImportPath  string
+	TypePackageName string
+	Func            *FuncRef
+	Inputs          []string
+	ReturnsError    bool
+}
+
+func (sp *SharedProviderConfig) MethodName() string {
+	return toPascalCase(sp.Name)
+}
+
+func (sp *SharedProviderConfig) OnceFieldName() string {
+	return toCamelCase(sp.Name) + "Once"
+}
+
+func (sp *SharedProviderConfig) ValueFieldName() string {
+	return toCamelCase(sp.Name)
+}
+
+func (sp *SharedProviderConfig) ErrorFieldName() string {
+	return toCamelCase(sp.Name) + "Err"
+}
+
+func (sp *SharedProviderConfig) QualifiedType() string {
+	if sp.Type == "" {
+		return "any"
+	}
+	if sp.TypePackageName != "" && sp.TypePackageName != "main" && !strings.Contains(sp.Type, ".") {
+		if strings.HasPrefix(sp.Type, "*") {
+			return "*" + sp.TypePackageName + "." + strings.TrimPrefix(sp.Type, "*")
+		}
+		if strings.HasPrefix(sp.Type, "[]*") {
+			return "[]*" + sp.TypePackageName + "." + strings.TrimPrefix(sp.Type, "[]*")
+		}
+		if strings.HasPrefix(sp.Type, "[]") {
+			return "[]" + sp.TypePackageName + "." + strings.TrimPrefix(sp.Type, "[]")
+		}
+		return sp.TypePackageName + "." + sp.Type
+	}
+	return sp.Type
+}
+
+func (sp *SharedProviderConfig) CallFor(receiver string) string {
+	if sp.Func == nil || sp.Func.FunctionName == "" {
+		return ""
+	}
+	args := make([]string, 0, len(sp.Inputs))
+	for _, input := range sp.Inputs {
+		if receiver != "" {
+			args = append(args, receiver+"."+input)
+		} else {
+			args = append(args, input)
+		}
+	}
+	argumentList := strings.Join(args, ", ")
+	if sp.Func.CommandPackageName != "" {
+		return fmt.Sprintf("%s.%s(%s)", sp.Func.CommandPackageName, sp.Func.FunctionName, argumentList)
+	}
+	return fmt.Sprintf("%s(%s)", sp.Func.FunctionName, argumentList)
+}
+
+func toPascalCase(s string) string {
+	if s == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '_' || r == '-' || r == ' '
+	})
+	var sb strings.Builder
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		sb.WriteString(strings.ToUpper(p[:1]) + p[1:])
+	}
+	return sb.String()
+}
+
+func toCamelCase(s string) string {
+	p := toPascalCase(s)
+	if p == "" {
+		return ""
+	}
+	return strings.ToLower(p[:1]) + p[1:]
+}
+
+func ExtractCallableReturnType(fnType string) string {
+	fnType = strings.TrimSpace(fnType)
+	if !strings.HasPrefix(fnType, "func()") {
+		return fnType
+	}
+	ret := strings.TrimSpace(strings.TrimPrefix(fnType, "func()"))
+	ret = strings.TrimPrefix(ret, "(")
+	ret = strings.TrimSuffix(ret, ")")
+	parts := strings.Split(ret, ",")
+	if len(parts) > 0 {
+		return strings.TrimSpace(parts[0])
+	}
+	return strings.TrimSpace(ret)
+}
+
 type ParserConfig struct {
 	Type ParserType
 	Func *FuncRef
@@ -99,8 +231,10 @@ type PlusOperationConfig struct {
 type Command struct {
 	*DataModel
 	// Metadata records an explicit functionless declaration, independently of FunctionName.
-	Metadata    *CommandMetadata
-	ManSections []ManSection
+	Metadata        *CommandMetadata
+	ManSections     []ManSection
+	Initializers    []*InitializerConfig
+	SharedProviders []*SharedProviderConfig
 	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName string
 	// SubCommands is the list of direct subcommands for this command.
@@ -242,10 +376,20 @@ type FunctionParameter struct {
 	TypeImportPath  string
 	TypePackageName string
 	TypeName        string
+
+	SharedProvider *SharedProviderConfig
+	IsLazyCallable bool
+}
+
+func (p *FunctionParameter) IsLazyCallableType() bool {
+	return strings.HasPrefix(p.Type, "func()")
 }
 
 func (dm *DataModel) Validate() error {
 	for _, cmd := range dm.Commands {
+		if err := cmd.ResolveSharedProviders(); err != nil {
+			return err
+		}
 		if err := cmd.Validate(); err != nil {
 			return err
 		}
@@ -255,6 +399,36 @@ func (dm *DataModel) Validate() error {
 
 func (cmd *Command) Validate() (err error) {
 	defer func() { err = metadataError(cmd.Metadata, err) }()
+	seenInits := make(map[string]bool)
+	for _, ic := range cmd.Initializers {
+		if ic.Func == nil || ic.Func.FunctionName == "" {
+			return fmt.Errorf("command %s: initializer declaration has no function", cmd.MainCmdName)
+		}
+		if seenInits[ic.Name] {
+			return fmt.Errorf("command %s: duplicate initializer %q", cmd.MainCmdName, ic.Name)
+		}
+		seenInits[ic.Name] = true
+		for _, in := range ic.Inputs {
+			if cmd.FindParameter(in) == nil {
+				return fmt.Errorf("command %s: initializer %q references unknown parameter %q", cmd.MainCmdName, ic.Name, in)
+			}
+		}
+	}
+	seenShared := make(map[string]bool)
+	for _, sp := range cmd.SharedProviders {
+		if sp.Func == nil || sp.Func.FunctionName == "" {
+			return fmt.Errorf("command %s: shared provider declaration has no function", cmd.MainCmdName)
+		}
+		if seenShared[sp.Name] {
+			return fmt.Errorf("command %s: duplicate shared provider %q", cmd.MainCmdName, sp.Name)
+		}
+		seenShared[sp.Name] = true
+		for _, in := range sp.Inputs {
+			if cmd.FindParameter(in) == nil {
+				return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", cmd.MainCmdName, sp.Name, in)
+			}
+		}
+	}
 	switch cmd.NoCommand {
 	case NoCommandDefault:
 	case NoCommandError:
@@ -365,6 +539,36 @@ func (cmd *Command) validateRootAliases() error {
 
 func (sc *SubCommand) Validate() (err error) {
 	defer func() { err = metadataError(sc.Metadata, err) }()
+	seenInits := make(map[string]bool)
+	for _, ic := range sc.Initializers {
+		if ic.Func == nil || ic.Func.FunctionName == "" {
+			return fmt.Errorf("command %s: initializer declaration has no function", sc.ProgName())
+		}
+		if seenInits[ic.Name] {
+			return fmt.Errorf("command %s: duplicate initializer %q", sc.ProgName(), ic.Name)
+		}
+		seenInits[ic.Name] = true
+		for _, in := range ic.Inputs {
+			if sc.FindParameter(in) == nil {
+				return fmt.Errorf("command %s: initializer %q references unknown parameter %q", sc.ProgName(), ic.Name, in)
+			}
+		}
+	}
+	seenShared := make(map[string]bool)
+	for _, sp := range sc.SharedProviders {
+		if sp.Func == nil || sp.Func.FunctionName == "" {
+			return fmt.Errorf("command %s: shared provider declaration has no function", sc.ProgName())
+		}
+		if seenShared[sp.Name] {
+			return fmt.Errorf("command %s: duplicate shared provider %q", sc.ProgName(), sp.Name)
+		}
+		seenShared[sp.Name] = true
+		for _, in := range sp.Inputs {
+			if sc.FindParameter(in) == nil {
+				return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", sc.ProgName(), sp.Name, in)
+			}
+		}
+	}
 	for _, alias := range sc.Aliases {
 		if strings.EqualFold(alias, sc.SubCommandName) {
 			return fmt.Errorf("command %s: alias %q on subcommand %q cannot alias itself", sc.ProgName(), alias, sc.SubCommandName)
@@ -977,8 +1181,10 @@ func (p *FunctionParameter) TypeDescription() string {
 
 // SubCommand represents a subcommand within a command tree.
 type SubCommand struct {
-	Metadata    *CommandMetadata
-	ManSections []ManSection
+	Metadata        *CommandMetadata
+	ManSections     []ManSection
+	Initializers    []*InitializerConfig
+	SharedProviders []*SharedProviderConfig
 	*Command
 	// Parent points to the parent command.
 	Parent *SubCommand
@@ -1602,6 +1808,320 @@ func (sc *SubCommand) FindAncestor(name string) *SubCommand {
 func (cmd *Command) ResolveInheritance() {
 	for _, sc := range cmd.SubCommands {
 		sc.ResolveInheritance()
+	}
+}
+
+func (sc *SubCommand) HierarchyInitializers() []*InitializerConfig {
+	var inits []*InitializerConfig
+	if sc.Command != nil {
+		inits = append(inits, sc.Command.Initializers...)
+	}
+	var ancestors []*SubCommand
+	for curr := sc.Parent; curr != nil; curr = curr.Parent {
+		ancestors = append(ancestors, curr)
+	}
+	for i := len(ancestors) - 1; i >= 0; i-- {
+		inits = append(inits, ancestors[i].Initializers...)
+	}
+	inits = append(inits, sc.Initializers...)
+	return inits
+}
+
+func (cmd *Command) HierarchyInitializers() []*InitializerConfig {
+	return cmd.Initializers
+}
+
+// HasLifecycle reports whether any command in the tree uses shared providers or initializers.
+func (cmd *Command) HasLifecycle() bool {
+	if len(cmd.Initializers) > 0 || len(cmd.SharedProviders) > 0 {
+		return true
+	}
+	for _, sc := range cmd.SubCommands {
+		if sc.HasLifecycle() {
+			return true
+		}
+	}
+	return false
+}
+
+func (sc *SubCommand) HasLifecycle() bool {
+	if len(sc.Initializers) > 0 || len(sc.SharedProviders) > 0 {
+		return true
+	}
+	for _, child := range sc.SubCommands {
+		if child.HasLifecycle() {
+			return true
+		}
+	}
+	return false
+}
+
+func (cmd *Command) FindParameter(name string) *FunctionParameter {
+	for _, p := range cmd.Parameters {
+		if p.Name == name {
+			return p
+		}
+	}
+	return nil
+}
+
+func (sc *SubCommand) FindParameter(name string) *FunctionParameter {
+	for _, p := range sc.AllParameters() {
+		if p.Name == name {
+			return p
+		}
+	}
+	return nil
+}
+
+func (cmd *Command) ResolveSharedProviders() error {
+	for _, sc := range cmd.SubCommands {
+		bindExplicitProviders(sc)
+	}
+
+	type paramPair struct {
+		subCmd *SubCommand
+		param  *FunctionParameter
+	}
+	type groupKey struct {
+		importPath string
+		funcName   string
+		inputs     string
+	}
+
+	usages := make(map[groupKey][]paramPair)
+	var collectUsages func(sc *SubCommand)
+	collectUsages = func(sc *SubCommand) {
+		for _, p := range sc.Parameters {
+			if p.SharedProvider != nil {
+				continue
+			}
+			if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
+				k := groupKey{
+					importPath: p.Generator.Func.ImportPath,
+					funcName:   p.Generator.Func.FunctionName,
+					inputs:     strings.Join(p.Generator.Inputs, ","),
+				}
+				usages[k] = append(usages[k], paramPair{subCmd: sc, param: p})
+			}
+		}
+		for _, child := range sc.SubCommands {
+			collectUsages(child)
+		}
+	}
+	for _, sc := range cmd.SubCommands {
+		collectUsages(sc)
+	}
+
+	for _, pairs := range usages {
+		if len(pairs) < 2 {
+			continue
+		}
+		distinctFuncs := make(map[string]bool)
+		for _, pair := range pairs {
+			fn := pair.subCmd.SubCommandFunctionName
+			if fn != "" && fn != cmd.FunctionName {
+				distinctFuncs[fn] = true
+			}
+		}
+		if len(distinctFuncs) < 2 {
+			continue
+		}
+		first := pairs[0]
+		commonPath := subCommandPath(first.subCmd)
+		for _, pair := range pairs[1:] {
+			p := subCommandPath(pair.subCmd)
+			commonPath = commonPrefix(commonPath, p)
+			if len(commonPath) == 0 {
+				break
+			}
+		}
+
+		p0 := first.param
+		actualType := p0.Type
+		if p0.IsLazyCallableType() {
+			actualType = ExtractCallableReturnType(p0.Type)
+		}
+
+		if len(commonPath) == 0 {
+			canProvide := true
+			for _, in := range p0.Generator.Inputs {
+				if cmd.FindParameter(in) == nil {
+					canProvide = false
+					break
+				}
+			}
+			if !canProvide {
+				continue
+			}
+
+			var sp *SharedProviderConfig
+			for _, existing := range cmd.SharedProviders {
+				if existing.Func != nil && existing.Func.FunctionName == p0.Generator.Func.FunctionName && existing.Func.ImportPath == p0.Generator.Func.ImportPath {
+					sp = existing
+					break
+				}
+			}
+			if sp == nil {
+				sp = &SharedProviderConfig{
+					Name:            p0.Name,
+					Type:            actualType,
+					TypeImportPath:  p0.TypeImportPath,
+					TypePackageName: p0.TypePackageName,
+					Func:            p0.Generator.Func,
+					Inputs:          p0.Generator.Inputs,
+					ReturnsError:    true,
+				}
+				cmd.SharedProviders = append(cmd.SharedProviders, sp)
+			}
+			for _, pair := range pairs {
+				pair.param.SharedProvider = sp
+				pair.param.FlagAliases = nil
+				pair.param.ShortAliases = nil
+				pair.param.LongAliases = nil
+				if pair.param.IsLazyCallableType() {
+					pair.param.IsLazyCallable = true
+				}
+			}
+		} else {
+			lca := commonPath[len(commonPath)-1]
+			canProvide := true
+			for _, in := range p0.Generator.Inputs {
+				if lca.FindParameter(in) == nil {
+					canProvide = false
+					break
+				}
+			}
+			if !canProvide {
+				continue
+			}
+
+			var sp *SharedProviderConfig
+			for _, existing := range lca.SharedProviders {
+				if existing.Func != nil && existing.Func.FunctionName == p0.Generator.Func.FunctionName && existing.Func.ImportPath == p0.Generator.Func.ImportPath {
+					sp = existing
+					break
+				}
+			}
+			if sp == nil {
+				sp = &SharedProviderConfig{
+					Name:            p0.Name,
+					Type:            actualType,
+					TypeImportPath:  p0.TypeImportPath,
+					TypePackageName: p0.TypePackageName,
+					Func:            p0.Generator.Func,
+					Inputs:          p0.Generator.Inputs,
+					ReturnsError:    true,
+				}
+				lca.SharedProviders = append(lca.SharedProviders, sp)
+			}
+			for _, pair := range pairs {
+				pair.param.SharedProvider = sp
+				pair.param.FlagAliases = nil
+				pair.param.ShortAliases = nil
+				pair.param.LongAliases = nil
+				if pair.param.IsLazyCallableType() {
+					pair.param.IsLazyCallable = true
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func subCommandPath(sc *SubCommand) []*SubCommand {
+	var path []*SubCommand
+	for curr := sc; curr != nil; curr = curr.Parent {
+		path = append(path, curr)
+	}
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+	return path
+}
+
+func commonPrefix(a, b []*SubCommand) []*SubCommand {
+	var prefix []*SubCommand
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	for i := 0; i < minLen; i++ {
+		if a[i] == b[i] {
+			prefix = append(prefix, a[i])
+		} else {
+			break
+		}
+	}
+	return prefix
+}
+
+func bindExplicitProviders(sc *SubCommand) {
+	for _, p := range sc.Parameters {
+		if p.SharedProvider != nil {
+			continue
+		}
+		genName := ""
+		if p.Generator.Func != nil {
+			genName = p.Generator.Func.FunctionName
+		}
+		for curr := sc.Parent; curr != nil; curr = curr.Parent {
+			for _, sp := range curr.SharedProviders {
+				if matchSharedProvider(p, genName, sp) {
+					p.SharedProvider = sp
+					bindProviderType(p, sp)
+					break
+				}
+			}
+			if p.SharedProvider != nil {
+				break
+			}
+		}
+		if p.SharedProvider == nil && sc.Command != nil {
+			for _, sp := range sc.Command.SharedProviders {
+				if matchSharedProvider(p, genName, sp) {
+					p.SharedProvider = sp
+					bindProviderType(p, sp)
+					break
+				}
+			}
+		}
+	}
+	for _, child := range sc.SubCommands {
+		bindExplicitProviders(child)
+	}
+}
+
+func matchSharedProvider(p *FunctionParameter, genName string, sp *SharedProviderConfig) bool {
+	if p.Generator.Type != SourceTypeGenerator && p.Generator.Type != "" {
+		return false
+	}
+	if p.Name == sp.Name || genName == sp.Name {
+		return true
+	}
+	if sp.Func != nil && genName != "" && genName == sp.Func.FunctionName {
+		return true
+	}
+	return false
+}
+
+func bindProviderType(p *FunctionParameter, sp *SharedProviderConfig) {
+	p.Generator.Type = SourceTypeGenerator
+	p.FlagAliases = nil
+	p.ShortAliases = nil
+	p.LongAliases = nil
+	if p.IsLazyCallableType() {
+		p.IsLazyCallable = true
+		if sp.Type == "" {
+			sp.Type = ExtractCallableReturnType(p.Type)
+			sp.TypeImportPath = p.TypeImportPath
+			sp.TypePackageName = p.TypePackageName
+		}
+	} else if sp.Type == "" {
+		sp.Type = p.Type
+		sp.TypeImportPath = p.TypeImportPath
+		sp.TypePackageName = p.TypePackageName
 	}
 }
 
