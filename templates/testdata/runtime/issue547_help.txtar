@@ -1,0 +1,178 @@
+Regression test for Issue #547: Leaf help and help after positionals.
+Leaf commands must not advertise fictitious child subcommands.
+Help flags must be accurately documented.
+Help after a positional argument is handled without executing the action or provider.
+The -- terminator retains its contract.
+
+-- input/go.mod --
+module example.com/helpissue
+
+go 1.22
+
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+func record(msg string) {
+	f, err := os.OpenFile("side_effects.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err == nil {
+		fmt.Fprintln(f, msg)
+		_ = f.Close()
+	}
+}
+
+func Provider() (string, error) {
+	record("provider called")
+	return "provided", nil
+}
+
+// Root is a subcommand `app` -- Root command with positional and business generator.
+//
+// Flags:
+//
+//	flag: -f --flag Toggle flag.
+//	dep: (generator: Provider) Injected dependency.
+//	url: @1 URL target.
+func Root(url string, flag bool, dep string) error {
+	record(fmt.Sprintf("root url=%s flag=%t dep=%s", url, flag, dep))
+	fmt.Printf("root url=%s flag=%t\n", url, flag)
+	return nil
+}
+
+// Group is a subcommand `app group` -- Group for leaf command.
+func Group() {}
+
+// Leaf is a subcommand `app group leaf` -- Leaf command demonstration.
+//
+// Flags:
+//
+//	tag: -t --tag (default: "default") Tag label.
+//	dep: (generator: Provider) Injected dependency.
+//	pos: @1 Positional argument.
+//	extra: ... Extra trailing arguments.
+func Leaf(pos string, tag string, dep string, extra ...string) error {
+	record(fmt.Sprintf("leaf pos=%s tag=%s extra=%s", pos, tag, strings.Join(extra, ",")))
+	fmt.Printf("leaf pos=%s tag=%s extra=%s\n", pos, tag, strings.Join(extra, ","))
+	return nil
+}
+
+// Nested is a subcommand `app nested` -- Nested parent command.
+func Nested() {}
+
+// NestedChild is a subcommand `app nested child` -- Deep nested command.
+//
+// Flags:
+//
+//	item: @1 Item identifier.
+func NestedChild(item string) error {
+	record(fmt.Sprintf("nested item=%s", item))
+	fmt.Printf("nested item=%s\n", item)
+	return nil
+}
+
+// Aliased is a subcommand `app aliased` -- Directly aliased leaf command.
+// Aliases: al
+//
+// Flags:
+//
+//	name: @1 Target name.
+func Aliased(name string) error {
+	record(fmt.Sprintf("aliased name=%s", name))
+	fmt.Printf("aliased name=%s\n", name)
+	return nil
+}
+
+-- expected/invocations.json --
+[
+  {"args": ["group", "leaf", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos", "-h"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos"], "stdout": "leaf pos=mypos tag=default extra=\n"},
+  {"args": ["group", "leaf", "--", "--help"], "stdout": "leaf pos=--help tag=default extra=\n"},
+  {"args": ["nested", "child", "--help"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem", "--help"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem", "-h"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem"], "stdout": "nested item=testitem\n"},
+  {"args": ["aliased", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["aliased", "alice", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice", "-h"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice"], "stdout": "aliased name=alice\n"},
+  {"args": ["--help"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com", "--help"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com", "-h"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com"], "stdout": "root url=https://example.com flag=false\n"},
+  {"args": ["--", "--help"], "stdout": "root url=--help flag=false\n"}
+]
+
+-- expected/leaf-help.stderr --
+Usage: app [flags...] group leaf [flags...] <pos> [extra...]
+
+Leaf command demonstration.
+
+
+
+`app` Flags:
+    --flag, -f                                Toggle flag.
+
+`leaf` Flags:
+    --tag, -t string   (default: "default")   Tag label.
+    -h, --help                                Print this help message
+
+Positional Arguments:
+    <pos>      Positional argument.
+    [extra...] Extra trailing arguments.
+-- expected/nested-help.stderr --
+Usage: app [flags...] nested child <item>
+
+Deep nested command.
+
+
+
+`app` Flags:
+    --flag, -f   Toggle flag.
+
+`child` Flags:
+    -h, --help   Print this help message
+
+Positional Arguments:
+    <item> Item identifier.
+-- expected/aliased-help.stderr --
+Usage: app [flags...] aliased <name>
+
+Directly aliased leaf command.
+
+
+
+`app` Flags:
+    --flag, -f   Toggle flag.
+
+`aliased` Flags:
+    -h, --help   Print this help message
+
+Positional Arguments:
+    <name> Target name.
+-- expected/root-help.stderr --
+Usage: app [flags...] <url> <subcommand>
+
+Root command with positional and business generator.
+
+Subcommands:
+
+    aliased Directly aliased leaf command.
+    group   Group for leaf command.
+    nested  Nested parent command.
+    help    Print this help message
+    usage   Print this usage message
+
+
+Flags:
+    --flag, -f   Toggle flag.
+
+Positional Arguments:
+    <url> URL target.

@@ -9,8 +9,8 @@ import "os"
 // Provenance
 var (
 	GeneratorVersion = "(devel)"
-	GeneratedAt      = ""
-	ProjectCommit    = ""
+	GeneratedAt      = "2026-11-10T03:37:07Z"
+	ProjectCommit    = "211f4d489604358ae7142e28ce2ddfd8898e1fc9"
 )
 
 func main() {

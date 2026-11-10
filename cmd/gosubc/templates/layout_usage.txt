@@ -5,6 +5,6 @@ Displays the generation template layout
 
 Prints a tree-like structure of the templates and their descriptions.
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
+
+Flags:
+    {{formatFlagRow 12 0 "-h, --help" "" "Print this help message"}}

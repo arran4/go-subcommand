@@ -817,6 +817,21 @@ func TestGenerateConstructorFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
+				if *updateGolden {
+					ar := txtar.Parse(constructorPresenceFixture)
+					for i, f := range ar.Files {
+						for _, name := range []string{"root.go", "child_grandchild.go"} {
+							if f.Name == "expected/"+name && files["cmd/app/"+name] != nil {
+								ar.Files[i].Data = files["cmd/app/"+name]
+							}
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue483_presence.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					constructorPresenceFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
 				for _, name := range []string{"root.go", "child_grandchild.go"} {
 					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
 						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
@@ -1612,6 +1627,21 @@ func TestGenerateProviderFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
+				if *updateGolden {
+					ar := txtar.Parse(providerPresenceFixture)
+					for i, f := range ar.Files {
+						for _, name := range []string{"root.go", "group_run.go"} {
+							if f.Name == "expected/"+name && files["cmd/app/"+name] != nil {
+								ar.Files[i].Data = files["cmd/app/"+name]
+							}
+						}
+					}
+					if err := os.WriteFile("templates/testdata/runtime/issue403_presence.txtar", txtar.Format(ar), 0644); err != nil {
+						t.Fatal(err)
+					}
+					providerPresenceFixture = txtar.Format(ar)
+					_, expected = splitInputExpected(ar)
+				}
 				for _, name := range []string{"root.go", "group_run.go"} {
 					if !bytes.Equal(files["cmd/app/"+name], expected[name].Data) {
 						t.Fatalf("generated %s differs from source-comment golden:\n%s", name, files["cmd/app/"+name])
@@ -4105,6 +4135,105 @@ func TestOptionalValueInvalidConfigurations(t *testing.T) {
 			err := dm.Validate()
 			if err == nil {
 				t.Fatalf("expected validation error, got nil")
+			}
+		})
+	}
+}
+
+//go:embed templates/testdata/runtime/issue547_help.txtar
+var issue547HelpFixture []byte
+
+func TestGenerateIssue547Help(t *testing.T) {
+	archive := txtar.Parse(issue547HelpFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args       []string
+		Stdout     string
+		Stderr     string
+		StderrFile string
+		Status     int
+		Help       bool
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+				if name != "cmd/app/main.go" && bytes.Contains(data, []byte("os.Exit(")) {
+					t.Fatalf("process exit outside main in %s", name)
+				}
+			}
+
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, out)
+			}
+
+			sideEffectsPath := filepath.Join(dir, "side_effects.log")
+
+			for _, invocation := range invocations {
+				_ = os.Remove(sideEffectsPath)
+				command := exec.Command(binary, invocation.Args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), "COLUMNS=80")
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				status := 0
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); ok {
+						status = exit.ExitCode()
+					} else {
+						t.Fatal(err)
+					}
+				}
+
+				wantStderr := invocation.Stderr
+				if invocation.StderrFile != "" {
+					file, ok := expected[invocation.StderrFile]
+					if !ok {
+						t.Fatalf("missing expected stderr file %s", invocation.StderrFile)
+					}
+					wantStderr = string(file.Data)
+				}
+				gotStderr := strings.ReplaceAll(stderr.String(), binary, "app")
+				if status != invocation.Status || stdout.String() != invocation.Stdout || gotStderr != wantStderr {
+					t.Errorf("%s %v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q",
+						backend, invocation.Args, status, stdout.String(), gotStderr, invocation.Status, invocation.Stdout, wantStderr)
+				}
+
+				if invocation.Help {
+					if _, err := os.Stat(sideEffectsPath); !os.IsNotExist(err) {
+						content, _ := os.ReadFile(sideEffectsPath)
+						t.Errorf("%s %v: expected no side effects on help request, got: %s",
+							backend, invocation.Args, string(content))
+					}
+				}
 			}
 		})
 	}

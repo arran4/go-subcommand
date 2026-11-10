@@ -352,6 +352,26 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- template "cli_parser_plus-minus" . }}
 	{{- end }}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+	{{- if .DefaultRoute }}
+	{{- if .IsHelpDefaultRoute }}
+	if !dashDashSeen && len(remainingArgs) == 0 {
+		isHelpRequest = true
+	}
+	{{- end }}
+	{{- end }}
+
 	{{- if eq .ResolvedCLIParser "plus-minus" }}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
@@ -385,18 +405,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	{{- end }}
 	{{- if .HasRequiredFlags }}
-	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
-	if !isHelpRequest && !dashDashSeen {
-		for _, arg := range remainingArgs {
-			if arg == "--" {
-				break
-			}
-			if arg == "-h" || arg == "--help" {
-				isHelpRequest = true
-				break
-			}
-		}
-	}
 	if !isHelpRequest {
 		{{- range .Parameters }}
 		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
@@ -409,25 +417,6 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- end }}
 	{{- else }}
 	{{- if .HasRequiredFlags }}
-	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
-	if !isHelpRequest && !dashDashSeen {
-		for _, arg := range remainingArgs {
-			if arg == "--" {
-				break
-			}
-			if arg == "-h" || arg == "--help" {
-				isHelpRequest = true
-				break
-			}
-		}
-	}
-	{{- if .DefaultRoute }}
-	{{- if .IsHelpDefaultRoute }}
-	if !dashDashSeen && len(remainingArgs) == 0 {
-		isHelpRequest = true
-	}
-	{{- end }}
-	{{- end }}
 	if !isHelpRequest {
 		{{- range .Parameters }}
 		{{- if and .Required (not .IsPositional) (not .HasGenerator) (not .HasConstructor) }}
@@ -449,6 +438,11 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		{{- end }}
 	}
 	{{- end }}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
 
 	{{- if .FunctionName }}
 

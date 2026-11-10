@@ -1372,7 +1372,6 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 	for name, tmplText := range map[string]string{
 		"app_usage.txt":     appUsage,
 		"service_usage.txt": serviceUsage,
-		"serve_usage.txt":   serveUsage,
 	} {
 		assertContains(t, tmplText, "{{formatHelpRow ", name+" should format command rows via formatHelpRow")
 		assertNotContains(t, tmplText, "subcommands", name+" must not build runtime subcommand collections")
@@ -1380,9 +1379,12 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		assertNotContains(t, tmplText, "%-40s", name+" must not contain hardcoded %-40s")
 		assertNotContains(t, tmplText, "%-10s", name+" must not contain hardcoded %-10s")
 	}
+	assertNotContains(t, serveUsage, "{{formatHelpRow ", "serve_usage.txt leaf command should not format command rows via formatHelpRow")
+	assertNotContains(t, serveUsage, "Subcommands:", "serve_usage.txt leaf command must not advertise subcommands")
 	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--port int" "(default: 8080)"`, "serve_usage.txt should format flags via formatFlagRow")
 	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--endpoint string" ""`, "serve_usage.txt should format default-less flags via formatFlagRow")
 	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "--quiet" "(default: false)" ""}}`, "serve_usage.txt should format description-less flags via formatFlagRow")
+	assertContains(t, serveUsage, `{{formatFlagRow 19 18 "-h, --help" "" "Print this help message"}}`, "serve_usage.txt should document built-in help flag")
 
 	// 2, 3, 4. Execute generated templates in shallow and recursive modes for long/short names,
 	// nested commands, and commands without descriptions.
@@ -1461,7 +1463,8 @@ func TestIssue481_RuntimeUsageAlignmentAndEscaping(t *testing.T) {
 		t.Errorf("serve shallow and recursive outputs should be byte-identical:\nshallow:\n%q\nrecursive:\n%q", serveShallow, serveRecursive)
 	}
 	assertContains(t, serveShallow, "Usage: app serve [flags...]", "serve usage should retain its direct command path")
-	assertContains(t, serveShallow, "    help  Print this help message\n    usage Print this usage message", "serve usage should align built-in help rows")
+	assertContains(t, serveShallow, "-h, --help", "serve usage should document built-in help flag")
+	assertNotContains(t, serveShallow, "Subcommands:", "leaf command should not advertise fictitious subcommands")
 
 	scenarioShallow := executeGeneratedUsageTemplate(t, scenarioServeUsage, false)
 	scenarioRecursive := executeGeneratedUsageTemplate(t, scenarioServeUsage, true)

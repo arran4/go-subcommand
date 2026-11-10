@@ -487,7 +487,11 @@ usage resource, and tests without colliding with the application root.
 
 Built-in `help` and `usage` commands also traverse nested subcommand paths
 (for example, `app help services list`) without invoking business actions or
-initializing generator-backed providers. Unrecognized command tokens on a
+initializing generator-backed providers. Help flags (`-h`, `--help`) provided
+after positional arguments (for example, `app extract https://example.com --help`)
+are recognized and display command usage immediately without executing the action
+or evaluating providers. Furthermore, leaf commands do not advertise fictitious
+child subcommands, accurately listing supported flags including `-h, --help`. Unrecognized command tokens on a
 non-positional parent fail with an `unknown command` error rather than falling
 through to the parent action. `--` preserves positional-argument semantics so a
 token after it is not treated as a subcommand.
