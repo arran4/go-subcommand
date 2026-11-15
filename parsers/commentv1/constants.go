@@ -59,6 +59,9 @@ const (
 	// AttributeRequired indicates that the parameter is mandatory.
 	// Usage: (required)
 	AttributeRequired = "required"
+	// AttributeOptional indicates that the parameter is explicitly optional.
+	// Usage: (optional)
+	AttributeOptional = "optional"
 
 	// AttributeOptionalValue marks a flag whose value is optional.
 	// Usage: (optional value)

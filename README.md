@@ -256,6 +256,7 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 *   **Flags:** `-f`, `--flag`. One or more flag aliases.
 *   **Default Value:** `default: value` or `default: "value"`.
 *   **Required:** `required`. Marks a flag as required; generated execution returns an error if it is omitted.
+*   **Optional:** `optional`. Explicitly marks a positional argument as optional (e.g. `@1 (optional)`), allowing bare invocation to pass zero-values without requiring default-value annotations.
 *   **From Parent:** `from parent`. Maps a child parameter to a flag declared on an ancestor command.
 *   **Custom Parser:** `parser: Func` or `parser: "import/path".Func`. Uses a custom string parser for the parameter.
 *   **Generator:** `generator: Func` or `generator: "import/path".Func`. Populates the parameter from code instead of exposing it as a CLI flag. Providers may name parameter dependencies, for example `generator: BuildClient(endpoint, token)`. Dependencies are bound first, providers run once per command execution in deterministic dependency order, and unknown dependencies or cycles fail generation with diagnostics.
@@ -296,7 +297,7 @@ can be constructed by using a `generator:` provider depending on the parsed
 optional flag parameter.
 
 `(optional value)` applies only to **named flags**, not positional arguments:
-an `@1` positional can instead be made omittable with `(default: ".")`, and a
+an `@1` positional can instead be made omittable with `(optional)` or `(default: ".")`, and a
 variadic `...` tail can accept zero or more values. These are distinct from a
 flag that accepts `--name` and `--name=value`.
 

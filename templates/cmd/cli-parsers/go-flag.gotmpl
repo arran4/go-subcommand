@@ -11,7 +11,7 @@
 	{{- $hasFlagPresence := false }}
 	{{- range .Parameters }}
 		{{- if .IsFlagPresence }}{{ $hasFlagPresence = true }}{{ $hasTrackedFlags = true }}{{ end }}
-		{{- if and (not .Inherited) (not .HasConstructor) (or .Required (and (not .IsPositional) (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
+		{{- if and (not .Inherited) (not .HasConstructor) (not .IsPositional) (or .Required (and (not .HasGenerator) (or .IsWriter .IsReader) .HasDefaultValue)) }}
 			{{- $hasTrackedFlags = true }}
 		{{- end }}
 	{{- end }}

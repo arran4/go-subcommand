@@ -94,6 +94,13 @@ func TestParseAttributes(t *testing.T) {
 			},
 		},
 		{
+			name:  "Optional",
+			attrs: "optional",
+			wantParam: ParsedParam{
+				Optional: true,
+			},
+		},
+		{
 			name:  "Parser Simple",
 			attrs: "parser: MyFunc",
 			wantParam: ParsedParam{
@@ -284,5 +291,18 @@ func TestParseParamDetailsOptionalValue(t *testing.T) {
 	}
 	if len(parsed.Flags) != 2 || parsed.Flags[0] != "label" || parsed.Flags[1] != "l" {
 		t.Fatalf("unexpected flags: %v", parsed.Flags)
+	}
+}
+
+func TestParseParamDetailsOptional(t *testing.T) {
+	parsed := parseParamDetails("@1 (optional) URL to extract")
+	if !parsed.Optional {
+		t.Fatalf("expected Optional=true, got false")
+	}
+	if parsed.Description != "URL to extract" {
+		t.Fatalf("expected Description='URL to extract', got %q", parsed.Description)
+	}
+	if !parsed.IsPositional || parsed.PositionalArgIndex != 1 {
+		t.Fatalf("expected Positional=true index=1, got %v index=%d", parsed.IsPositional, parsed.PositionalArgIndex)
 	}
 }
