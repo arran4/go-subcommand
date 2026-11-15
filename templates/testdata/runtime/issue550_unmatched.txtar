@@ -1,0 +1,2365 @@
+-- input/go.mod --
+module example.com/unmatched
+
+go 1.22
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+)
+
+// Root is a subcommand `app`.
+// CLI-Parser: plus-minus
+//
+// Flags:
+//
+//	a: -a Flag a.
+//	n: -n Number option.
+//	known: --known Known option.
+//	args: (unmatched) Unmatched argv at root.
+func Root(a bool, n int, known int, args []string) error {
+	fmt.Printf("root: a=%v n=%d known=%d args=%q\n", a, n, known, args)
+	return nil
+}
+
+// Volume is a subcommand `app volume`.
+//
+// Flags:
+//
+//	player: --player Select player.
+//	args: (unmatched) Unmatched argv in volume.
+func Volume(player string, args []string) error {
+	fmt.Printf("volume: player=%s args=%q\n", player, args)
+	return nil
+}
+
+// Child is a subcommand `app child`.
+//
+// Flags:
+//
+//	known: --known Known flag.
+//	known2: --known2 Known flag 2.
+//	args: (unmatched) Unmatched argv in child.
+func Child(known string, known2 string, args []string) error {
+	fmt.Printf("child: known=%s known2=%s args=%q\n", known, known2, args)
+	return nil
+}
+
+// Run is a subcommand `app run`.
+//
+// Flags:
+//
+//	args: (unmatched) Unmatched argv in run.
+func Run(args []string) error {
+	fmt.Printf("run: args=%q\n", args)
+	return nil
+}
+
+// Other is a subcommand `app other`.
+//
+// Flags:
+//
+//	flag: --flag Flag.
+func Other(flag string) error {
+	fmt.Printf("other: flag=%s\n", flag)
+	return nil
+}
+-- expected/invocations.json --
+[
+  {
+    "Args": [
+      "volume",
+      "-0.1",
+      "--player",
+      "vlc"
+    ],
+    "Stdout": "volume: player=vlc args=[\"-0.1\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "volume",
+      "+0.1"
+    ],
+    "Stdout": "volume: player= args=[\"+0.1\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "volume",
+      "0.5"
+    ],
+    "Stdout": "volume: player= args=[\"0.5\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "volume",
+      "-0.1",
+      "--help"
+    ],
+    "Stdout": "",
+    "Stderr": "",
+    "StderrFile": "volume-help.stderr",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "-10"
+    ],
+    "Stdout": "root: a=false n=0 known=0 args=[\"-10\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "run",
+      "unknown",
+      "text"
+    ],
+    "Stdout": "run: args=[\"unknown\" \"text\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "child",
+      "--foreign",
+      "value"
+    ],
+    "Stdout": "child: known= known2= args=[\"--foreign\" \"value\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "--foreign",
+      "child"
+    ],
+    "Stdout": "root: a=false n=0 known=0 args=[\"--foreign\" \"child\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "unknown",
+      "child"
+    ],
+    "Stdout": "root: a=false n=0 known=0 args=[\"unknown\" \"child\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "child",
+      "--known=value",
+      "-0.1",
+      "--known2=value2"
+    ],
+    "Stdout": "child: known=value known2=value2 args=[\"-0.1\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "-az"
+    ],
+    "Stdout": "root: a=false n=0 known=0 args=[\"-az\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "-n5"
+    ],
+    "Stdout": "root: a=false n=5 known=0 args=[]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "--known=invalid"
+    ],
+    "Stdout": "",
+    "Stderr": "Error: invalid value \"invalid\" for flag known: strconv.Atoi: parsing \"invalid\": invalid syntax\n",
+    "StderrFile": "",
+    "Status": 1
+  },
+  {
+    "Args": [
+      "--",
+      "literal",
+      "-0.1"
+    ],
+    "Stdout": "root: a=false n=0 known=0 args=[\"literal\" \"-0.1\"]\n",
+    "Stderr": "",
+    "StderrFile": "",
+    "Status": 0
+  },
+  {
+    "Args": [
+      "other",
+      "-0.1"
+    ],
+    "Stdout": "",
+    "Stderr": "Error: invalid short option syntax: -0.1\n",
+    "StderrFile": "",
+    "Status": 1
+  },
+  {
+    "Args": [
+      "other",
+      "--foreign"
+    ],
+    "Stdout": "",
+    "Stderr": "Error: unknown flag: --foreign\n",
+    "StderrFile": "",
+    "Status": 1
+  }
+]
+-- expected/volume-help.stderr --
+Usage: app [flags...] volume [flags...]
+
+.
+
+Subcommands:
+    help  Print this help message
+    usage Print this usage message
+
+
+
+`app` Flags:
+    -a                Flag a.
+    -n int            Number option.
+    --known int       Known option.
+
+`volume` Flags:
+    --player string   Select player.
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/contract_test.go --
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+func TestIssue550Contract_Types(t *testing.T) {
+	root, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootVal := reflect.ValueOf(root).Elem()
+	argsField := rootVal.FieldByName("args")
+	if !argsField.IsValid() {
+		t.Fatal("expected args field on RootCmd")
+	}
+	if argsField.Type() != reflect.TypeOf([]string(nil)) {
+		t.Fatalf("expected args to have type []string, got %v", argsField.Type())
+	}
+
+	vol := root.NewVolume()
+	volVal := reflect.ValueOf(vol).Elem()
+	volArgs := volVal.FieldByName("args")
+	if !volArgs.IsValid() {
+		t.Fatal("expected args field on Volume")
+	}
+	if volArgs.Type() != reflect.TypeOf([]string(nil)) {
+		t.Fatalf("expected args to have type []string, got %v", volArgs.Type())
+	}
+}
+
+func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
+	dir := t.TempDir()
+	sentinel := filepath.Join(dir, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actionRan := false
+	root.CommandAction = func(c *RootCmd) error {
+		actionRan = true
+		return os.WriteFile(sentinel, []byte("mutated"), 0644)
+	}
+
+	err = root.Execute([]string{"-10", "--help"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if actionRan {
+		t.Fatal("action should not have executed during late help")
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "original" {
+		t.Fatalf("sentinel file was mutated: %s", string(data))
+	}
+}
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"sync"
+
+	app "example.com/unmatched"
+	"example.com/unmatched/cmd"
+	"example.com/unmatched/cmd/app/templates"
+)
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands        map[string]func() Cmd
+	Version         string
+	Commit          string
+	Date            string
+	a               bool
+	n               int
+	known           int
+	args            []string
+	CommandAction   func(c *RootCmd) error
+	plusMinusCommit func() error
+	seenFlags       map[string]bool
+}
+
+func (c *RootCmd) commitAll() error {
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+
+func (c *RootCmd) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+	}
+	c.FlagSet.Usage = c.Usage
+
+	c.BoolVar(&c.a, "a", false, "Flag a.")
+
+	c.IntVar(&c.n, "n", 0, "Number option.")
+
+	c.IntVar(&c.known, "known", 0, "Known option.")
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		err := app.Root(c.a, c.n, c.known, c.args)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("app failed: %w", err)
+		}
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewChild() })
+		c.Commands["child"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewOther() })
+		c.Commands["other"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewRun() })
+		c.Commands["run"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewVolume() })
+		c.Commands["volume"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"n": {
+			Key:               "n",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.n = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.n = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"known": {
+			Key:               "known",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.known = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.known = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["a"],
+		"n": plusMinusOptions["n"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"known": plusMinusOptions["known"],
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	for name := range c.Commands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	if err != nil {
+		return err
+	}
+	if pmSpecial == "help" || pmSpecial == "usage" {
+		c.Usage()
+		return nil
+	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	c.args = remainingArgs
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/volume.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+
+	app "example.com/unmatched"
+	"example.com/unmatched/cmd"
+)
+
+var _ Cmd = (*Volume)(nil)
+
+type Volume struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	player          string
+	args            []string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Volume) error
+	plusMinusCommit func() error
+	seenFlags       map[string]bool
+}
+
+func (c *Volume) commitAll() error {
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+
+func (c *Volume) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+
+type UsageDataVolume struct {
+	*Volume
+	Recursive bool
+}
+
+func (c *Volume) Usage() {
+	err := executeUsage(os.Stderr, "volume_usage.txt", UsageDataVolume{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Volume) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Volume) commandPath() string { return "app volume" }
+
+func (c *Volume) UsageRecursive() {
+	err := executeUsage(os.Stderr, "volume_usage.txt", UsageDataVolume{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Volume) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"player": {
+			Key:               "player",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.player = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.player = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"n": {
+			Key:               "n",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.n = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.n = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"known": {
+			Key:               "known",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.known = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.known = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["a"],
+		"n": plusMinusOptions["n"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"player": plusMinusOptions["player"],
+		"known":  plusMinusOptions["known"],
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	if err != nil {
+		return err
+	}
+	if pmSpecial == "help" || pmSpecial == "usage" {
+		c.Usage()
+		return nil
+	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	c.args = remainingArgs
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewVolume() *Volume {
+	set := flag.NewFlagSet("volume", flag.ContinueOnError)
+	v := &Volume{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.StringVar(&v.player, "player", "", "Select player.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Volume) error {
+
+		err := app.Volume(c.player, c.args)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("volume failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/child.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+
+	app "example.com/unmatched"
+	"example.com/unmatched/cmd"
+)
+
+var _ Cmd = (*Child)(nil)
+
+type Child struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	known           string
+	known2          string
+	args            []string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Child) error
+	plusMinusCommit func() error
+	seenFlags       map[string]bool
+}
+
+func (c *Child) commitAll() error {
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+
+func (c *Child) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+
+type UsageDataChild struct {
+	*Child
+	Recursive bool
+}
+
+func (c *Child) Usage() {
+	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Child) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Child) commandPath() string { return "app child" }
+
+func (c *Child) UsageRecursive() {
+	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Child) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"known": {
+			Key:               "known",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.known = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.known = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"known2": {
+			Key:               "known2",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.known2 = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.known2 = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"n": {
+			Key:               "n",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.n = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.n = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["a"],
+		"n": plusMinusOptions["n"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"known":  plusMinusOptions["known"],
+		"known2": plusMinusOptions["known2"],
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	if err != nil {
+		return err
+	}
+	if pmSpecial == "help" || pmSpecial == "usage" {
+		c.Usage()
+		return nil
+	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	c.args = remainingArgs
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewChild() *Child {
+	set := flag.NewFlagSet("child", flag.ContinueOnError)
+	v := &Child{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.StringVar(&v.known, "known", "", "Known flag.")
+
+	set.StringVar(&v.known2, "known2", "", "Known flag 2.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Child) error {
+
+		err := app.Child(c.known, c.known2, c.args)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("child failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/run.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+
+	app "example.com/unmatched"
+	"example.com/unmatched/cmd"
+)
+
+var _ Cmd = (*Run)(nil)
+
+type Run struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	args            []string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Run) error
+	plusMinusCommit func() error
+	seenFlags       map[string]bool
+}
+
+func (c *Run) commitAll() error {
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+
+func (c *Run) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+
+type UsageDataRun struct {
+	*Run
+	Recursive bool
+}
+
+func (c *Run) Usage() {
+	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataRun{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Run) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Run) commandPath() string { return "app run" }
+
+func (c *Run) UsageRecursive() {
+	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataRun{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Run) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"n": {
+			Key:               "n",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.n = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.n = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"known": {
+			Key:               "known",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.known = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.known = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["a"],
+		"n": plusMinusOptions["n"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"known": plusMinusOptions["known"],
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	if err != nil {
+		return err
+	}
+	if pmSpecial == "help" || pmSpecial == "usage" {
+		c.Usage()
+		return nil
+	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	c.args = remainingArgs
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewRun() *Run {
+	set := flag.NewFlagSet("run", flag.ContinueOnError)
+	v := &Run{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Run) error {
+
+		err := app.Run(c.args)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("run failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/other.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strconv"
+
+	app "example.com/unmatched"
+	"example.com/unmatched/cmd"
+)
+
+var _ Cmd = (*Other)(nil)
+
+type Other struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	flag            string
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Other) error
+	plusMinusCommit func() error
+	seenFlags       map[string]bool
+}
+
+func (c *Other) commitAll() error {
+	if err := c.RootCmd.commitAll(); err != nil {
+		return err
+	}
+	if c.plusMinusCommit != nil {
+		fn := c.plusMinusCommit
+		c.plusMinusCommit = nil
+		return fn()
+	}
+	return nil
+}
+
+func (c *Other) hasSeenFlag(name string) bool {
+	return c.seenFlags != nil && c.seenFlags[name]
+}
+
+type UsageDataOther struct {
+	*Other
+	Recursive bool
+}
+
+func (c *Other) Usage() {
+	err := executeUsage(os.Stderr, "other_usage.txt", UsageDataOther{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Other) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Other) commandPath() string { return "app other" }
+
+func (c *Other) UsageRecursive() {
+	err := executeUsage(os.Stderr, "other_usage.txt", UsageDataOther{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Other) Execute(args []string) (err error) {
+	plusMinusOptions := map[string]plusMinusOption{
+		"flag": {
+			Key:               "flag",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v := value
+				c.flag = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v := value
+				return func() error {
+					c.flag = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"a": {
+			Key:               "a",
+			Boolean:           true,
+			IO:                false,
+			SupportsBarePlus:  true,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return err
+				}
+				c.a = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				v := false
+				return func() error {
+					c.a = v
+					return nil
+				}, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"n": {
+			Key:               "n",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.n = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.n = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+		"known": {
+			Key:               "known",
+			Boolean:           false,
+			IO:                false,
+			SupportsBarePlus:  false,
+			SupportsValuePlus: false,
+			Set: func(value string) error {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				c.known = v
+				return nil
+			},
+			StageMinus: func(value string) (func() error, error) {
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, err
+				}
+				return func() error {
+					c.known = v
+					return nil
+				}, nil
+			},
+			StageBarePlus: func() (func() error, error) {
+				return nil, nil
+			},
+			StageValuePlus: func(value string) (func() error, error) {
+				return nil, nil
+			},
+		},
+	}
+	plusMinusShort := map[string]plusMinusOption{
+		"a": plusMinusOptions["a"],
+		"n": plusMinusOptions["n"],
+	}
+	plusMinusLong := map[string]plusMinusOption{
+		"flag":  plusMinusOptions["flag"],
+		"known": plusMinusOptions["known"],
+	}
+	_ = plusMinusOptions
+	subcmdMap := make(map[string]bool)
+	for name := range c.SubCommands {
+		subcmdMap[name] = true
+	}
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	if err != nil {
+		return err
+	}
+	if pmSpecial == "help" || pmSpecial == "usage" {
+		c.Usage()
+		return nil
+	}
+	if pmSpecial == "version" {
+		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		return nil
+	}
+	c.plusMinusCommit = commitFlags
+	c.seenFlags = seenFlags
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+	if err := c.commitAll(); err != nil {
+		return err
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewOther() *Other {
+	set := flag.NewFlagSet("other", flag.ContinueOnError)
+	v := &Other{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.StringVar(&v.flag, "flag", "", "Flag.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Other) error {
+
+		err := app.Other(c.flag)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("other failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/plus_minus.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"strings"
+
+	"example.com/unmatched/cmd"
+)
+
+type plusMinusOption struct {
+	Key               string
+	Boolean           bool
+	IO                bool
+	SupportsBarePlus  bool
+	SupportsValuePlus bool
+	Set               func(string) error
+	StageMinus        func(string) (func() error, error)
+	StageBarePlus     func() (func() error, error)
+	StageValuePlus    func(string) (func() error, error)
+}
+
+type plusMinusValue struct {
+	Name     string
+	Prefix   string
+	Option   plusMinusOption
+	Value    string
+	IsPlus   bool
+	Assigned bool
+}
+
+type plusMinusToken struct {
+	Boundary, Terminated, NeedsValue bool
+	Special                          string
+	Values                           []plusMinusValue
+	Unknown                          bool
+}
+
+// Tokenization validates an individual option token against the option tables.
+func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOption, allowUnmatched ...bool) (plusMinusToken, error) {
+	unmatchedOptIn := len(allowUnmatched) > 0 && allowUnmatched[0]
+	var result plusMinusToken
+	if token == "--" {
+		result.Terminated = true
+		return result, nil
+	}
+	if token == "-h" || token == "--help" || token == "++help" {
+		result.Special = "help"
+		return result, nil
+	}
+	if token == "--usage" || token == "++usage" {
+		result.Special = "usage"
+		return result, nil
+	}
+	if token == "--version" || token == "++version" {
+		result.Special = "version"
+		return result, nil
+	}
+	if len(token) < 2 || (token[0] != '-' && token[0] != '+') {
+		result.Boundary = true
+		return result, nil
+	}
+	if strings.HasPrefix(token, "--") || strings.HasPrefix(token, "++") {
+		prefix := token[:2]
+		rest := token[2:]
+		if rest == "" {
+			// Standalone "++" is treated as boundary positional
+			result.Boundary = true
+			return result, nil
+		}
+		name, value, assigned := rest, "", false
+		if at := strings.IndexByte(rest, '='); at >= 0 {
+			name, value, assigned = rest[:at], rest[at+1:], true
+		}
+		option, found := long[name]
+		if !found {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
+			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", prefix, name)
+		}
+		if prefix == "--" {
+			if option.Boolean && !assigned {
+				value = "true"
+			}
+			result.NeedsValue = !option.Boolean && !assigned
+		} else { // prefix == "++"
+			if assigned {
+				if !option.SupportsValuePlus {
+					return result, newUsageError(path, cmd.UsageInvalidValue, name, nil, "flag ++%s does not support assigned plus operation", name)
+				}
+			} else {
+				if option.Boolean {
+					value = "false"
+				} else if !option.SupportsBarePlus {
+					return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: ++%s", name)
+				}
+			}
+		}
+		result.Values = []plusMinusValue{{Name: name, Prefix: prefix, Option: option, Value: value, IsPlus: prefix == "++", Assigned: assigned}}
+		return result, nil
+	}
+
+	prefix := token[0]
+	prefixStr := string(prefix)
+	body := token[1:]
+	if body[0] == '+' || body[0] == '-' {
+		if unmatchedOptIn {
+			result.Unknown = true
+			return result, nil
+		}
+		return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
+	}
+
+	for j := 0; j < len(body); j++ {
+		char := body[j : j+1]
+		if !(body[j] >= 'a' && body[j] <= 'z' || body[j] >= 'A' && body[j] <= 'Z') {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
+			return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid short option syntax: %s", token)
+		}
+		if char == "h" {
+			if len(body) > 1 || prefix == '+' {
+				return result, newUsageError(path, cmd.UsageInvalidArguments, "h", nil, "help cannot be disabled or clustered: %s", token)
+			}
+			result.Special = "help"
+			return result, nil
+		}
+		option, found := short[char]
+		if !found {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
+			return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: %c%s", prefix, char)
+		}
+		if option.Boolean {
+			if j+1 < len(body) && body[j+1] == '=' {
+				return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
+			}
+			value := "true"
+			if prefix == '+' {
+				value = "false"
+			}
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+', Assigned: false})
+		} else {
+			rest := body[j+1:]
+			value := ""
+			assigned := false
+			if strings.HasPrefix(rest, "=") {
+				value = rest[1:]
+				assigned = true
+			} else if len(rest) > 0 {
+				value = rest
+				assigned = true
+			} else {
+				if prefix == '-' {
+					result.NeedsValue = true
+				}
+			}
+			if prefix == '+' {
+				if assigned {
+					if !option.SupportsValuePlus {
+						return result, newUsageError(path, cmd.UsageInvalidValue, char, nil, "flag +%s does not support assigned plus operation", char)
+					}
+				} else {
+					if !option.SupportsBarePlus {
+						return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: +%s", char)
+					}
+				}
+			}
+			result.Values = append(result.Values, plusMinusValue{Name: char, Prefix: prefixStr, Option: option, Value: value, IsPlus: prefix == '+', Assigned: assigned})
+			break
+		}
+	}
+	return result, nil
+}
+
+func isFlagLike(token string) bool {
+	if strings.HasPrefix(token, "--") && len(token) > 2 {
+		return true
+	}
+	if strings.HasPrefix(token, "++") && len(token) > 2 {
+		return true
+	}
+	return false
+}
+
+// Scans args, validates all tokens and staged values before committing any changes.
+// Preserves positional argument ordering and yields when encountering subcommands.
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
+	var subcmdMap map[string]bool
+	allowUnmatched := false
+	for _, extra := range subcommands {
+		switch v := extra.(type) {
+		case bool:
+			allowUnmatched = v
+		case map[string]bool:
+			subcmdMap = v
+		}
+	}
+
+	stagedSeen := make(map[string]bool)
+	var commits []func() error
+	var positionals []string
+	dashDashSeen := false
+	frozen := false
+
+	for i := 0; i < len(args); i++ {
+		token, tokenErr := tokenizePlusMinus(args[i], path, short, long, allowUnmatched)
+		if tokenErr != nil {
+			return nil, stagedSeen, nil, false, "", tokenErr
+		}
+		if token.Special != "" {
+			return nil, stagedSeen, nil, false, token.Special, nil
+		}
+		if token.Unknown {
+			frozen = true
+			positionals = append(positionals, args[i])
+			continue
+		}
+		if token.Terminated {
+			dashDashSeen = true
+			if len(positionals) == 0 {
+				positionals = args[i+1:]
+			} else {
+				positionals = append(positionals, args[i+1:]...)
+			}
+			break
+		}
+		if token.Boundary {
+			if !frozen && !dashDashSeen && subcmdMap != nil && subcmdMap[args[i]] && len(positionals) == 0 {
+				commitFn := func() error {
+					for _, fn := range commits {
+						if err := fn(); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				return args[i:], stagedSeen, commitFn, false, "", nil
+			}
+			if allowUnmatched {
+				frozen = true
+			}
+			positionals = append(positionals, args[i])
+			continue
+		}
+		if token.NeedsValue {
+			lastVal := token.Values[len(token.Values)-1]
+			lastName := lastVal.Name
+			flagPrefix := lastVal.Prefix
+			if i+1 >= len(args) {
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
+			}
+			next := args[i+1]
+			if isFlagLike(next) {
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageMissingFlagValue, lastName, nil, "flag %s%s requires a value", flagPrefix, lastName)
+			}
+			i++
+			token.Values[len(token.Values)-1].Value = next
+			token.Values[len(token.Values)-1].Assigned = true
+		}
+
+		for _, v := range token.Values {
+			var commitFn func() error
+			var stageErr error
+
+			if !v.IsPlus {
+				if v.Option.StageMinus != nil {
+					commitFn, stageErr = v.Option.StageMinus(v.Value)
+				} else if v.Option.Set != nil {
+					val := v.Value
+					opt := v.Option
+					if opt.IO {
+						commitFn = func() error { return opt.Set(val) }
+					} else {
+						stageErr = opt.Set(val)
+					}
+				}
+			} else {
+				if v.Assigned {
+					if v.Option.StageValuePlus != nil {
+						commitFn, stageErr = v.Option.StageValuePlus(v.Value)
+					} else if v.Option.Set != nil {
+						val := v.Value
+						opt := v.Option
+						if opt.IO {
+							commitFn = func() error { return opt.Set(val) }
+						} else {
+							stageErr = opt.Set(val)
+						}
+					} else {
+						return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageInvalidValue, v.Name, nil, "flag ++%s does not support assigned plus operation", v.Name)
+					}
+				} else {
+					if v.Option.StageBarePlus != nil {
+						commitFn, stageErr = v.Option.StageBarePlus()
+					} else if v.Option.Set != nil {
+						opt := v.Option
+						if v.Option.Boolean {
+							stageErr = opt.Set("false")
+						} else {
+							stageErr = opt.Set("")
+						}
+					} else {
+						return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageUnknownFlag, v.Name, nil, "unknown flag: ++%s", v.Name)
+					}
+				}
+			}
+
+			if stageErr != nil {
+				if v.Option.IO {
+					return nil, stagedSeen, nil, false, "", stageErr
+				}
+				return nil, stagedSeen, nil, false, "", newUsageError(path, cmd.UsageInvalidValue, v.Name, stageErr, "invalid value %q for flag %s: %v", v.Value, v.Name, stageErr)
+			}
+			if commitFn != nil {
+				commits = append(commits, commitFn)
+			}
+			stagedSeen[v.Option.Key] = true
+		}
+	}
+
+	commitFn := func() error {
+		for _, fn := range commits {
+			if err := fn(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return positionals, stagedSeen, commitFn, dashDashSeen, "", nil
+}
+-- expected/templates/app_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] <subcommand>
+
+.
+
+Subcommands:
+    {{formatHelpRow 6 "child" "."}}
+    {{formatHelpRow 6 "other" "."}}
+    {{formatHelpRow 6 "run" "."}}
+    {{formatHelpRow 6 "volume" "."}}
+    {{formatHelpRow 6 "help" "Print this help message"}}
+    {{formatHelpRow 6 "usage" "Print this usage message"}}
+
+
+Flags:
+    {{formatFlagRow 13 0 "-a" "" "Flag a."}}
+    {{formatFlagRow 13 0 "-n int" "" "Number option."}}
+    {{formatFlagRow 13 0 "--known int" "" "Known option."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/templates/volume_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] volume [flags...]
+
+.
+
+Subcommands:
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
+
+
+
+`app` Flags:
+    {{formatFlagRow 17 0 "-a" "" "Flag a."}}
+    {{formatFlagRow 17 0 "-n int" "" "Number option."}}
+    {{formatFlagRow 17 0 "--known int" "" "Known option."}}
+
+`volume` Flags:
+    {{formatFlagRow 17 0 "--player string" "" "Select player."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/templates/child_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] child [flags...]
+
+.
+
+Subcommands:
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
+
+
+
+`app` Flags:
+    {{formatFlagRow 17 0 "-a" "" "Flag a."}}
+    {{formatFlagRow 17 0 "-n int" "" "Number option."}}
+
+`child` Flags:
+    {{formatFlagRow 17 0 "--known string" "" "Known flag."}}
+    {{formatFlagRow 17 0 "--known2 string" "" "Known flag 2."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/templates/run_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] run
+
+.
+
+Subcommands:
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
+
+
+Flags:
+    {{formatFlagRow 13 0 "-a" "" "Flag a."}}
+    {{formatFlagRow 13 0 "-n int" "" "Number option."}}
+    {{formatFlagRow 13 0 "--known int" "" "Known option."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.
+-- expected/templates/other_usage.txt --
+{{/* Do not modify: Generated by github.com/arran4/go-subcommand/cmd/gosubc */ -}}
+Usage: app [flags...] other [flags...]
+
+.
+
+Subcommands:
+    {{formatHelpRow 5 "help" "Print this help message"}}
+    {{formatHelpRow 5 "usage" "Print this usage message"}}
+
+
+
+`app` Flags:
+    {{formatFlagRow 15 0 "-a" "" "Flag a."}}
+    {{formatFlagRow 15 0 "-n int" "" "Number option."}}
+    {{formatFlagRow 15 0 "--known int" "" "Known option."}}
+
+`other` Flags:
+    {{formatFlagRow 15 0 "--flag string" "" "Flag."}}
+
+Short boolean toggles: -x enables, +x disables; --name is one long option.

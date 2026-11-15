@@ -241,6 +241,9 @@ type FunctionParameter struct {
 	// PlusValue configures an explicit assigned plus operation (+flag=val or ++flag=val).
 	PlusValue PlusOperationConfig `json:",omitempty"`
 
+	// IsUnmatchedArgv indicates that the parameter receives otherwise-unrecognized argv tokens.
+	IsUnmatchedArgv bool `json:",omitempty"`
+
 	TypeImportPath  string
 	TypePackageName string
 	TypeName        string
@@ -490,7 +493,42 @@ func (p *FunctionParameter) IsRequiredPositional() bool {
 func validateParameters(params []*FunctionParameter, cmdName string) error {
 	var hasOptionalPos bool
 	var hasVarArg bool
+	var hasPositionalOrVarArg bool
+	var unmatchedCount int
 	for _, p := range params {
+		if p.IsPositional || p.IsVarArg {
+			hasPositionalOrVarArg = true
+		}
+		if p.IsUnmatchedArgv {
+			unmatchedCount++
+			if p.Type != "[]string" {
+				return fmt.Errorf("command %s: parameter %s with (unmatched) must have type []string, got %s", cmdName, p.Name, p.Type)
+			}
+			if p.IsPositional || p.IsVarArg {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with positional metadata", cmdName, p.Name)
+			}
+			if p.Required {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with required metadata", cmdName, p.Name)
+			}
+			if p.Inherited {
+				return fmt.Errorf("command %s: parameter %s cannot be inherited", cmdName, p.Name)
+			}
+			if p.HasGenerator() || p.HasConstructor() {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with provider or constructor", cmdName, p.Name)
+			}
+			if p.OptionalValue {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with (optional value)", cmdName, p.Name)
+			}
+			if p.HasDefaultValue {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with default value", cmdName, p.Name)
+			}
+			if len(p.FlagAliases) > 0 || len(p.ShortAliases) > 0 || len(p.LongAliases) > 0 {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with flag aliases or flags", cmdName, p.Name)
+			}
+			if p.PlusBare.Mode != "" || p.PlusBare.Func != nil || p.PlusValue.Mode != "" || p.PlusValue.Func != nil {
+				return fmt.Errorf("command %s: parameter %s cannot combine (unmatched) with plus-minus modifiers", cmdName, p.Name)
+			}
+		}
 		if p.IsFlagPresence() && (p.Type != "map[string]bool" || p.IsPositional || p.IsVarArg || p.Required || p.HasDefaultValue || p.Inherited || len(p.FlagAliases) != 0 || p.Parser.Type != "" || p.Generator.Func != nil) {
 			return fmt.Errorf("parameter %q: flag presence requires map[string]bool without positional, inherited, required, default, parser or provider options", p.Name)
 		}
@@ -534,6 +572,13 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 				return fmt.Errorf("command %s: required positional argument %s appears after an optional positional argument", cmdName, p.Name)
 			}
 		}
+	}
+
+	if unmatchedCount > 1 {
+		return fmt.Errorf("command %s: multiple parameters marked with (unmatched)", cmdName)
+	}
+	if unmatchedCount > 0 && hasPositionalOrVarArg {
+		return fmt.Errorf("command %s: cannot combine (unmatched) argv filter with positional arguments", cmdName)
 	}
 
 	for _, p := range params {
@@ -1274,7 +1319,7 @@ func (sc *SubCommand) ProgName() string {
 func (sc *SubCommand) MaxFlagLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.HasGenerator() || p.HasConstructor() || p.IsPositional {
+		if p.HasGenerator() || p.HasConstructor() || p.IsPositional || p.IsUnmatchedArgv {
 			continue
 		}
 		l := displayWidth(p.FlagString())
@@ -1290,9 +1335,28 @@ func (sc *SubCommand) MaxFlagLength() int {
 	return max
 }
 
+func (cmd *Command) HasUnmatchedArgv() bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.UnmatchedArgvParam() != nil
+}
+
+func (cmd *Command) UnmatchedArgvParam() *FunctionParameter {
+	if cmd == nil {
+		return nil
+	}
+	for _, p := range cmd.Parameters {
+		if p.IsUnmatchedArgv {
+			return p
+		}
+	}
+	return nil
+}
+
 func requiredFlagPresent(params []*FunctionParameter) bool {
 	for _, p := range params {
-		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+		if p.Required && !p.Inherited && !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() && !p.IsUnmatchedArgv {
 			return true
 		}
 	}
@@ -1358,6 +1422,25 @@ func (cmd *Command) HasPathRequiredFlags() bool {
 
 func (sc *SubCommand) HasRequiredFlags() bool {
 	return requiredFlagPresent(sc.Parameters)
+}
+
+func (sc *SubCommand) HasUnmatchedArgv() bool {
+	if sc == nil {
+		return false
+	}
+	return sc.UnmatchedArgvParam() != nil
+}
+
+func (sc *SubCommand) UnmatchedArgvParam() *FunctionParameter {
+	if sc == nil {
+		return nil
+	}
+	for _, p := range sc.Parameters {
+		if p.IsUnmatchedArgv {
+			return p
+		}
+	}
+	return nil
 }
 
 // HasPlusMinusInHierarchy reports whether this subcommand or any of its ancestors uses plus-minus.
@@ -1436,7 +1519,7 @@ func (sc *SubCommand) PathRequiredFlags() []*PathRequiredFlag {
 
 	for i, scope := range scopes {
 		for _, p := range scope.params {
-			if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+			if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 				continue
 			}
 
@@ -1492,7 +1575,7 @@ func (sc *SubCommand) PathRequiredFlags() []*PathRequiredFlag {
 			scope := scopes[k]
 			shadowed := false
 			for _, pk := range scope.params {
-				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() || pk.IsUnmatchedArgv {
 					continue
 				}
 				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
@@ -1507,7 +1590,7 @@ func (sc *SubCommand) PathRequiredFlags() []*PathRequiredFlag {
 
 			explicitlyInherited := false
 			for _, pk := range scope.params {
-				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() {
+				if pk.IsPositional || pk.HasGenerator() || pk.HasConstructor() || pk.IsUnmatchedArgv {
 					continue
 				}
 				pkInherited := pk.Inherited || (pk.DeclaredIn != "" && pk.DeclaredIn != scope.cmdName)
@@ -1682,7 +1765,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 	allParams := sc.AllParameters()
 	grouped := make(map[string][]*FunctionParameter)
 	for _, p := range allParams {
-		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 			continue
 		}
 		grouped[p.DeclaredIn] = append(grouped[p.DeclaredIn], p)
@@ -1786,7 +1869,7 @@ func (sc *SubCommand) ParameterGroups() []ParameterGroup {
 func appendFlagsUsage(parts *[]string, params []*FunctionParameter) {
 	hasFlags := false
 	for _, p := range params {
-		if !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() {
+		if !p.IsPositional && !p.HasGenerator() && !p.HasConstructor() && !p.IsUnmatchedArgv {
 			hasFlags = true
 			break
 		}
@@ -1867,7 +1950,7 @@ func (sc *SubCommand) MaxPositionalLength() int {
 func (sc *SubCommand) MaxDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 			continue
 		}
 		l := displayWidth(p.DefaultString())
@@ -1883,7 +1966,7 @@ func (sc *SubCommand) MaxDefaultLength() int {
 func (sc *SubCommand) MaxUsageDefaultLength() int {
 	max := 0
 	for _, p := range sc.AllParameters() {
-		if p.IsPositional || p.HasGenerator() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 			continue
 		}
 		l := len(p.UsageDefaultString())

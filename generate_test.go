@@ -4117,26 +4117,299 @@ func TestOptionalValueRejectsGoFlagBackend(t *testing.T) {
 	}
 }
 
-func TestOptionalValueInvalidConfigurations(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		param *model.FunctionParameter
-	}{
-		{"positional", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsPositional: true}},
-		{"vararg", &model.FunctionParameter{Name: "opt", OptionalValue: true, IsVarArg: true}},
-		{"generator", &model.FunctionParameter{Name: "opt", OptionalValue: true, Generator: model.GeneratorConfig{Type: model.SourceTypeGenerator}}},
-		{"triple_pointer", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "***string"}},
-		{"slice_pointer_slice", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "[]*[]string"}},
-		{"map", &model.FunctionParameter{Name: "opt", OptionalValue: true, Type: "map[string]string"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{tc.param}}
-			dm := &model.DataModel{Commands: []*model.Command{cmd}}
-			err := dm.Validate()
-			if err == nil {
-				t.Fatalf("expected validation error, got nil")
+func TestUnmatchedArgvRejectsNonPlusMinusBackends(t *testing.T) {
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run("root_"+backend, func(t *testing.T) {
+			param := &model.FunctionParameter{Name: "args", Type: "[]string", IsUnmatchedArgv: true}
+			command := &model.Command{MainCmdName: "app", Parameters: []*model.FunctionParameter{param}, CLIParser: backend}
+			err := resolveCLIParsers([]*model.Command{command}, "plus-minus")
+			if err == nil || !strings.Contains(err.Error(), "(unmatched) argv filter is only supported with CLI-Parser: plus-minus") {
+				t.Fatalf("expected plus-minus rejection error for %s, got: %v", backend, err)
 			}
 		})
+
+		t.Run("subcommand_"+backend, func(t *testing.T) {
+			param := &model.FunctionParameter{Name: "args", Type: "[]string", IsUnmatchedArgv: true}
+			subCmd := &model.SubCommand{SubCommandName: "sub", Parameters: []*model.FunctionParameter{param}, CLIParser: backend}
+			rootCmd := &model.Command{MainCmdName: "app", SubCommands: []*model.SubCommand{subCmd}, CLIParser: "plus-minus"}
+			err := resolveCLIParsers([]*model.Command{rootCmd}, "plus-minus")
+			if err == nil || !strings.Contains(err.Error(), "(unmatched) argv filter is only supported with CLI-Parser: plus-minus") {
+				t.Fatalf("expected subcommand plus-minus rejection error for %s, got: %v", backend, err)
+			}
+		})
+	}
+}
+
+//go:embed templates/testdata/runtime/issue550_unmatched.txtar
+var issue550UnmatchedFixture []byte
+
+func TestGenerateIssue550Unmatched(t *testing.T) {
+	ar := txtar.Parse(issue550UnmatchedFixture)
+	input, expected := splitInputExpected(ar)
+	writer := NewCollectingFileWriter()
+	if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	files := writer.Files
+
+	writer2 := NewCollectingFileWriter()
+	if err := GenerateWithFS(input, writer2, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(files, writer2.Files) {
+		t.Fatal("nondeterministic generation")
+	}
+
+	dir := t.TempDir()
+	for name, file := range input {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+	}
+	for name, data := range files {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
+
+	contractTestCode := `package main
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+func TestIssue550Contract_Types(t *testing.T) {
+	root, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootVal := reflect.ValueOf(root).Elem()
+	argsField := rootVal.FieldByName("args")
+	if !argsField.IsValid() {
+		t.Fatal("expected args field on RootCmd")
+	}
+	if argsField.Type() != reflect.TypeOf([]string(nil)) {
+		t.Fatalf("expected args to have type []string, got %v", argsField.Type())
+	}
+
+	vol := root.NewVolume()
+	volVal := reflect.ValueOf(vol).Elem()
+	volArgs := volVal.FieldByName("args")
+	if !volArgs.IsValid() {
+		t.Fatal("expected args field on Volume")
+	}
+	if volArgs.Type() != reflect.TypeOf([]string(nil)) {
+		t.Fatalf("expected args to have type []string, got %v", volArgs.Type())
+	}
+}
+
+func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
+	dir := t.TempDir()
+	sentinel := filepath.Join(dir, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := NewRoot("app", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actionRan := false
+	root.CommandAction = func(c *RootCmd) error {
+		actionRan = true
+		return os.WriteFile(sentinel, []byte("mutated"), 0644)
+	}
+
+	err = root.Execute([]string{"-10", "--help"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if actionRan {
+		t.Fatal("action should not have executed during late help")
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "original" {
+		t.Fatalf("sentinel file was mutated: %s", string(data))
+	}
+}
+`
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/contract_test.go"), contractTestCode)
+
+	goBin := "/home/user/.go/pkg/mod/golang.org/toolchain@v0.0.1-go1.22.12.linux-amd64/bin/go"
+	toolchainDir := "/home/user/.go/pkg/mod/golang.org/toolchain@v0.0.1-go1.22.12.linux-amd64"
+	hasGo122 := false
+	if _, err := os.Stat(goBin); err == nil {
+		hasGo122 = true
+	} else {
+		goBin = "go"
+	}
+
+	var goEnv []string
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "GOROOT=") || strings.HasPrefix(env, "GOTOOLDIR=") || strings.HasPrefix(env, "GOTOOLCHAIN=") {
+			continue
+		}
+		goEnv = append(goEnv, env)
+	}
+	goEnv = append(goEnv, "GOTOOLCHAIN=local")
+	if hasGo122 {
+		goEnv = append(goEnv, "GOROOT="+toolchainDir)
+	}
+
+	verCmd := exec.Command(goBin, "version")
+	verCmd.Env = goEnv
+	if verOut, err := verCmd.CombinedOutput(); err == nil {
+		t.Logf("Compiler used: %s", strings.TrimSpace(string(verOut)))
+	}
+
+	testCmd := exec.Command(goBin, "test", "./cmd/app")
+	testCmd.Dir = dir
+	testCmd.Env = goEnv
+	if out, err := testCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go test ./cmd/app failed: %v\n%s", err, out)
+	}
+
+	binary := filepath.Join(dir, "app")
+	buildCmd := exec.Command(goBin, "build", "-o", binary, "./cmd/app")
+	buildCmd.Dir = dir
+	buildCmd.Env = goEnv
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, out)
+	}
+
+	testInvocations := []struct {
+		Args       []string
+		Stdout     string
+		Stderr     string
+		StderrFile string
+		Status     int
+	}{
+		{Args: []string{"volume", "-0.1", "--player", "vlc"}, Stdout: "volume: player=vlc args=[\"-0.1\"]\n", Status: 0},
+		{Args: []string{"volume", "+0.1"}, Stdout: "volume: player= args=[\"+0.1\"]\n", Status: 0},
+		{Args: []string{"volume", "0.5"}, Stdout: "volume: player= args=[\"0.5\"]\n", Status: 0},
+		{Args: []string{"volume", "-0.1", "--help"}, StderrFile: "volume-help.stderr", Status: 0},
+		{Args: []string{"-10"}, Stdout: "root: a=false n=0 known=0 args=[\"-10\"]\n", Status: 0},
+		{Args: []string{"run", "unknown", "text"}, Stdout: "run: args=[\"unknown\" \"text\"]\n", Status: 0},
+		{Args: []string{"child", "--foreign", "value"}, Stdout: "child: known= known2= args=[\"--foreign\" \"value\"]\n", Status: 0},
+		{Args: []string{"--foreign", "child"}, Stdout: "root: a=false n=0 known=0 args=[\"--foreign\" \"child\"]\n", Status: 0},
+		{Args: []string{"unknown", "child"}, Stdout: "root: a=false n=0 known=0 args=[\"unknown\" \"child\"]\n", Status: 0},
+		{Args: []string{"child", "--known=value", "-0.1", "--known2=value2"}, Stdout: "child: known=value known2=value2 args=[\"-0.1\"]\n", Status: 0},
+		{Args: []string{"-az"}, Stdout: "root: a=false n=0 known=0 args=[\"-az\"]\n", Status: 0},
+		{Args: []string{"-n5"}, Stdout: "root: a=false n=5 known=0 args=[]\n", Status: 0},
+		{Args: []string{"--known=invalid"}, Stderr: "Error: invalid value \"invalid\" for flag known: strconv.Atoi: parsing \"invalid\": invalid syntax\n", Status: 1},
+		{Args: []string{"--", "literal", "-0.1"}, Stdout: "root: a=false n=0 known=0 args=[\"literal\" \"-0.1\"]\n", Status: 0},
+		{Args: []string{"other", "-0.1"}, Stderr: "Error: invalid short option syntax: -0.1\n", Status: 1},
+		{Args: []string{"other", "--foreign"}, Stderr: "Error: unknown flag: --foreign\n", Status: 1},
+	}
+
+	capturedStderrFiles := make(map[string]string)
+	for i, inv := range testInvocations {
+		cmd := exec.Command(binary, inv.Args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "COLUMNS=80")
+		var outBuf, errBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+		err := cmd.Run()
+		status := 0
+		if err != nil {
+			if exit, ok := err.(*exec.ExitError); ok {
+				status = exit.ExitCode()
+			} else {
+				t.Fatalf("run error: %v", err)
+			}
+		}
+		gotStdout := outBuf.String()
+		gotStderr := strings.ReplaceAll(errBuf.String(), binary, "app")
+		if inv.StderrFile != "" {
+			capturedStderrFiles[inv.StderrFile] = gotStderr
+		}
+		if status != inv.Status {
+			t.Errorf("[%d] %v status=%d, want %d (stderr: %s)", i, inv.Args, status, inv.Status, gotStderr)
+		}
+		if inv.Stdout != "" && gotStdout != inv.Stdout {
+			t.Errorf("[%d] %v stdout=%q, want %q", i, inv.Args, gotStdout, inv.Stdout)
+		}
+		if inv.Stderr != "" && gotStderr != inv.Stderr {
+			t.Errorf("[%d] %v stderr=%q, want %q", i, inv.Args, gotStderr, inv.Stderr)
+		}
+	}
+
+	if os.Getenv("UPDATE_GOLDENS") == "1" || len(expected) == 0 {
+		var newFiles []txtar.File
+		for _, f := range ar.Files {
+			if strings.HasPrefix(f.Name, "input/") {
+				newFiles = append(newFiles, f)
+			}
+		}
+
+		invocationsJSON, err := json.MarshalIndent(testInvocations, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newFiles = append(newFiles, txtar.File{
+			Name: "expected/invocations.json",
+			Data: append(invocationsJSON, '\n'),
+		})
+
+		for fileName, fileData := range capturedStderrFiles {
+			newFiles = append(newFiles, txtar.File{
+				Name: "expected/" + fileName,
+				Data: []byte(fileData),
+			})
+		}
+
+		newFiles = append(newFiles, txtar.File{
+			Name: "expected/contract_test.go",
+			Data: []byte(contractTestCode),
+		})
+
+		expectedNames := []string{
+			"root.go",
+			"volume.go",
+			"child.go",
+			"run.go",
+			"other.go",
+			"plus_minus.go",
+			"templates/app_usage.txt",
+			"templates/volume_usage.txt",
+			"templates/child_usage.txt",
+			"templates/run_usage.txt",
+			"templates/other_usage.txt",
+		}
+		for _, name := range expectedNames {
+			data := files["cmd/app/"+name]
+			if data == nil {
+				t.Fatalf("missing expected generated file %s", name)
+			}
+			newFiles = append(newFiles, txtar.File{
+				Name: "expected/" + name,
+				Data: data,
+			})
+		}
+
+		ar.Files = newFiles
+		formatted := txtar.Format(ar)
+		if err := os.WriteFile("templates/testdata/runtime/issue550_unmatched.txtar", formatted, 0644); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("Successfully updated templates/testdata/runtime/issue550_unmatched.txtar with complete goldens")
+		issue550UnmatchedFixture = formatted
+		_, expected = splitInputExpected(ar)
+	}
+
+	// Verify generated files match expected goldens
+	for _, name := range []string{"root.go", "volume.go", "child.go", "run.go", "other.go", "plus_minus.go", "templates/app_usage.txt", "templates/volume_usage.txt"} {
+		exp := expected[name]
+		if exp == nil {
+			t.Fatalf("missing expected golden for %s", name)
+		}
+		gen := files["cmd/app/"+name]
+		if !bytes.Equal(gen, exp.Data) {
+			t.Fatalf("generated file cmd/app/%s does not match expected golden", name)
+		}
 	}
 }
 

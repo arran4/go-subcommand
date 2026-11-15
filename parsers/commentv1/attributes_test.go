@@ -306,3 +306,13 @@ func TestParseParamDetailsOptional(t *testing.T) {
 		t.Fatalf("expected Positional=true index=1, got %v index=%d", parsed.IsPositional, parsed.PositionalArgIndex)
 	}
 }
+
+func TestParseParamDetailsUnmatched(t *testing.T) {
+	parsed := parseParamDetails("(unmatched) Command-owned, otherwise-unrecognized argv.")
+	if !parsed.UnmatchedArgv {
+		t.Fatalf("expected UnmatchedArgv=true, got false")
+	}
+	if parsed.Description != "Command-owned, otherwise-unrecognized argv." {
+		t.Fatalf("unexpected description: %q", parsed.Description)
+	}
+}

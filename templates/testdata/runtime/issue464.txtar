@@ -1309,10 +1309,12 @@ type plusMinusToken struct {
 	Boundary, Terminated, NeedsValue bool
 	Special                          string
 	Values                           []plusMinusValue
+	Unknown                          bool
 }
 
 // Tokenization validates an individual option token against the option tables.
-func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOption) (plusMinusToken, error) {
+func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOption, allowUnmatched ...bool) (plusMinusToken, error) {
+	unmatchedOptIn := len(allowUnmatched) > 0 && allowUnmatched[0]
 	var result plusMinusToken
 	if token == "--" {
 		result.Terminated = true
@@ -1348,6 +1350,10 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 		}
 		option, found := long[name]
 		if !found {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
 			return result, newUsageError(path, cmd.UsageUnknownFlag, name, nil, "unknown flag: %s%s", prefix, name)
 		}
 		if prefix == "--" {
@@ -1376,12 +1382,20 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 	prefixStr := string(prefix)
 	body := token[1:]
 	if body[0] == '+' || body[0] == '-' {
+		if unmatchedOptIn {
+			result.Unknown = true
+			return result, nil
+		}
 		return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid plus-minus option: %s", token)
 	}
 
 	for j := 0; j < len(body); j++ {
 		char := body[j : j+1]
 		if !(body[j] >= 'a' && body[j] <= 'z' || body[j] >= 'A' && body[j] <= 'Z') {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
 			return result, newUsageError(path, cmd.UsageInvalidArguments, "", nil, "invalid short option syntax: %s", token)
 		}
 		if char == "h" {
@@ -1393,6 +1407,10 @@ func tokenizePlusMinus(token, path string, short, long map[string]plusMinusOptio
 		}
 		option, found := short[char]
 		if !found {
+			if unmatchedOptIn {
+				result.Unknown = true
+				return result, nil
+			}
 			return result, newUsageError(path, cmd.UsageUnknownFlag, char, nil, "unknown flag: %c%s", prefix, char)
 		}
 		if option.Boolean {
@@ -1449,24 +1467,36 @@ func isFlagLike(token string) bool {
 
 // Scans args, validates all tokens and staged values before committing any changes.
 // Preserves positional argument ordering and yields when encountering subcommands.
-func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...map[string]bool) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
 	var subcmdMap map[string]bool
-	if len(subcommands) > 0 {
-		subcmdMap = subcommands[0]
+	allowUnmatched := false
+	for _, extra := range subcommands {
+		switch v := extra.(type) {
+		case bool:
+			allowUnmatched = v
+		case map[string]bool:
+			subcmdMap = v
+		}
 	}
 
 	stagedSeen := make(map[string]bool)
 	var commits []func() error
 	var positionals []string
 	dashDashSeen := false
+	frozen := false
 
 	for i := 0; i < len(args); i++ {
-		token, tokenErr := tokenizePlusMinus(args[i], path, short, long)
+		token, tokenErr := tokenizePlusMinus(args[i], path, short, long, allowUnmatched)
 		if tokenErr != nil {
 			return nil, stagedSeen, nil, false, "", tokenErr
 		}
 		if token.Special != "" {
 			return nil, stagedSeen, nil, false, token.Special, nil
+		}
+		if token.Unknown {
+			frozen = true
+			positionals = append(positionals, args[i])
+			continue
 		}
 		if token.Terminated {
 			dashDashSeen = true
@@ -1478,7 +1508,7 @@ func parsePlusMinus(args []string, path string, short, long map[string]plusMinus
 			break
 		}
 		if token.Boundary {
-			if subcmdMap != nil && subcmdMap[args[i]] && len(positionals) == 0 {
+			if !frozen && !dashDashSeen && subcmdMap != nil && subcmdMap[args[i]] && len(positionals) == 0 {
 				commitFn := func() error {
 					for _, fn := range commits {
 						if err := fn(); err != nil {
@@ -1488,6 +1518,9 @@ func parsePlusMinus(args []string, path string, short, long map[string]plusMinus
 					return nil
 				}
 				return args[i:], stagedSeen, commitFn, false, "", nil
+			}
+			if allowUnmatched {
+				frozen = true
 			}
 			positionals = append(positionals, args[i])
 			continue

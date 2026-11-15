@@ -520,6 +520,9 @@ func resolveCLIParsers(commands []*model.Command, generatorDefault string) error
 		if err := validateOptionalValueParser(cmd.Parameters, resolved, cmd.MainCmdName); err != nil {
 			return err
 		}
+		if err := validateUnmatchedArgvParser(cmd.Parameters, resolved, cmd.MainCmdName); err != nil {
+			return err
+		}
 		if err := resolveSubCommandCLIParsers(cmd.SubCommands, resolved, cmd.Parameters); err != nil {
 			return err
 		}
@@ -542,6 +545,9 @@ func resolveSubCommandCLIParsers(subCommands []*model.SubCommand, inherited stri
 		if err := validateOptionalValueParser(subCommand.Parameters, resolved, subCommand.SubCommandName); err != nil {
 			return err
 		}
+		if err := validateUnmatchedArgvParser(subCommand.Parameters, resolved, subCommand.SubCommandName); err != nil {
+			return err
+		}
 		currentAncestors := append(append([]*model.FunctionParameter(nil), ancestors...), subCommand.Parameters...)
 		if err := resolveSubCommandCLIParsers(subCommand.SubCommands, resolved, currentAncestors); err != nil {
 			return err
@@ -554,6 +560,15 @@ func validateOptionalValueParser(params []*model.FunctionParameter, backend, com
 	for _, param := range params {
 		if param.OptionalValue && backend != "gnu" {
 			return fmt.Errorf("command %q: optional-value flag %q is unsupported by %s; select gnu", command, param.Name, backend)
+		}
+	}
+	return nil
+}
+
+func validateUnmatchedArgvParser(params []*model.FunctionParameter, backend, command string) error {
+	for _, param := range params {
+		if param.IsUnmatchedArgv && backend != "plus-minus" {
+			return fmt.Errorf("command %q: (unmatched) argv filter is only supported with CLI-Parser: plus-minus, not %s", command, backend)
 		}
 	}
 	return nil

@@ -27,7 +27,7 @@ func plusMinusParameterNames(p *model.FunctionParameter) plusMinusNames {
 		}
 	}
 
-	if p.Inherited {
+	if p.Inherited || p.IsUnmatchedArgv {
 		return result
 	}
 
@@ -54,7 +54,7 @@ func plusMinusAllParameters(data any) []*model.FunctionParameter {
 	seenLong := make(map[string]bool)
 
 	addParam := func(p *model.FunctionParameter, isInherited bool) {
-		if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+		if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 			return
 		}
 		if seenParamName[p.Name] {
@@ -134,7 +134,7 @@ func validatePlusMinusParameters(path string, params []*model.FunctionParameter,
 	ancestorShort, ancestorLong := make(map[string]string), make(map[string]string)
 	for _, aList := range ancestors {
 		for _, p := range aList {
-			if p.IsPositional || p.HasGenerator() || p.HasConstructor() {
+			if p.IsPositional || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 				continue
 			}
 			names := plusMinusParameterNames(p)
@@ -148,7 +148,7 @@ func validatePlusMinusParameters(path string, params []*model.FunctionParameter,
 	}
 
 	for _, p := range params {
-		if p.IsPositional || p.Inherited || p.HasGenerator() || p.HasConstructor() {
+		if p.IsPositional || p.Inherited || p.HasGenerator() || p.HasConstructor() || p.IsUnmatchedArgv {
 			continue
 		}
 		if p.IsBool() && (p.IsSlice() || p.HasCustomParser()) {

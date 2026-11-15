@@ -1095,6 +1095,35 @@ generated artifacts/help and exact compiled invocations, including mixed-backend
 subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
 remain separate work and are not implied by this backend.
 
+##### Opt-in Unmatched Argv Filter (`plus-minus` only)
+
+Commands using the `plus-minus` parser backend can opt in to receiving otherwise-unrecognized command-line arguments (such as signed numeric values `-0.1`, `+0.1`, unknown flags, or arbitrary foreign options) directly in a `[]string` action parameter marked with `(unmatched)` (#550):
+
+```go
+// Volume is a subcommand `app volume`
+// CLI-Parser: plus-minus
+//
+// Flags:
+//
+//	player: --player Target player.
+//	args: (unmatched) Unmatched arguments collected verbatim.
+func Volume(player string, args []string) error {
+	// ...
+}
+```
+
+- **Doc comment syntax variants:** `(unmatched)`, `(unmatched argv)`, and `(unmatched-argv)`.
+- **Backend requirement:** Supported exclusively with `CLI-Parser: plus-minus`. Non-`plus-minus` backends (`gnu`, `go-flag`) are rejected at generation time with clear error diagnostics.
+- **Model constraints:** The parameter must have Go type `[]string`. It cannot be combined with positional parameters (`@1`), variadic tails (`...string`), `(optional value)`, defaults, providers, constructors, or flag aliases. At most one unmatched parameter is permitted per command.
+- **Argv semantics:**
+  - Known options, aliases, and recognized short clusters continue to be parsed normally.
+  - Unmatched arguments are passed verbatim as `[]string` without splitting clusters or creating synthetic flags.
+  - Any short cluster containing an unrecognized character (e.g. `-az` where `z` is unknown) is not partially committed; the whole cluster is preserved in `args`.
+  - Once an unmatched argument or unknown token is encountered at a parent command, subcommand routing is frozen: subsequent arguments cannot dispatch child subcommands.
+  - Trailing arguments after `--` are collected verbatim into `args`.
+  - The collector parameter is internal to the action and never appears in usage, `--help`, or man pages.
+
+
 #### Runtime Parser Backends
 By default, the `gnu` backend is used, featuring clustered short flags (e.g., `-abc` is identical to `-a -b -c`).
 
