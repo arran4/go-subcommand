@@ -1,0 +1,1052 @@
+Regression test for Issue #547: Leaf help and help after positionals.
+Leaf commands must not advertise fictitious child subcommands.
+Help flags must be accurately documented.
+Help after a positional argument is handled without executing the action or provider.
+The -- terminator retains its contract.
+
+-- input/go.mod --
+module example.com/helpissue
+
+go 1.22
+
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+func record(msg string) {
+	f, err := os.OpenFile("side_effects.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err == nil {
+		fmt.Fprintln(f, msg)
+		_ = f.Close()
+	}
+}
+
+func Provider() (string, error) {
+	record("provider called")
+	return "provided", nil
+}
+
+func ParseCustom(val string) (string, error) {
+	record(fmt.Sprintf("custom parser called with %s", val))
+	return "PARSED:" + val, nil
+}
+
+// Root is a subcommand `app` -- Root command with positional and business generator.
+//
+// Flags:
+//
+//	flag: -f --flag Toggle flag.
+//	dep: (generator: Provider) Injected dependency.
+//	url: @1 URL target.
+func Root(url string, flag bool, dep string) error {
+	record(fmt.Sprintf("root url=%s flag=%t dep=%s", url, flag, dep))
+	fmt.Printf("root url=%s flag=%t\n", url, flag)
+	return nil
+}
+
+// Group is a subcommand `app group` -- Group for leaf command.
+func Group() {}
+
+// Leaf is a subcommand `app group leaf` -- Leaf command demonstration.
+//
+// Flags:
+//
+//	tag: -t --tag (default: "default") Tag label.
+//	output: -o --output Output destination file.
+//	input: -i --input Input source file.
+//	custom: -c --custom (parser: ParseCustom) Custom parsed value.
+//	dep: (generator: Provider) Injected dependency.
+//	pos: @1 Positional argument.
+//	extra: ... Extra trailing arguments.
+func Leaf(pos string, tag string, output io.Writer, input io.Reader, custom string, dep string, extra ...string) error {
+	record(fmt.Sprintf("leaf pos=%s tag=%s custom=%s extra=%s", pos, tag, custom, strings.Join(extra, ",")))
+	if output != nil {
+		_, _ = output.Write([]byte("written_data\n"))
+	}
+	fmt.Printf("leaf pos=%s tag=%s custom=%s extra=%s\n", pos, tag, custom, strings.Join(extra, ","))
+	return nil
+}
+
+// Nested is a subcommand `app nested` -- Nested parent command.
+func Nested() {}
+
+// NestedChild is a subcommand `app nested child` -- Deep nested command.
+//
+// Flags:
+//
+//	item: @1 Item identifier.
+func NestedChild(item string) error {
+	record(fmt.Sprintf("nested item=%s", item))
+	fmt.Printf("nested item=%s\n", item)
+	return nil
+}
+
+// Aliased is a subcommand `app aliased` -- Directly aliased leaf command.
+// Aliases: al
+//
+// Flags:
+//
+//	name: @1 Target name.
+func Aliased(name string) error {
+	record(fmt.Sprintf("aliased name=%s", name))
+	fmt.Printf("aliased name=%s\n", name)
+	return nil
+}
+
+-- expected/invocations.json --
+[
+  {"args": ["group", "leaf", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "-h"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "usage"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos", "-h"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "--output=sentinel.txt", "mypos", "--help"], "help": true, "checkSentinel": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "-o", "sentinel.txt", "mypos", "-h"], "help": true, "checkSentinel": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "--input=nonexistent.txt", "mypos", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "--custom=custom_val", "mypos", "--help"], "help": true, "stderrFile": "leaf-help.stderr"},
+  {"args": ["group", "leaf", "mypos"], "stdout": "leaf pos=mypos tag=default custom= extra=\n"},
+  {"args": ["group", "leaf", "-t", "--help", "mypos"], "stdout": "leaf pos=mypos tag=--help custom= extra=\n"},
+  {"args": ["group", "leaf", "--", "mypos", "--help"], "stdout": "leaf pos=mypos tag=default custom= extra=--help\n"},
+  {"args": ["group", "leaf", "--", "--help"], "stdout": "leaf pos=--help tag=default custom= extra=\n"},
+  {"args": ["group", "leaf", "mypos", "help"], "stdout": "leaf pos=mypos tag=default custom= extra=help\n"},
+  {"args": ["group", "leaf", "mypos", "usage"], "stdout": "leaf pos=mypos tag=default custom= extra=usage\n"},
+  {"args": ["group", "leaf", "--output=normal_out.txt", "mypos"], "stdout": "leaf pos=mypos tag=default custom= extra=\n"},
+  {"args": ["nested", "child", "--help"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem", "--help"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem", "-h"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["nested", "child", "testitem"], "stdout": "nested item=testitem\n"},
+  {"args": ["help", "nested", "child"], "help": true, "stderrFile": "nested-help.stderr"},
+  {"args": ["aliased", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["aliased", "alice", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice", "--help"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice", "-h"], "help": true, "stderrFile": "aliased-help.stderr"},
+  {"args": ["al", "alice"], "stdout": "aliased name=alice\n"},
+  {"args": ["--help"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com", "--help"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com", "-h"], "help": true, "stderrFile": "root-help.stderr"},
+  {"args": ["https://example.com"], "stdout": "root url=https://example.com flag=false\n"},
+  {"args": ["--", "--help"], "stdout": "root url=--help flag=false\n"}
+]
+
+-- expected/leaf-help.stderr --
+Usage: app [flags...] group leaf [flags...] <pos> [extra...]
+
+Leaf command demonstration.
+
+
+
+`app` Flags:
+    --flag, -f                                      Toggle flag.
+
+`leaf` Flags:
+    --tag, -t string         (default: "default")   Tag label.
+    --output, -o io.Writer                          Output destination file.;
+                                                    use '-' for stdout
+    --input, -i io.Reader                           Input source file.; use '-'
+                                                    for stdin
+    --custom, -c string                             (parser: ParseCustom) Custom
+                                                    parsed value.
+    -h, --help                                      Print this help message
+
+Positional Arguments:
+    <pos>      Positional argument.
+    [extra...] Extra trailing arguments.
+-- expected/nested-help.stderr --
+Usage: app [flags...] nested child <item>
+
+Deep nested command.
+
+
+
+`app` Flags:
+    --flag, -f   Toggle flag.
+
+`child` Flags:
+    -h, --help   Print this help message
+
+Positional Arguments:
+    <item> Item identifier.
+-- expected/aliased-help.stderr --
+Usage: app [flags...] aliased <name>
+
+Directly aliased leaf command.
+
+
+
+`app` Flags:
+    --flag, -f   Toggle flag.
+
+`aliased` Flags:
+    -h, --help   Print this help message
+
+Positional Arguments:
+    <name> Target name.
+-- expected/root-help.stderr --
+Usage: app [flags...] <url> <subcommand>
+
+Root command with positional and business generator.
+
+Subcommands:
+
+    aliased Directly aliased leaf command.
+    group   Group for leaf command.
+    nested  Nested parent command.
+    help    Print this help message
+    usage   Print this usage message
+
+
+Flags:
+    --flag, -f   Toggle flag.
+
+Positional Arguments:
+    <url> URL target.
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	app "example.com/helpissue"
+	"example.com/helpissue/cmd"
+	"example.com/helpissue/cmd/app/templates"
+)
+
+var generatedOpenReader = func(name string) (io.ReadCloser, error) {
+	return os.Open(name)
+}
+
+var generatedOpenWriter = func(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+}
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands      map[string]func() Cmd
+	Version       string
+	Commit        string
+	Date          string
+	url           string
+	flag          bool
+	dep           string
+	CommandAction func(c *RootCmd) error
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+	}
+	c.FlagSet.Usage = c.Usage
+
+	c.BoolVar(&c.flag, "flag", false, "Toggle flag.")
+	c.BoolVar(&c.flag, "f", false, "Toggle flag.")
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		err := app.Root(c.url, c.flag, c.dep)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("app failed: %w", err)
+		}
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewAliased() })
+		c.Commands["aliased"] = subCmd
+
+		c.Commands["al"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewGroup() })
+		c.Commands["group"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewNested() })
+		c.Commands["nested"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "flag":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.flag = b
+				} else {
+					c.flag = true
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "f" {
+					found = true
+					c.flag = true
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+	if len(remainingArgs) < 1 {
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
+	}
+	// Handle positional argument url
+	{
+		argIndex := 0
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			c.url = argVal
+		} else {
+		}
+	}
+	{
+		v, err := app.Provider()
+		if err != nil {
+			return fmt.Errorf("failed to generate dep: %w", err)
+		}
+		c.dep = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/group_leaf.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/helpissue"
+	"example.com/helpissue/cmd"
+)
+
+var _ Cmd = (*GroupLeaf)(nil)
+
+type GroupLeaf struct {
+	*Group
+	Flags         *flag.FlagSet
+	pos           string
+	tag           string
+	output        io.Writer
+	input         io.Reader
+	custom        string
+	dep           string
+	extra         []string
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *GroupLeaf) error
+}
+
+type UsageDataGroupLeaf struct {
+	*GroupLeaf
+	Recursive bool
+}
+
+func (c *GroupLeaf) Usage() {
+	err := executeUsage(os.Stderr, "leaf_usage.txt", UsageDataGroupLeaf{c, false})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GroupLeaf) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *GroupLeaf) commandPath() string { return "app group leaf" }
+
+func (c *GroupLeaf) UsageRecursive() {
+	err := executeUsage(os.Stderr, "leaf_usage.txt", UsageDataGroupLeaf{c, true})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *GroupLeaf) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var stagedIO []func() error
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "tag":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.tag = value
+
+			case "output":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				ioVal := value
+				stagedIO = append(stagedIO, func() error {
+					if ioVal == "-" {
+						c.output = os.Stdout
+					} else {
+						f, err := generatedOpenWriter(ioVal)
+						if err != nil {
+							return err
+						}
+						cleanups = append(cleanups, f.Close)
+						c.output = f
+					}
+					return nil
+				})
+
+			case "input":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				ioVal := value
+				stagedIO = append(stagedIO, func() error {
+					if ioVal == "-" {
+						c.input = os.Stdin
+					} else {
+						f, err := generatedOpenReader(ioVal)
+						if err != nil {
+							return err
+						}
+						cleanups = append(cleanups, f.Close)
+						c.input = f
+					}
+					return nil
+				})
+
+			case "custom":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.custom = value
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if char == "t" {
+					found = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					c.tag = value
+				}
+
+				if char == "o" {
+					found = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					ioVal := value
+					stagedIO = append(stagedIO, func() error {
+						if ioVal == "-" {
+							c.output = os.Stdout
+						} else {
+							f, err := generatedOpenWriter(ioVal)
+							if err != nil {
+								return err
+							}
+							cleanups = append(cleanups, f.Close)
+							c.output = f
+						}
+						return nil
+					})
+				}
+
+				if char == "i" {
+					found = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					ioVal := value
+					stagedIO = append(stagedIO, func() error {
+						if ioVal == "-" {
+							c.input = os.Stdin
+						} else {
+							f, err := generatedOpenReader(ioVal)
+							if err != nil {
+								return err
+							}
+							cleanups = append(cleanups, f.Close)
+							c.input = f
+						}
+						return nil
+					})
+				}
+
+				if char == "c" {
+					found = true
+					// Value flag
+					value := ""
+					if j+1 < len(shorts) {
+						// Value is the rest of the short flag
+						value = shorts[j+1:]
+						if strings.HasPrefix(value, "=") {
+							value = value[1:]
+						}
+						j = len(shorts) // break inner loop
+					} else {
+						// Value is the next arg
+						if i+1 < len(args) {
+							value = args[i+1]
+							i++
+						} else {
+							return c.usageError(cmd.UsageMissingFlagValue, char, nil, "flag -%s requires a value", char)
+						}
+					}
+					c.custom = value
+				}
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+	if len(remainingArgs) < 1 {
+		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
+	}
+	// Handle positional argument pos
+	{
+		argIndex := 0
+		if argIndex >= 0 && argIndex < len(remainingArgs) {
+			argVal := remainingArgs[argIndex]
+			c.pos = argVal
+		} else {
+		}
+	}
+	// Handle vararg extra
+	{
+		varArgStart := 1
+		if varArgStart > len(remainingArgs) {
+			varArgStart = len(remainingArgs)
+		}
+		varArgs := remainingArgs[varArgStart:]
+		c.extra = varArgs
+	}
+	for _, fn := range stagedIO {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
+	{
+		v, err := app.Provider()
+		if err != nil {
+			return fmt.Errorf("failed to generate dep: %w", err)
+		}
+		c.dep = v
+		if closer, ok := interface{}(v).(io.Closer); ok {
+			cleanups = append(cleanups, closer.Close)
+		}
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Group) NewGroupLeaf() *GroupLeaf {
+	set := flag.NewFlagSet("leaf", flag.ContinueOnError)
+	v := &GroupLeaf{
+		Group:       c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+
+	set.StringVar(&v.tag, "tag", "default", "Tag label.")
+	set.StringVar(&v.tag, "t", "default", "Tag label.")
+
+	set.Func("output", "Output destination file.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
+	set.Func("o", "Output destination file.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
+
+	set.Func("input", "Input source file.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
+	set.Func("i", "Input source file.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
+
+	set.StringVar(&v.custom, "custom", "", "(parser: ParseCustom) Custom parsed value.")
+	set.StringVar(&v.custom, "c", "", "(parser: ParseCustom) Custom parsed value.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *GroupLeaf) error {
+
+		err := app.Leaf(c.pos, c.tag, c.output, c.input, c.custom, c.dep, c.extra...)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("leaf failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}

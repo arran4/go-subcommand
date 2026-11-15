@@ -5,16 +5,13 @@ updates an AI agent skill.
 
 Updates an AI agent skill.
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
-
 
 Flags:
     {{formatFlagRow 16 19 "--all" "(default: false)" "Update all installed skills"}}
     {{formatFlagRow 16 19 "--scope string" "(default: \"user\")" "The installation scope ('user' or 'project')"}}
     {{formatFlagRow 16 19 "--agent string" "(default: \"\")" "Explicitly target a specific agent (e.g. 'codex', 'claude')"}}
     {{formatFlagRow 16 19 "--force" "(default: false)" "Force update even if local modifications exist"}}
+    {{formatFlagRow 16 19 "-h, --help" "" "Print this help message"}}
 
 Positional Arguments:
     {{formatHelpRow 6 "[name]" "The name of the skill to update"}}

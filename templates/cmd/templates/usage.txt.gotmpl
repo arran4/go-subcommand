@@ -16,7 +16,7 @@ Usage: {{escapeUsageText .FullUsageString}}
 
 {{escapeUsageText .SubCommandExtendedHelp}}
 {{- end}}
-{{- if or .SubCommands .SubCommandFunctionName}}
+{{- if .SubCommands}}
 
 Subcommands:
 {{- if .HasDistinctRecursiveSubcommands}}

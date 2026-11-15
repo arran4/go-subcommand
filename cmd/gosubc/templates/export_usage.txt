@@ -5,12 +5,9 @@ Exports the built-in templates
 
 Exports the built-in templates to a specified directory or txtar file.
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
-
 
 Flags:
     {{formatFlagRow 21 24 "--output, -o string" "(default: \"templates\")" "The destination directory or file."}}
     {{formatFlagRow 21 24 "--as-txtar" "(default: false)" "Export as a txtar archive instead of a directory."}}
     {{formatFlagRow 21 24 "--force" "(default: false)" "Replace existing exported template files."}}
+    {{formatFlagRow 21 24 "-h, --help" "" "Print this help message"}}

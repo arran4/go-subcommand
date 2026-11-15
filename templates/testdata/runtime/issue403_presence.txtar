@@ -551,12 +551,30 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
 		c.Usage()
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	c.seen = seenFlags
 	{
@@ -767,10 +785,28 @@ func (c *GroupRun) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	// Handle positional argument item
 	{
@@ -906,10 +942,6 @@ Usage: app [flags...] group run [flags...] [item]
 
 Run nested providers.
 
-Subcommands:
-    help  Print this help message
-    usage Print this usage message
-
 
 
 `group` Flags:
@@ -919,6 +951,7 @@ Subcommands:
 `run` Flags:
     --enabled, -e     (default: true)   Enable output.
     --count, -n int   (default: 7)      Count.
+    -h, --help                          Print this help message
 
 Positional Arguments:
     [item] Positional item.

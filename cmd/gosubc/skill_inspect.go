@@ -124,10 +124,28 @@ func (c *SkillInspect) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	if len(remainingArgs) < 1 {
 		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))

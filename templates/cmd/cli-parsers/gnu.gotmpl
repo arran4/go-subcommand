@@ -110,6 +110,7 @@
 					{{- else }}
 					c.{{$param.Name}} = s
 					{{- end }}
+
 					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
@@ -194,7 +195,12 @@
 				{{- end }}
 				{{- end }}
 				{{- else if or $param.IsWriter $param.IsReader }}
-				{{- template "acquire_io" (list $param "value") }}
+				ioVal := value
+				stagedIO = append(stagedIO, func() error {
+					{{- template "acquire_io" (list $param "ioVal") }}
+					return nil
+				})
+
 				{{- else }}
 				v, err := {{$param.ParserCall "value"}}
 				if err != nil {
@@ -315,6 +321,7 @@
 						{{- else }}
 						c.{{$param.Name}} = s
 						{{- end }}
+
 						{{- else }}
 						v, err := {{$param.ParserCall "value"}}
 						if err != nil {
@@ -389,7 +396,12 @@
 					{{- end }}
 					{{- end }}
 					{{- else if or $param.IsWriter $param.IsReader }}
-					{{- template "acquire_io" (list $param "value") }}
+					ioVal := value
+					stagedIO = append(stagedIO, func() error {
+						{{- template "acquire_io" (list $param "ioVal") }}
+						return nil
+					})
+
 					{{- else }}
 					v, err := {{$param.ParserCall "value"}}
 					if err != nil {
