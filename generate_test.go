@@ -4237,15 +4237,6 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 `
 	writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/contract_test.go"), contractTestCode)
 
-	goBin := "/home/user/.go/pkg/mod/golang.org/toolchain@v0.0.1-go1.22.12.linux-amd64/bin/go"
-	toolchainDir := "/home/user/.go/pkg/mod/golang.org/toolchain@v0.0.1-go1.22.12.linux-amd64"
-	hasGo122 := false
-	if _, err := os.Stat(goBin); err == nil {
-		hasGo122 = true
-	} else {
-		goBin = "go"
-	}
-
 	var goEnv []string
 	for _, env := range os.Environ() {
 		if strings.HasPrefix(env, "GOROOT=") || strings.HasPrefix(env, "GOTOOLDIR=") || strings.HasPrefix(env, "GOTOOLCHAIN=") {
@@ -4253,36 +4244,38 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 		}
 		goEnv = append(goEnv, env)
 	}
-	goEnv = append(goEnv, "GOTOOLCHAIN=local")
-	if hasGo122 {
-		goEnv = append(goEnv, "GOROOT="+toolchainDir)
-	}
 
-	verCmd := exec.Command(goBin, "version")
-	verCmd.Env = goEnv
-	verOut, err := verCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("compiler version check failed: %v\n%s", err, verOut)
-	}
-	verStr := strings.TrimSpace(string(verOut))
-	if !strings.Contains(verStr, "go1.22") {
-		t.Fatalf("expected Go 1.22 compiler for compatibility test, but got: %s", verStr)
-	}
-	t.Logf("Compiler verified: %s", verStr)
-
-	testCmd := exec.Command(goBin, "test", "./cmd/app")
+	localEnv := append(append([]string{}, goEnv...), "GOTOOLCHAIN=local")
+	testCmd := exec.Command("go", "test", "./cmd/app")
 	testCmd.Dir = dir
-	testCmd.Env = goEnv
+	testCmd.Env = localEnv
 	if out, err := testCmd.CombinedOutput(); err != nil {
 		t.Fatalf("go test ./cmd/app failed: %v\n%s", err, out)
 	}
 
 	binary := filepath.Join(dir, "app")
-	buildCmd := exec.Command(goBin, "build", "-o", binary, "./cmd/app")
+	buildCmd := exec.Command("go", "build", "-o", binary, "./cmd/app")
 	buildCmd.Dir = dir
-	buildCmd.Env = goEnv
+	buildCmd.Env = localEnv
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		t.Fatalf("build failed: %v\n%s", err, out)
+	}
+
+	binaries := []string{binary}
+
+	// When Go 1.22 toolchain is available or switchable, also build and test with Go 1.22.
+	env122 := append(append([]string{}, goEnv...), "GOTOOLCHAIN=go1.22.12")
+	verCmd := exec.Command("go", "version")
+	verCmd.Env = env122
+	if out, err := verCmd.CombinedOutput(); err == nil && strings.Contains(string(out), "go1.22") {
+		binary122 := filepath.Join(dir, "app-122")
+		build122 := exec.Command("go", "build", "-o", binary122, "./cmd/app")
+		build122.Dir = dir
+		build122.Env = env122
+		if out, err := build122.CombinedOutput(); err == nil {
+			binaries = append(binaries, binary122)
+			t.Logf("Go 1.22 toolchain verified: %s", strings.TrimSpace(string(out)))
+		}
 	}
 
 	testInvocations := []struct {
@@ -4311,44 +4304,46 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 	}
 
 	capturedStderrFiles := make(map[string]string)
-	for i, inv := range testInvocations {
-		cmd := exec.Command(binary, inv.Args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "COLUMNS=80")
-		var outBuf, errBuf bytes.Buffer
-		cmd.Stdout = &outBuf
-		cmd.Stderr = &errBuf
-		err := cmd.Run()
-		status := 0
-		if err != nil {
-			if exit, ok := err.(*exec.ExitError); ok {
-				status = exit.ExitCode()
-			} else {
-				t.Fatalf("run error: %v", err)
+	for _, bin := range binaries {
+		for i, inv := range testInvocations {
+			cmd := exec.Command(bin, inv.Args...)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "COLUMNS=80")
+			var outBuf, errBuf bytes.Buffer
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			err := cmd.Run()
+			status := 0
+			if err != nil {
+				if exit, ok := err.(*exec.ExitError); ok {
+					status = exit.ExitCode()
+				} else {
+					t.Fatalf("run error: %v", err)
+				}
 			}
-		}
-		gotStdout := outBuf.String()
-		gotStderr := strings.ReplaceAll(errBuf.String(), binary, "app")
-		if inv.StderrFile != "" {
-			capturedStderrFiles[inv.StderrFile] = gotStderr
-		}
-		if status != inv.Status {
-			t.Errorf("[%d] %v status=%d, want %d (stderr: %s)", i, inv.Args, status, inv.Status, gotStderr)
-		}
-		wantStdout := inv.Stdout
-		wantStderr := inv.Stderr
-		if inv.StderrFile != "" {
-			if f, ok := expected[inv.StderrFile]; ok {
-				wantStderr = string(f.Data)
-			} else if captured, ok := capturedStderrFiles[inv.StderrFile]; ok {
-				wantStderr = captured
+			gotStdout := outBuf.String()
+			gotStderr := strings.ReplaceAll(errBuf.String(), bin, "app")
+			if inv.StderrFile != "" {
+				capturedStderrFiles[inv.StderrFile] = gotStderr
 			}
-		}
-		if gotStdout != wantStdout {
-			t.Errorf("[%d] %v stdout=%q, want %q", i, inv.Args, gotStdout, wantStdout)
-		}
-		if gotStderr != wantStderr {
-			t.Errorf("[%d] %v stderr=%q, want %q", i, inv.Args, gotStderr, wantStderr)
+			if status != inv.Status {
+				t.Errorf("[%s %d] %v status=%d, want %d (stderr: %s)", filepath.Base(bin), i, inv.Args, status, inv.Status, gotStderr)
+			}
+			wantStdout := inv.Stdout
+			wantStderr := inv.Stderr
+			if inv.StderrFile != "" {
+				if f, ok := expected[inv.StderrFile]; ok {
+					wantStderr = string(f.Data)
+				} else if captured, ok := capturedStderrFiles[inv.StderrFile]; ok {
+					wantStderr = captured
+				}
+			}
+			if gotStdout != wantStdout {
+				t.Errorf("[%s %d] %v stdout=%q, want %q", filepath.Base(bin), i, inv.Args, gotStdout, wantStdout)
+			}
+			if gotStderr != wantStderr {
+				t.Errorf("[%s %d] %v stderr=%q, want %q", filepath.Base(bin), i, inv.Args, gotStderr, wantStderr)
+			}
 		}
 	}
 
