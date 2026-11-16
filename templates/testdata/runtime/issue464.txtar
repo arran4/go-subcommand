@@ -1467,11 +1467,11 @@ func isFlagLike(token string) bool {
 
 // Scans args, validates all tokens and staged values before committing any changes.
 // Preserves positional argument ordering and yields when encountering subcommands.
-func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, extra ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
 	var subcmdMap map[string]bool
 	allowUnmatched := false
-	for _, extra := range subcommands {
-		switch v := extra.(type) {
+	for _, arg := range extra {
+		switch v := arg.(type) {
 		case bool:
 			allowUnmatched = v
 		case map[string]bool:
@@ -2262,7 +2262,6 @@ Toggle root options.
 Short boolean toggles use -x to enable and +x to disable. Long options use --name.
 
 
-
 .SH OPTIONS
 
 .TP
@@ -2292,7 +2291,6 @@ Short boolean toggles use -x to enable and +x to disable. Long options use --nam
 .TP
 .BR \-args
 (string) Literal positional tail.
-
 
 
 .SH SEE ALSO

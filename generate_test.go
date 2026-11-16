@@ -4260,9 +4260,15 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 
 	verCmd := exec.Command(goBin, "version")
 	verCmd.Env = goEnv
-	if verOut, err := verCmd.CombinedOutput(); err == nil {
-		t.Logf("Compiler used: %s", strings.TrimSpace(string(verOut)))
+	verOut, err := verCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("compiler version check failed: %v\n%s", err, verOut)
 	}
+	verStr := strings.TrimSpace(string(verOut))
+	if !strings.Contains(verStr, "go1.22") {
+		t.Fatalf("expected Go 1.22 compiler for compatibility test, but got: %s", verStr)
+	}
+	t.Logf("Compiler verified: %s", verStr)
 
 	testCmd := exec.Command(goBin, "test", "./cmd/app")
 	testCmd.Dir = dir
@@ -4329,11 +4335,20 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 		if status != inv.Status {
 			t.Errorf("[%d] %v status=%d, want %d (stderr: %s)", i, inv.Args, status, inv.Status, gotStderr)
 		}
-		if inv.Stdout != "" && gotStdout != inv.Stdout {
-			t.Errorf("[%d] %v stdout=%q, want %q", i, inv.Args, gotStdout, inv.Stdout)
+		wantStdout := inv.Stdout
+		wantStderr := inv.Stderr
+		if inv.StderrFile != "" {
+			if f, ok := expected[inv.StderrFile]; ok {
+				wantStderr = string(f.Data)
+			} else if captured, ok := capturedStderrFiles[inv.StderrFile]; ok {
+				wantStderr = captured
+			}
 		}
-		if inv.Stderr != "" && gotStderr != inv.Stderr {
-			t.Errorf("[%d] %v stderr=%q, want %q", i, inv.Args, gotStderr, inv.Stderr)
+		if gotStdout != wantStdout {
+			t.Errorf("[%d] %v stdout=%q, want %q", i, inv.Args, gotStdout, wantStdout)
+		}
+		if gotStderr != wantStderr {
+			t.Errorf("[%d] %v stderr=%q, want %q", i, inv.Args, gotStderr, wantStderr)
 		}
 	}
 
@@ -4410,6 +4425,31 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 		if !bytes.Equal(gen, exp.Data) {
 			t.Fatalf("generated file cmd/app/%s does not match expected golden", name)
 		}
+	}
+}
+
+func TestManPageOnlyUnmatchedArgvOmitsOptions(t *testing.T) {
+	if err := initTemplates(TemplatesFS); err != nil {
+		t.Fatal(err)
+	}
+	sub := &model.SubCommand{
+		Command: &model.Command{
+			MainCmdName:       "app",
+			ResolvedCLIParser: "plus-minus",
+		},
+		SubCommandName: "run",
+		Parameters: []*model.FunctionParameter{
+			{Name: "args", Type: "[]string", IsUnmatchedArgv: true},
+		},
+	}
+
+	writer := NewCollectingFileWriter()
+	if err := generateFile(writer, "man", "app-run.1", "man.gotmpl", sub, false); err != nil {
+		t.Fatal(err)
+	}
+	content := string(writer.Files["man/app-run.1"])
+	if strings.Contains(content, ".SH OPTIONS") {
+		t.Fatalf("man page for command with only (unmatched) emitted empty .SH OPTIONS:\n%s", content)
 	}
 }
 

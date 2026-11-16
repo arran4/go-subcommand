@@ -237,10 +237,6 @@ Usage: app [flags...] volume [flags...]
 
 .
 
-Subcommands:
-    help  Print this help message
-    usage Print this usage message
-
 
 
 `app` Flags:
@@ -250,6 +246,7 @@ Subcommands:
 
 `volume` Flags:
     --player string   Select player.
+    -h, --help        Print this help message
 
 Short boolean toggles: -x enables, +x disables; --name is one long option.
 -- expected/contract_test.go --
@@ -700,7 +697,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	for name := range c.Commands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap, true)
 	if err != nil {
 		return err
 	}
@@ -714,10 +711,28 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	}
 	c.plusMinusCommit = commitFlags
 	c.seenFlags = seenFlags
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	c.args = remainingArgs
 	if err := c.commitAll(); err != nil {
@@ -939,7 +954,7 @@ func (c *Volume) Execute(args []string) (err error) {
 	for name := range c.SubCommands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap, true)
 	if err != nil {
 		return err
 	}
@@ -953,10 +968,28 @@ func (c *Volume) Execute(args []string) (err error) {
 	}
 	c.plusMinusCommit = commitFlags
 	c.seenFlags = seenFlags
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	c.args = remainingArgs
 	if err := c.commitAll(); err != nil {
@@ -1241,7 +1274,7 @@ func (c *Child) Execute(args []string) (err error) {
 	for name := range c.SubCommands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap, true)
 	if err != nil {
 		return err
 	}
@@ -1255,10 +1288,28 @@ func (c *Child) Execute(args []string) (err error) {
 	}
 	c.plusMinusCommit = commitFlags
 	c.seenFlags = seenFlags
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	c.args = remainingArgs
 	if err := c.commitAll(); err != nil {
@@ -1523,7 +1574,7 @@ func (c *Run) Execute(args []string) (err error) {
 	for name := range c.SubCommands {
 		subcmdMap[name] = true
 	}
-	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, true, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap, true)
 	if err != nil {
 		return err
 	}
@@ -1537,10 +1588,28 @@ func (c *Run) Execute(args []string) (err error) {
 	}
 	c.plusMinusCommit = commitFlags
 	c.seenFlags = seenFlags
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	c.args = remainingArgs
 	if err := c.commitAll(); err != nil {
@@ -1841,10 +1910,28 @@ func (c *Other) Execute(args []string) (err error) {
 	}
 	c.plusMinusCommit = commitFlags
 	c.seenFlags = seenFlags
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	if err := c.commitAll(); err != nil {
 		return err
@@ -2118,11 +2205,11 @@ func isFlagLike(token string) bool {
 
 // Scans args, validates all tokens and staged values before committing any changes.
 // Preserves positional argument ordering and yields when encountering subcommands.
-func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, subcommands ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
+func parsePlusMinus(args []string, path string, short, long map[string]plusMinusOption, extra ...any) (remaining []string, seen map[string]bool, commit func() error, terminated bool, special string, err error) {
 	var subcmdMap map[string]bool
 	allowUnmatched := false
-	for _, extra := range subcommands {
-		switch v := extra.(type) {
+	for _, arg := range extra {
+		switch v := arg.(type) {
 		case bool:
 			allowUnmatched = v
 		case map[string]bool:
@@ -2289,10 +2376,6 @@ Usage: app [flags...] volume [flags...]
 
 .
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
-
 
 
 `app` Flags:
@@ -2302,6 +2385,7 @@ Subcommands:
 
 `volume` Flags:
     {{formatFlagRow 17 0 "--player string" "" "Select player."}}
+    {{formatFlagRow 17 0 "-h, --help" "" "Print this help message"}}
 
 Short boolean toggles: -x enables, +x disables; --name is one long option.
 -- expected/templates/child_usage.txt --
@@ -2309,10 +2393,6 @@ Short boolean toggles: -x enables, +x disables; --name is one long option.
 Usage: app [flags...] child [flags...]
 
 .
-
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 
@@ -2323,6 +2403,7 @@ Subcommands:
 `child` Flags:
     {{formatFlagRow 17 0 "--known string" "" "Known flag."}}
     {{formatFlagRow 17 0 "--known2 string" "" "Known flag 2."}}
+    {{formatFlagRow 17 0 "-h, --help" "" "Print this help message"}}
 
 Short boolean toggles: -x enables, +x disables; --name is one long option.
 -- expected/templates/run_usage.txt --
@@ -2331,15 +2412,15 @@ Usage: app [flags...] run
 
 .
 
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
-Flags:
+`app` Flags:
     {{formatFlagRow 13 0 "-a" "" "Flag a."}}
     {{formatFlagRow 13 0 "-n int" "" "Number option."}}
     {{formatFlagRow 13 0 "--known int" "" "Known option."}}
+
+`run` Flags:
+    {{formatFlagRow 13 0 "-h, --help" "" "Print this help message"}}
 
 Short boolean toggles: -x enables, +x disables; --name is one long option.
 -- expected/templates/other_usage.txt --
@@ -2347,10 +2428,6 @@ Short boolean toggles: -x enables, +x disables; --name is one long option.
 Usage: app [flags...] other [flags...]
 
 .
-
-Subcommands:
-    {{formatHelpRow 5 "help" "Print this help message"}}
-    {{formatHelpRow 5 "usage" "Print this usage message"}}
 
 
 
@@ -2361,5 +2438,6 @@ Subcommands:
 
 `other` Flags:
     {{formatFlagRow 15 0 "--flag string" "" "Flag."}}
+    {{formatFlagRow 15 0 "-h, --help" "" "Print this help message"}}
 
 Short boolean toggles: -x enables, +x disables; --name is one long option.

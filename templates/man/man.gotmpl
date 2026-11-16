@@ -15,7 +15,13 @@ Short boolean toggles use -x to enable and +x to disable. Long options use --nam
 {{ if .SubCommandExtendedHelp }}
 {{ .SubCommandExtendedHelp }}
 {{ end }}
-{{ if .Parameters }}
+{{- $hasOptions := false }}
+{{- range .Parameters }}
+{{- if not .IsUnmatchedArgv }}
+{{- $hasOptions = true }}
+{{- end }}
+{{- end }}
+{{- if $hasOptions }}
 .SH OPTIONS
 {{ range .Parameters }}
 {{- if not .IsUnmatchedArgv }}
@@ -24,7 +30,7 @@ Short boolean toggles use -x to enable and +x to disable. Long options use --nam
 ({{ .Type }}){{ if .Description }} {{ .Description }}{{ end }}{{ if .Default }} (default: {{ .Default }}){{ end }}
 {{ end }}
 {{- end }}
-{{ end }}
+{{- end }}
 {{ range .ManSections }}
 .SH {{ .Name }}
 {{ .Text }}
