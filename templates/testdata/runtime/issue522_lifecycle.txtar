@@ -429,12 +429,30 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
 		c.Usage()
 		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	if c.CommandAction != nil {
 		if err := c.CommandAction(c); err != nil {
@@ -566,10 +584,28 @@ func (c *Admin) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 
 	c.Usage()
@@ -796,10 +832,28 @@ func (c *AdminList) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 
 	if err := session.RequireAdmin(); err != nil {
@@ -996,10 +1050,28 @@ func (c *AdminDelete) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 	if len(remainingArgs) < 1 {
 		return c.usageError(cmd.UsageInvalidArguments, "", nil, "expected at least 1 positional arguments, got %d", len(remainingArgs))
@@ -1221,10 +1293,28 @@ func (c *AdminAudit) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 
 	if err := session.RequireAdmin(); err != nil {
@@ -1407,10 +1497,28 @@ func (c *AdminAbout) Execute(args []string) (err error) {
 		}
 	}
 
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
 	if !dashDashSeen && len(remainingArgs) > 0 {
 		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
 			return cmd().Execute(remainingArgs[1:])
 		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
 	}
 
 	if err := session.RequireAdmin(); err != nil {
