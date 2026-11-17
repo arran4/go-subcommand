@@ -117,6 +117,10 @@ const (
 	// Usage: (aka: f)
 	AttributeAka = "aka"
 
+	// AttributeUnmatched marks a parameter to receive otherwise-unrecognized argv tokens.
+	// Usage: (unmatched)
+	AttributeUnmatched = "unmatched"
+
 	// AttributePlus configures bare plus operation for a parameter.
 	// Usage: (plus: reset), (plus: zero), (plus: FuncName)
 	AttributePlus = "plus"

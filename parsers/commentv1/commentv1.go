@@ -684,6 +684,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.OptionalValue {
 								fp.OptionalValue = true
 							}
+							if c.UnmatchedArgv {
+								fp.IsUnmatchedArgv = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -738,6 +741,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							if c.OptionalValue {
 								fp.OptionalValue = true
 							}
+							if c.UnmatchedArgv {
+								fp.IsUnmatchedArgv = true
+							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
 							}
@@ -791,6 +797,9 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.OptionalValue {
 								fp.OptionalValue = true
+							}
+							if c.UnmatchedArgv {
+								fp.IsUnmatchedArgv = true
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
@@ -852,19 +861,24 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 								}
 							}
 						}
-						if len(fp.FlagAliases) == 0 && !fp.IsFlagPresence() {
+						if len(fp.FlagAliases) == 0 && !fp.IsFlagPresence() && !fp.IsUnmatchedArgv {
 							kebab := parsers.ToKebabCase(name.Name)
 							if kebab != name.Name {
 								fp.FlagAliases = []string{kebab}
 							}
 						}
-						if len(fp.ShortAliases) == 0 && len(fp.LongAliases) == 0 && !fp.IsFlagPresence() {
+						if len(fp.ShortAliases) == 0 && len(fp.LongAliases) == 0 && !fp.IsFlagPresence() && !fp.IsUnmatchedArgv {
 							if len(name.Name) == 1 {
 								fp.ShortAliases = []string{name.Name}
 							} else {
 								kebab := parsers.ToKebabCase(name.Name)
 								fp.LongAliases = []string{kebab}
 							}
+						}
+						if fp.IsUnmatchedArgv {
+							fp.FlagAliases = nil
+							fp.ShortAliases = nil
+							fp.LongAliases = nil
 						}
 
 						// If detected as VarArg in signature, force IsPositional to true
@@ -1039,6 +1053,7 @@ type ParsedParam struct {
 	Required           bool
 	Optional           bool
 	OptionalValue      bool
+	UnmatchedArgv      bool
 	PlusBare           model.PlusOperationConfig
 	PlusValue          model.PlusOperationConfig
 	Generator          model.GeneratorConfig
@@ -1296,7 +1311,7 @@ func isLikelyAttribute(attrStr string) bool {
 		}
 	}
 
-	knownSingles := []string{"required", AttributeOptional, "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue}
+	knownSingles := []string{"required", AttributeOptional, "inherited", "from parent", "root context", "constructor", "flag presence", AttributeOptionalValue, AttributeUnmatched, "unmatched argv", "unmatched-argv"}
 	parts := splitSafe(lower, ';')
 	useComma := false
 	for _, part := range parts {
@@ -1571,6 +1586,8 @@ func parseAttributes(attrs string, p *ParsedParam) {
 			p.Optional = true
 		case AttributeOptionalValue:
 			p.OptionalValue = true
+		case AttributeUnmatched, "unmatched argv", "unmatched-argv":
+			p.UnmatchedArgv = true
 		case AttributeGenerator, AttributeProvider, AttributeInject:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {

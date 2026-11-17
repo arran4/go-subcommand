@@ -43,7 +43,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	args := []string{}
 	{{- range .Parameters}}
 	{{- $param := . }}
-	{{- if and (not .HasGenerator) (not .HasConstructor) (not .IsPositional) (not .Inherited)}}
+	{{- if and (not .HasGenerator) (not .HasConstructor) (not .IsPositional) (not .Inherited) (not .IsUnmatchedArgv)}}
 	args = append(args, "{{.PrimaryFlagName}}")
 		{{- if ne .BaseType "bool"}}
 			{{- if eq .BaseType "string"}}
@@ -112,7 +112,7 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	{{range .Parameters}}
 	{{- $param := . }}
 	{{- if not .Inherited }}
-	{{- if and (not .HasGenerator) (not .HasConstructor) (not .HasCustomParser) }}
+	{{- if and (not .HasGenerator) (not .HasConstructor) (not .HasCustomParser) (not .IsUnmatchedArgv) }}
 	{{- if .IsPositional}}
 		{{- if .IsVarArg}}
 			{{- if gt .VarArgMin 0}}
@@ -196,10 +196,12 @@ func Test{{.SubCommandStructName}}_ExecuteHelpAndUnknownFlags(t *testing.T) {
 	if err := cmd.Execute([]string{"-h"}); err != nil {
 		t.Errorf("-h returned an error: %v", err)
 	}
+	{{- if not .HasUnmatchedArgv }}
 	if err := cmd.Execute([]string{"--not-a-real-flag"}); err == nil {
 		t.Error("expected an error for an unknown long flag")
 	}
 	if err := cmd.Execute([]string{"-?"}); err == nil {
 		t.Error("expected an error for an unknown short flag")
 	}
+	{{- end }}
 }

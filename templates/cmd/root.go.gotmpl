@@ -398,7 +398,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 	{{- if or .IsWriter .IsReader (and .HasGenerator (not .IsFlagPresence)) }}
 	{{- $hasFile = true }}
 	{{- end }}
-	{{- if or .IsPositional .IsVarArg }}
+	{{- if or .IsPositional .IsVarArg .IsUnmatchedArgv }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
 	{{- if and (not .Inherited) (not .HasConstructor) (or .IsWriter .IsReader) }}

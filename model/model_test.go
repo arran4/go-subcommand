@@ -664,3 +664,115 @@ func TestPositionalString(t *testing.T) {
 		t.Errorf("PositionalString() = %q, want %q", got, "[files...]")
 	}
 }
+
+func TestValidateParametersUnmatchedArgv(t *testing.T) {
+	valid := []*FunctionParameter{
+		{Name: "flag", Type: "string"},
+		{Name: "unmatched", Type: "[]string", IsUnmatchedArgv: true},
+	}
+	if err := validateParameters(valid, "app"); err != nil {
+		t.Fatalf("unexpected error for valid unmatched param: %v", err)
+	}
+
+	invalidCases := []struct {
+		name   string
+		params []*FunctionParameter
+		want   string
+	}{
+		{
+			name: "non-[]string type",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "string", IsUnmatchedArgv: true},
+			},
+			want: "must have type []string",
+		},
+		{
+			name: "positional",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, IsPositional: true, PositionalArgIndex: 1},
+			},
+			want: "cannot combine (unmatched) with positional metadata",
+		},
+		{
+			name: "vararg",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, IsVarArg: true},
+			},
+			want: "cannot combine (unmatched) with positional metadata",
+		},
+		{
+			name: "required",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, Required: true},
+			},
+			want: "cannot combine (unmatched) with required metadata",
+		},
+		{
+			name: "inherited",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, Inherited: true},
+			},
+			want: "cannot be inherited",
+		},
+		{
+			name: "generator",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, Generator: GeneratorConfig{Type: SourceTypeGenerator, Func: &FuncRef{FunctionName: "Gen"}}},
+			},
+			want: "cannot combine (unmatched) with provider or constructor",
+		},
+		{
+			name: "optional value",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, OptionalValue: true},
+			},
+			want: "cannot combine (unmatched) with (optional value)",
+		},
+		{
+			name: "default value",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, HasDefaultValue: true, Default: "foo"},
+			},
+			want: "cannot combine (unmatched) with default value",
+		},
+		{
+			name: "flag aliases",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, FlagAliases: []string{"-a"}},
+			},
+			want: "cannot combine (unmatched) with flag aliases or flags",
+		},
+		{
+			name: "plus-minus modifier",
+			params: []*FunctionParameter{
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true, PlusBare: PlusOperationConfig{Mode: "reset"}},
+			},
+			want: "cannot combine (unmatched) with plus-minus modifiers",
+		},
+		{
+			name: "multiple unmatched",
+			params: []*FunctionParameter{
+				{Name: "args1", Type: "[]string", IsUnmatchedArgv: true},
+				{Name: "args2", Type: "[]string", IsUnmatchedArgv: true},
+			},
+			want: "multiple parameters marked with (unmatched)",
+		},
+		{
+			name: "unmatched with positional on same command",
+			params: []*FunctionParameter{
+				{Name: "pos", Type: "string", IsPositional: true, PositionalArgIndex: 1},
+				{Name: "args", Type: "[]string", IsUnmatchedArgv: true},
+			},
+			want: "cannot combine (unmatched) argv filter with positional arguments",
+		},
+	}
+
+	for _, tc := range invalidCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateParameters(tc.params, "app")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got: %v", tc.want, err)
+			}
+		})
+	}
+}

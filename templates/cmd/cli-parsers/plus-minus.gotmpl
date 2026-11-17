@@ -213,7 +213,7 @@
 		subcmdMap[name] = true
 	}
 	{{- end }}
-	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap)
+	remainingArgs, seenFlags, commitFlags, dashDashSeen, pmSpecial, err := parsePlusMinus(args, c.commandPath(), plusMinusShort, plusMinusLong, subcmdMap{{if .HasUnmatchedArgv}}, true{{end}})
 	if err != nil { return err }
 	if pmSpecial == "help" || pmSpecial == "usage" { c.Usage(); return nil }
 	if pmSpecial == "version" {

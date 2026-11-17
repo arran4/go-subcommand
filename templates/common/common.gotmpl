@@ -6,7 +6,7 @@
 		{{- if and .OptionalValue .HasDefaultValue (not .HasPointer) (not .IsSlice) }}
 	{{$struct}}.{{.Name}} = {{.BareValueCode}}
 		{{- end }}
-		{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) (not .OptionalValue) }}
+		{{- if and (not .IsPositional) (not .HasGenerator) (not .HasConstructor) (not .Inherited) (not .OptionalValue) (not .IsUnmatchedArgv) }}
 		{{$param := .}}
 		{{- $desc := .Description -}}
 		{{- if not $desc }}{{ $desc = "TODO: Add usage text" }}{{ end -}}
@@ -208,6 +208,11 @@
 		}
 	}
 			{{- end }}
+		{{- end }}
+	{{- end }}
+	{{- range $params }}
+		{{- if .IsUnmatchedArgv }}
+	c.{{.ValueFieldName}} = remainingArgs
 		{{- end }}
 	{{- end }}
 {{- end -}}

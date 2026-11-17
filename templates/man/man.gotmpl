@@ -6,7 +6,7 @@
 {{ .MainCmdName }}{{ if .SubCommandSequence }}-{{ replace .SubCommandSequence " " "-" }}{{ end }} \-{{ if .SubCommandDescription }} {{ .SubCommandDescription }}{{ end }}
 .SH SYNOPSIS
 .B {{ .MainCmdName }}{{ if .SubCommandSequence }} {{ .SubCommandSequence }}{{ end }}
-{{ range $i, $p := .Parameters }}{{ if $i }} {{ end }}[{{ $p.Name }}]{{ end }}
+{{ range $i, $p := .Parameters }}{{ if not $p.IsUnmatchedArgv }}{{ if $i }} {{ end }}[{{ $p.Name }}]{{ end }}{{ end }}
 .SH DESCRIPTION
 {{ .SubCommandDescription }}{{ if eq .ResolvedCLIParser "plus-minus" }}
 .PP
@@ -15,14 +15,22 @@ Short boolean toggles use -x to enable and +x to disable. Long options use --nam
 {{ if .SubCommandExtendedHelp }}
 {{ .SubCommandExtendedHelp }}
 {{ end }}
-{{ if .Parameters }}
+{{- $hasOptions := false }}
+{{- range .Parameters }}
+{{- if not .IsUnmatchedArgv }}
+{{- $hasOptions = true }}
+{{- end }}
+{{- end }}
+{{- if $hasOptions }}
 .SH OPTIONS
 {{ range .Parameters }}
+{{- if not .IsUnmatchedArgv }}
 .TP
 .BR {{ if .FlagAliases }}{{ range $i, $f := .FlagAliases }}{{if $i}}, {{end}}\-{{$f}}{{end}}{{else}}\-{{ .Name }}{{end}}
 ({{ .Type }}){{ if .Description }} {{ .Description }}{{ end }}{{ if .Default }} (default: {{ .Default }}){{ end }}
 {{ end }}
-{{ end }}
+{{- end }}
+{{- end }}
 {{ range .ManSections }}
 .SH {{ .Name }}
 {{ .Text }}
