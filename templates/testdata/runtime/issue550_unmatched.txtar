@@ -391,6 +391,9 @@ type RootCmd struct {
 	Version         string
 	Commit          string
 	Date            string
+	Stdin           io.Reader
+	Stdout          io.Writer
+	Stderr          io.Writer
 	a               bool
 	n               int
 	known           int
@@ -398,6 +401,37 @@ type RootCmd struct {
 	CommandAction   func(c *RootCmd) error
 	plusMinusCommit func() error
 	seenFlags       map[string]bool
+}
+
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+type CommandIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+type RootOptions struct {
+	IO CommandIO
 }
 
 func (c *RootCmd) commitAll() error {
@@ -414,9 +448,9 @@ func (c *RootCmd) hasSeenFlag(name string) bool {
 }
 
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -427,9 +461,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -438,14 +472,24 @@ type UsageDataRootCmd struct {
 	Recursive bool
 }
 
+// NewRoot retains the default no-options constructor contract. Call
+// NewRootWithOptions when supplying invocation streams or options.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{})
+}
+
+func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
+		Stdin:    opts.IO.Stdin,
+		Stdout:   opts.IO.Stdout,
+		Stderr:   opts.IO.Stderr,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.BoolVar(&c.a, "a", false, "Flag a.")
@@ -467,7 +511,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -574,11 +618,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -706,7 +750,7 @@ func (c *RootCmd) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -797,9 +841,9 @@ type UsageDataVolume struct {
 }
 
 func (c *Volume) Usage() {
-	err := executeUsage(os.Stderr, "volume_usage.txt", UsageDataVolume{c, false})
+	err := executeUsage(c.outputStderr(), "volume_usage.txt", UsageDataVolume{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -810,9 +854,9 @@ func (c *Volume) usageError(kind cmd.UsageErrorKind, flag string, cause error, f
 func (c *Volume) commandPath() string { return "app volume" }
 
 func (c *Volume) UsageRecursive() {
-	err := executeUsage(os.Stderr, "volume_usage.txt", UsageDataVolume{c, true})
+	err := executeUsage(c.outputStderr(), "volume_usage.txt", UsageDataVolume{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -963,7 +1007,7 @@ func (c *Volume) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1014,6 +1058,7 @@ func (c *RootCmd) NewVolume() *Volume {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.player, "player", "", "Select player.")
 	set.Usage = v.Usage
@@ -1031,7 +1076,7 @@ func (c *RootCmd) NewVolume() *Volume {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -1123,9 +1168,9 @@ type UsageDataChild struct {
 }
 
 func (c *Child) Usage() {
-	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, false})
+	err := executeUsage(c.outputStderr(), "child_usage.txt", UsageDataChild{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1136,9 +1181,9 @@ func (c *Child) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Child) commandPath() string { return "app child" }
 
 func (c *Child) UsageRecursive() {
-	err := executeUsage(os.Stderr, "child_usage.txt", UsageDataChild{c, true})
+	err := executeUsage(c.outputStderr(), "child_usage.txt", UsageDataChild{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1283,7 +1328,7 @@ func (c *Child) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1334,6 +1379,7 @@ func (c *RootCmd) NewChild() *Child {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.known, "known", "", "Known flag.")
 
@@ -1353,7 +1399,7 @@ func (c *RootCmd) NewChild() *Child {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -1443,9 +1489,9 @@ type UsageDataRun struct {
 }
 
 func (c *Run) Usage() {
-	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataRun{c, false})
+	err := executeUsage(c.outputStderr(), "run_usage.txt", UsageDataRun{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1456,9 +1502,9 @@ func (c *Run) usageError(kind cmd.UsageErrorKind, flag string, cause error, form
 func (c *Run) commandPath() string { return "app run" }
 
 func (c *Run) UsageRecursive() {
-	err := executeUsage(os.Stderr, "run_usage.txt", UsageDataRun{c, true})
+	err := executeUsage(c.outputStderr(), "run_usage.txt", UsageDataRun{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1583,7 +1629,7 @@ func (c *Run) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1634,6 +1680,7 @@ func (c *RootCmd) NewRun() *Run {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Run) error {
@@ -1649,7 +1696,7 @@ func (c *RootCmd) NewRun() *Run {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -1739,9 +1786,9 @@ type UsageDataOther struct {
 }
 
 func (c *Other) Usage() {
-	err := executeUsage(os.Stderr, "other_usage.txt", UsageDataOther{c, false})
+	err := executeUsage(c.outputStderr(), "other_usage.txt", UsageDataOther{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1752,9 +1799,9 @@ func (c *Other) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Other) commandPath() string { return "app other" }
 
 func (c *Other) UsageRecursive() {
-	err := executeUsage(os.Stderr, "other_usage.txt", UsageDataOther{c, true})
+	err := executeUsage(c.outputStderr(), "other_usage.txt", UsageDataOther{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1905,7 +1952,7 @@ func (c *Other) Execute(args []string) (err error) {
 		return nil
 	}
 	if pmSpecial == "version" {
-		fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+		fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 		return nil
 	}
 	c.plusMinusCommit = commitFlags
@@ -1955,6 +2002,7 @@ func (c *RootCmd) NewOther() *Other {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.flag, "flag", "", "Flag.")
 	set.Usage = v.Usage
@@ -1972,7 +2020,7 @@ func (c *RootCmd) NewOther() *Other {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

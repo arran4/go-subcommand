@@ -199,6 +199,9 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 	CommandAction func(c *RootCmd) error
 	cleanups      []func() error
 	cleanupMu     sync.Mutex
@@ -217,10 +220,41 @@ func (c *RootCmd) registerReset(fn func()) {
 	c.resets = append(c.resets, fn)
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+type CommandIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+type RootOptions struct {
+	IO CommandIO
+}
+
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -231,9 +265,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -242,14 +276,24 @@ type UsageDataRootCmd struct {
 	Recursive bool
 }
 
+// NewRoot retains the default no-options constructor contract. Call
+// NewRootWithOptions when supplying invocation streams or options.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{})
+}
+
+func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
+		Stdin:    opts.IO.Stdin,
+		Stdout:   opts.IO.Stdout,
+		Stderr:   opts.IO.Stderr,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.CommandAction = func(c *RootCmd) error {
@@ -265,7 +309,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -354,11 +398,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -470,7 +514,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -515,9 +558,9 @@ type UsageDataAdmin struct {
 }
 
 func (c *Admin) Usage() {
-	err := executeUsage(os.Stderr, "admin_usage.txt", UsageDataAdmin{c, false})
+	err := executeUsage(c.outputStderr(), "admin_usage.txt", UsageDataAdmin{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -528,9 +571,9 @@ func (c *Admin) usageError(kind cmd.UsageErrorKind, flag string, cause error, fo
 func (c *Admin) commandPath() string { return "app admin" }
 
 func (c *Admin) UsageRecursive() {
-	err := executeUsage(os.Stderr, "admin_usage.txt", UsageDataAdmin{c, true})
+	err := executeUsage(c.outputStderr(), "admin_usage.txt", UsageDataAdmin{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -623,6 +666,7 @@ func (c *RootCmd) NewAdmin() *Admin {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	{
@@ -755,9 +799,9 @@ type UsageDataAdminList struct {
 }
 
 func (c *AdminList) Usage() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataAdminList{c, false})
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataAdminList{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -768,9 +812,9 @@ func (c *AdminList) usageError(kind cmd.UsageErrorKind, flag string, cause error
 func (c *AdminList) commandPath() string { return "app admin list" }
 
 func (c *AdminList) UsageRecursive() {
-	err := executeUsage(os.Stderr, "list_usage.txt", UsageDataAdminList{c, true})
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataAdminList{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -884,6 +928,7 @@ func (c *Admin) NewAdminList() *AdminList {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *AdminList) error {
@@ -899,7 +944,7 @@ func (c *Admin) NewAdminList() *AdminList {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -973,9 +1018,9 @@ type UsageDataAdminDelete struct {
 }
 
 func (c *AdminDelete) Usage() {
-	err := executeUsage(os.Stderr, "delete_usage.txt", UsageDataAdminDelete{c, false})
+	err := executeUsage(c.outputStderr(), "delete_usage.txt", UsageDataAdminDelete{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -986,9 +1031,9 @@ func (c *AdminDelete) usageError(kind cmd.UsageErrorKind, flag string, cause err
 func (c *AdminDelete) commandPath() string { return "app admin delete" }
 
 func (c *AdminDelete) UsageRecursive() {
-	err := executeUsage(os.Stderr, "delete_usage.txt", UsageDataAdminDelete{c, true})
+	err := executeUsage(c.outputStderr(), "delete_usage.txt", UsageDataAdminDelete{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1114,6 +1159,7 @@ func (c *Admin) NewAdminDelete() *AdminDelete {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *AdminDelete) error {
@@ -1129,7 +1175,7 @@ func (c *Admin) NewAdminDelete() *AdminDelete {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -1204,9 +1250,9 @@ type UsageDataAdminAudit struct {
 }
 
 func (c *AdminAudit) Usage() {
-	err := executeUsage(os.Stderr, "audit_usage.txt", UsageDataAdminAudit{c, false})
+	err := executeUsage(c.outputStderr(), "audit_usage.txt", UsageDataAdminAudit{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1217,9 +1263,9 @@ func (c *AdminAudit) usageError(kind cmd.UsageErrorKind, flag string, cause erro
 func (c *AdminAudit) commandPath() string { return "app admin audit" }
 
 func (c *AdminAudit) UsageRecursive() {
-	err := executeUsage(os.Stderr, "audit_usage.txt", UsageDataAdminAudit{c, true})
+	err := executeUsage(c.outputStderr(), "audit_usage.txt", UsageDataAdminAudit{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1339,6 +1385,7 @@ func (c *Admin) NewAdminAudit() *AdminAudit {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.BoolVar(&v.dryRun, "dry-run", false, "Dry run mode")
 	set.Usage = v.Usage
@@ -1356,7 +1403,7 @@ func (c *Admin) NewAdminAudit() *AdminAudit {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -1428,9 +1475,9 @@ type UsageDataAdminAbout struct {
 }
 
 func (c *AdminAbout) Usage() {
-	err := executeUsage(os.Stderr, "about_usage.txt", UsageDataAdminAbout{c, false})
+	err := executeUsage(c.outputStderr(), "about_usage.txt", UsageDataAdminAbout{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1441,9 +1488,9 @@ func (c *AdminAbout) usageError(kind cmd.UsageErrorKind, flag string, cause erro
 func (c *AdminAbout) commandPath() string { return "app admin about" }
 
 func (c *AdminAbout) UsageRecursive() {
-	err := executeUsage(os.Stderr, "about_usage.txt", UsageDataAdminAbout{c, true})
+	err := executeUsage(c.outputStderr(), "about_usage.txt", UsageDataAdminAbout{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -1542,6 +1589,7 @@ func (c *Admin) NewAdminAbout() *AdminAbout {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *AdminAbout) error {
@@ -1557,7 +1605,7 @@ func (c *Admin) NewAdminAbout() *AdminAbout {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
