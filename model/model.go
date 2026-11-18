@@ -114,28 +114,44 @@ func (ic *InitializerConfig) CallFor(receiver string) string {
 
 // SharedProviderConfig specifies a memoized, invocation-scoped typed provider hosted on a common ancestor.
 type SharedProviderConfig struct {
-	Name            string
-	Type            string
-	TypeImportPath  string
-	TypePackageName string
-	Func            *FuncRef
-	Inputs          []string
-	ReturnsError    bool
+	Name                    string
+	Type                    string
+	TypeImportPath          string
+	TypePackageName         string
+	Func                    *FuncRef
+	Inputs                  []string
+	ReturnsError            bool
+	AllocatedMethodName     string `json:"-"`
+	AllocatedOnceFieldName  string `json:"-"`
+	AllocatedValueFieldName string `json:"-"`
+	AllocatedErrorFieldName string `json:"-"`
 }
 
 func (sp *SharedProviderConfig) MethodName() string {
+	if sp.AllocatedMethodName != "" {
+		return sp.AllocatedMethodName
+	}
 	return toPascalCase(sp.Name)
 }
 
 func (sp *SharedProviderConfig) OnceFieldName() string {
+	if sp.AllocatedOnceFieldName != "" {
+		return sp.AllocatedOnceFieldName
+	}
 	return toCamelCase(sp.Name) + "Once"
 }
 
 func (sp *SharedProviderConfig) ValueFieldName() string {
+	if sp.AllocatedValueFieldName != "" {
+		return sp.AllocatedValueFieldName
+	}
 	return toCamelCase(sp.Name)
 }
 
 func (sp *SharedProviderConfig) ErrorFieldName() string {
+	if sp.AllocatedErrorFieldName != "" {
+		return sp.AllocatedErrorFieldName
+	}
 	return toCamelCase(sp.Name) + "Err"
 }
 
@@ -628,6 +644,143 @@ func (cmd *Command) ConstructorParameters() []*FunctionParameter {
 
 func (cmd *Command) HasConstructorParameters() bool {
 	return len(cmd.ConstructorParameters()) > 0
+}
+
+func pickUniqueName(preferred string, fallbacks []string, numberedPrefix string, used ...map[string]bool) string {
+	isUsed := func(name string) bool {
+		if name == "" {
+			return true
+		}
+		for _, m := range used {
+			if m[name] {
+				return true
+			}
+		}
+		return false
+	}
+	if !isUsed(preferred) {
+		return preferred
+	}
+	for _, fb := range fallbacks {
+		if !isUsed(fb) {
+			return fb
+		}
+	}
+	base := numberedPrefix
+	if base == "" {
+		base = preferred
+	}
+	for i := 2; ; i++ {
+		cand := fmt.Sprintf("%s%d", base, i)
+		if !isUsed(cand) {
+			return cand
+		}
+	}
+}
+
+func (cmd *Command) streamFieldNames() (stdin, stdout, stderr string) {
+	used := map[string]bool{
+		"FlagSet":         true,
+		"Commands":        true,
+		"Version":         true,
+		"Commit":          true,
+		"Date":            true,
+		"CommandAction":   true,
+		"plusMinusCommit": true,
+		"seenFlags":       true,
+		"cleanups":        true,
+		"cleanupMu":       true,
+		"resets":          true,
+		"registerCleanup": true,
+		"registerReset":   true,
+		"outputStdout":    true,
+		"outputStderr":    true,
+		"inputStdin":      true,
+		"commitAll":       true,
+		"hasSeenFlag":     true,
+		"Usage":           true,
+		"usageError":      true,
+		"commandPath":     true,
+		"UsageRecursive":  true,
+		"Execute":         true,
+	}
+	for _, p := range cmd.Parameters {
+		used[p.Name] = true
+	}
+	for _, sp := range cmd.SharedProviders {
+		used[sp.MethodName()] = true
+		used[sp.ValueFieldName()] = true
+		used[sp.OnceFieldName()] = true
+		used[sp.ErrorFieldName()] = true
+	}
+	for _, sc := range cmd.SubCommands {
+		used[sc.ConstructorMethodName] = true
+	}
+
+	stdin = pickUniqueName("Stdin", []string{"stdinStream"}, "stdinStream", used)
+	used[stdin] = true
+	stdout = pickUniqueName("Stdout", []string{"stdoutStream"}, "stdoutStream", used)
+	used[stdout] = true
+	stderr = pickUniqueName("Stderr", []string{"stderrStream"}, "stderrStream", used)
+	used[stderr] = true
+	return stdin, stdout, stderr
+}
+
+func (cmd *Command) StdinFieldName() string {
+	stdin, _, _ := cmd.streamFieldNames()
+	return stdin
+}
+
+func (cmd *Command) StdoutFieldName() string {
+	_, stdout, _ := cmd.streamFieldNames()
+	return stdout
+}
+
+func (cmd *Command) StderrFieldName() string {
+	_, _, stderr := cmd.streamFieldNames()
+	return stderr
+}
+
+func (cmd *Command) RootOptionsIOFieldName() string {
+	used := make(map[string]bool)
+	for _, p := range cmd.ConstructorParameters() {
+		used[p.Name] = true
+	}
+	return pickUniqueName("IO", []string{"Streams", "CommandIO"}, "IO", used)
+}
+
+func (cmd *Command) ConstructorArgName(target *FunctionParameter) string {
+	fixed := map[string]bool{
+		"name":    true,
+		"version": true,
+		"commit":  true,
+		"date":    true,
+	}
+	if !fixed[target.Name] {
+		return target.Name
+	}
+	used := map[string]bool{
+		"name":    true,
+		"version": true,
+		"commit":  true,
+		"date":    true,
+	}
+	for _, p := range cmd.ConstructorParameters() {
+		if p != target && !fixed[p.Name] {
+			used[p.Name] = true
+		}
+	}
+	for _, p := range cmd.ConstructorParameters() {
+		if !fixed[p.Name] {
+			continue
+		}
+		cand := pickUniqueName(p.Name+"Arg", nil, p.Name+"Arg", used)
+		if p == target {
+			return cand
+		}
+		used[cand] = true
+	}
+	return target.Name
 }
 
 // HasIOParameters reports whether this subcommand tree needs generated file
@@ -2145,7 +2298,173 @@ func (cmd *Command) ResolveSharedProviders() error {
 		}
 	}
 
+	cmd.allocateSharedProviderNames()
 	return nil
+}
+
+func (cmd *Command) allocateSharedProviderNames() {
+	var resetSub func(sc *SubCommand)
+	resetSub = func(sc *SubCommand) {
+		for _, sp := range sc.SharedProviders {
+			sp.AllocatedMethodName = ""
+			sp.AllocatedOnceFieldName = ""
+			sp.AllocatedValueFieldName = ""
+			sp.AllocatedErrorFieldName = ""
+		}
+		for _, child := range sc.SubCommands {
+			resetSub(child)
+		}
+	}
+	for _, sp := range cmd.SharedProviders {
+		sp.AllocatedMethodName = ""
+		sp.AllocatedOnceFieldName = ""
+		sp.AllocatedValueFieldName = ""
+		sp.AllocatedErrorFieldName = ""
+	}
+	for _, sc := range cmd.SubCommands {
+		resetSub(sc)
+	}
+
+	builtIns := map[string]bool{
+		"Execute": true, "Usage": true, "UsageRecursive": true,
+		"usageError": true, "commandPath": true, "commitAll": true, "hasSeenFlag": true,
+		"Flags": true, "SubCommands": true, "CommandAction": true,
+		"plusMinusCommit": true, "seenFlags": true,
+		"FlagSet": true, "Commands": true, "Version": true, "Commit": true, "Date": true,
+		"Stdin": true, "Stdout": true, "Stderr": true,
+		"cleanups": true, "cleanupMu": true, "resets": true,
+		"registerCleanup": true, "registerReset": true,
+		"outputStdout": true, "outputStderr": true, "inputStdin": true,
+		"NewVersionCmd": true,
+		// Embedded *flag.FlagSet methods on RootCmd
+		"Arg": true, "Args": true, "Bool": true, "BoolFunc": true, "BoolVar": true,
+		"Duration": true, "DurationVar": true, "ErrorHandling": true,
+		"Float64": true, "Float64Var": true, "Func": true, "Init": true,
+		"Int": true, "Int64": true, "Int64Var": true, "IntVar": true,
+		"Lookup": true, "NArg": true, "NFlag": true, "Name": true, "Output": true,
+		"Parse": true, "Parsed": true, "PrintDefaults": true, "Set": true, "SetOutput": true,
+		"String": true, "StringVar": true, "TextVar": true,
+		"Uint": true, "Uint64": true, "Uint64Var": true, "UintVar": true,
+		"Var": true, "Visit": true, "VisitAll": true,
+	}
+
+	var collectSubtreeNames func(sc *SubCommand, dst map[string]bool)
+	collectSubtreeNames = func(sc *SubCommand, dst map[string]bool) {
+		for _, p := range sc.Parameters {
+			dst[p.Name] = true
+			dst[p.ValueFieldName()] = true
+		}
+		if sc.ConstructorMethodName != "" {
+			dst[sc.ConstructorMethodName] = true
+		}
+		for _, child := range sc.SubCommands {
+			collectSubtreeNames(child, dst)
+		}
+	}
+
+	copySet := func(src map[string]bool) map[string]bool {
+		dst := make(map[string]bool, len(src))
+		for k, v := range src {
+			dst[k] = v
+		}
+		return dst
+	}
+
+	allocateHost := func(providers []*SharedProviderConfig, hostMembers, subtreeMethodBlockers map[string]bool) {
+		for _, sp := range providers {
+			baseMethod := toPascalCase(sp.Name)
+			if baseMethod == "" {
+				baseMethod = "Resource"
+			}
+			methodName := pickUniqueName(baseMethod, []string{"Provide" + baseMethod}, baseMethod, hostMembers, subtreeMethodBlockers)
+			if methodName != toPascalCase(sp.Name) {
+				sp.AllocatedMethodName = methodName
+			}
+			hostMembers[methodName] = true
+			subtreeMethodBlockers[methodName] = true
+
+			baseField := toCamelCase(sp.Name)
+			if baseField == "" {
+				baseField = "resource"
+			}
+			valField := pickUniqueName(baseField, []string{baseField + "Value"}, baseField, hostMembers)
+			if valField != toCamelCase(sp.Name) {
+				sp.AllocatedValueFieldName = valField
+			}
+			hostMembers[valField] = true
+
+			onceField := pickUniqueName(baseField+"Once", nil, baseField+"Once", hostMembers)
+			if onceField != toCamelCase(sp.Name)+"Once" {
+				sp.AllocatedOnceFieldName = onceField
+			}
+			hostMembers[onceField] = true
+
+			errField := pickUniqueName(baseField+"Err", nil, baseField+"Err", hostMembers)
+			if errField != toCamelCase(sp.Name)+"Err" {
+				sp.AllocatedErrorFieldName = errField
+			}
+			hostMembers[errField] = true
+		}
+	}
+
+	rootMembers := copySet(builtIns)
+	rootMethodBlockers := copySet(builtIns)
+	for _, p := range cmd.Parameters {
+		rootMembers[p.Name] = true
+		rootMethodBlockers[p.Name] = true
+	}
+	for _, sc := range cmd.SubCommands {
+		if sc.ConstructorMethodName != "" {
+			rootMembers[sc.ConstructorMethodName] = true
+			rootMethodBlockers[sc.ConstructorMethodName] = true
+		}
+		collectSubtreeNames(sc, rootMethodBlockers)
+	}
+	allocateHost(cmd.SharedProviders, rootMembers, rootMethodBlockers)
+
+	var visitSub func(sc *SubCommand, ancestorMethods map[string]bool)
+	visitSub = func(sc *SubCommand, ancestorMethods map[string]bool) {
+		members := copySet(builtIns)
+		for k := range ancestorMethods {
+			members[k] = true
+		}
+		if sc.Parent != nil && sc.Parent.SubCommandStructName != "" {
+			members[sc.Parent.SubCommandStructName] = true
+		} else {
+			members["RootCmd"] = true
+		}
+		methodBlockers := copySet(members)
+		for _, p := range sc.Parameters {
+			methodBlockers[p.Name] = true
+			methodBlockers[p.ValueFieldName()] = true
+			if !p.Inherited {
+				members[p.Name] = true
+			}
+		}
+		for _, child := range sc.SubCommands {
+			if child.ConstructorMethodName != "" {
+				members[child.ConstructorMethodName] = true
+				methodBlockers[child.ConstructorMethodName] = true
+			}
+			collectSubtreeNames(child, methodBlockers)
+		}
+		allocateHost(sc.SharedProviders, members, methodBlockers)
+		nextAncestorMethods := copySet(ancestorMethods)
+		for _, sp := range sc.SharedProviders {
+			nextAncestorMethods[sp.MethodName()] = true
+		}
+		for _, child := range sc.SubCommands {
+			visitSub(child, nextAncestorMethods)
+		}
+	}
+
+	rootAncestorMethods := copySet(builtIns)
+	for _, sp := range cmd.SharedProviders {
+		rootAncestorMethods[sp.MethodName()] = true
+	}
+	for _, sc := range cmd.SubCommands {
+		visitSub(sc, rootAncestorMethods)
+	}
 }
 
 func subCommandPath(sc *SubCommand) []*SubCommand {

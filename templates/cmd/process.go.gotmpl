@@ -27,7 +27,7 @@ func generatedRunWithStreams(args []string, stdout, stderr io.Writer) int {
 
 func generatedRunWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	root, err := NewRootWithOptions("{{.MainCmdName}}", version, commit, date, RootOptions{
-		IO: CommandIO{
+		{{.RootOptionsIOFieldName}}: CommandIO{
 			Stdin:  stdin,
 			Stdout: stdout,
 			Stderr: stderr,

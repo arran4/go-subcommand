@@ -315,6 +315,9 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		}
 
 		allocator := parsers.NewNameAllocator()
+		for _, p := range cmd.Parameters {
+			allocator.Reserve(p.Name)
+		}
 		subCommands := collectSubCommands(cmd, "", cmdTree.SubCommandTree, nil, allocator)
 		cmd.SubCommands = subCommands
 		commands = append(commands, cmd)

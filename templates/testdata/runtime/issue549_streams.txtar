@@ -66,14 +66,41 @@ func Mixed(verbose bool) error {
 //
 //	in: --in Input reader.
 //	out: --out Output writer.
-func Echo(in io.Reader, out io.Writer) error {
+//	closeIn: --close-in Input read closer.
+//	closeOut: --close-out Output write closer.
+func Echo(in io.Reader, out io.Writer, closeIn io.ReadCloser, closeOut io.WriteCloser) error {
+	if closeOut != nil {
+		var data []byte
+		if closeIn != nil {
+			var err error
+			data, err = io.ReadAll(closeIn)
+			if cerr := closeIn.Close(); err == nil && cerr != nil {
+				return cerr
+			}
+			if err != nil {
+				return err
+			}
+		} else if in != nil {
+			var err error
+			data, err = io.ReadAll(in)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := closeOut.Write(data); err != nil {
+			_ = closeOut.Close()
+			return err
+		}
+		return closeOut.Close()
+	}
 	if in != nil && out != nil {
 		b, err := io.ReadAll(in)
 		if err != nil {
 			return err
 		}
-		_, err = out.Write(b)
-		return err
+		if _, err = out.Write(b); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -152,9 +179,6 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func toWriteCloser(w io.Writer) io.WriteCloser {
-	if wc, ok := w.(io.WriteCloser); ok {
-		return wc
-	}
 	return nopWriteCloser{w}
 }
 
@@ -1150,6 +1174,8 @@ type Echo struct {
 	Flags         *flag.FlagSet
 	in            io.Reader
 	out           io.Writer
+	closeIn       io.ReadCloser
+	closeOut      io.WriteCloser
 	SubCommands   map[string]func() Cmd
 	CommandAction func(c *Echo) error
 }
@@ -1263,6 +1289,54 @@ func (c *Echo) Execute(args []string) (err error) {
 					}
 					return nil
 				})
+
+			case "closeIn", "close-in":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				ioVal := value
+				stagedIO = append(stagedIO, func() error {
+					if ioVal == "-" {
+						c.closeIn = io.NopCloser(c.inputStdin())
+					} else {
+						f, err := generatedOpenReader(ioVal)
+						if err != nil {
+							return err
+						}
+						cleanups = append(cleanups, f.Close)
+						c.closeIn = f
+					}
+					return nil
+				})
+
+			case "closeOut", "close-out":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				ioVal := value
+				stagedIO = append(stagedIO, func() error {
+					if ioVal == "-" {
+						c.closeOut = toWriteCloser(c.outputStdout())
+					} else {
+						f, err := generatedOpenWriter(ioVal)
+						if err != nil {
+							return err
+						}
+						cleanups = append(cleanups, f.Close)
+						c.closeOut = f
+					}
+					return nil
+				})
 			default:
 				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
 			}
@@ -1345,11 +1419,21 @@ func (c *RootCmd) NewEcho() *Echo {
 		// Parsed manually in Execute
 		return nil
 	})
+
+	set.Func("close-in", "Input read closer.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
+
+	set.Func("close-out", "Output write closer.", func(s string) error {
+		// Parsed manually in Execute
+		return nil
+	})
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Echo) error {
 
-		err := app.Echo(c.in, c.out)
+		err := app.Echo(c.in, c.out, c.closeIn, c.closeOut)
 		if err != nil {
 			var exitCode *cmd.ErrExitCode
 			if errors.As(err, &exitCode) {

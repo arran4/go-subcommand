@@ -35,9 +35,6 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func toWriteCloser(w io.Writer) io.WriteCloser {
-	if wc, ok := w.(io.WriteCloser); ok {
-		return wc
-	}
 	return nopWriteCloser{w}
 }
 {{- end}}
@@ -97,9 +94,9 @@ type RootCmd struct {
 	Version  string
 	Commit   string
 	Date     string
-	Stdin    io.Reader
-	Stdout   io.Writer
-	Stderr   io.Writer
+	{{.StdinFieldName}}  io.Reader
+	{{.StdoutFieldName}} io.Writer
+	{{.StderrFieldName}} io.Writer
 	{{- range .Parameters}}
 	{{.Name}} {{if .IsVarArg}}[]{{end}}{{.GeneratedType}}
 	{{- end}}
@@ -162,22 +159,22 @@ func (c *RootCmd) {{.MethodName}}() ({{.QualifiedType}}, error) {
 {{- end }}
 
 func (c *RootCmd) outputStdout() io.Writer {
-	if c != nil && c.Stdout != nil {
-		return c.Stdout
+	if c != nil && c.{{.StdoutFieldName}} != nil {
+		return c.{{.StdoutFieldName}}
 	}
 	return os.Stdout
 }
 
 func (c *RootCmd) outputStderr() io.Writer {
-	if c != nil && c.Stderr != nil {
-		return c.Stderr
+	if c != nil && c.{{.StderrFieldName}} != nil {
+		return c.{{.StderrFieldName}}
 	}
 	return os.Stderr
 }
 
 func (c *RootCmd) inputStdin() io.Reader {
-	if c != nil && c.Stdin != nil {
-		return c.Stdin
+	if c != nil && c.{{.StdinFieldName}} != nil {
+		return c.{{.StdinFieldName}}
 	}
 	return os.Stdin
 }
@@ -189,7 +186,7 @@ type CommandIO struct {
 }
 
 type RootOptions struct {
-	IO CommandIO
+	{{.RootOptionsIOFieldName}} CommandIO
 	{{- range .ConstructorParameters}}
 	{{.Name}} {{.GeneratedType}}
 	{{- end}}
@@ -243,10 +240,10 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 }
 
 {{- if .HasConstructorParameters}}
-func NewRootWithContext(name, version, commit, date string{{range .ConstructorParameters}}, {{.Name}} {{.GeneratedType}}{{end}}) (*RootCmd, error) {
+func NewRootWithContext(name, version, commit, date string{{range .ConstructorParameters}}, {{$.ConstructorArgName .}} {{.GeneratedType}}{{end}}) (*RootCmd, error) {
 	return NewRootWithOptions(name, version, commit, date, RootOptions{
 		{{- range .ConstructorParameters}}
-		{{.Name}}: {{.Name}},
+		{{.Name}}: {{$.ConstructorArgName .}},
 		{{- end}}
 	})
 }
@@ -259,9 +256,9 @@ func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
-		Stdin:    opts.IO.Stdin,
-		Stdout:   opts.IO.Stdout,
-		Stderr:   opts.IO.Stderr,
+		{{.StdinFieldName}}:  opts.{{.RootOptionsIOFieldName}}.Stdin,
+		{{.StdoutFieldName}}: opts.{{.RootOptionsIOFieldName}}.Stdout,
+		{{.StderrFieldName}}: opts.{{.RootOptionsIOFieldName}}.Stderr,
 		{{- range .ConstructorParameters}}
 		{{.Name}}: opts.{{.Name}},
 		{{- end}}

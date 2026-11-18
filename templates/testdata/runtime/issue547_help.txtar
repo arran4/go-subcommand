@@ -243,9 +243,6 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func toWriteCloser(w io.Writer) io.WriteCloser {
-	if wc, ok := w.(io.WriteCloser); ok {
-		return wc
-	}
 	return nopWriteCloser{w}
 }
 

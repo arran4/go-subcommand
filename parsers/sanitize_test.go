@@ -69,7 +69,9 @@ func TestNameAllocator(t *testing.T) {
 		na := NewNameAllocator()
 		reserved := []string{
 			"Cmd", "Root", "RootCmd", "UserError",
-			"NewRoot", "NewUserError", "executeUsage",
+			"NewRoot", "NewRootWithContext", "NewRootWithOptions",
+			"CommandIO", "RootOptions", "InternalCommand", "NewLazyCommand", "UsageDataRootCmd",
+			"NewUserError", "executeUsage",
 			"Main", "FlagHelpers",
 			"main", "init",
 		}
@@ -77,6 +79,16 @@ func TestNameAllocator(t *testing.T) {
 			if !na.used[r] {
 				t.Errorf("Expected %q to be reserved", r)
 			}
+		}
+		if got := na.Allocate("root-options"); got != "RootOptions2" {
+			t.Errorf("Allocate(root-options) = %q, want RootOptions2", got)
+		}
+		if got := na.Allocate("new-root-with-options"); got != "NewRootWithOptions2" {
+			t.Errorf("Allocate(new-root-with-options) = %q, want NewRootWithOptions2", got)
+		}
+		na.Reserve("CustomParam")
+		if got := na.Allocate("custom-param"); got != "CustomParam2" {
+			t.Errorf("Allocate(custom-param) = %q, want CustomParam2", got)
 		}
 	})
 
