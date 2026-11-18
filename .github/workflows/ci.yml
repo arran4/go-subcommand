@@ -215,7 +215,8 @@ jobs:
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v3
         with:
-          hugo-version: 'latest'
+          # 0.170 removed bundled LibSass; the theme needs Dart Sass to upgrade (#563).
+          hugo-version: '0.169.0'
           extended: true
       - id: pages
         uses: actions/configure-pages@v6
