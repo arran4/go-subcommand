@@ -48,9 +48,9 @@ type UsageDataGenerate struct {
 }
 
 func (c *Generate) Usage() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, false})
+	err := executeUsage(c.outputStderr(), "generate_usage.txt", UsageDataGenerate{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -61,9 +61,9 @@ func (c *Generate) usageError(kind cmd.UsageErrorKind, flag string, cause error,
 func (c *Generate) commandPath() string { return "gosubc generate" }
 
 func (c *Generate) UsageRecursive() {
-	err := executeUsage(os.Stderr, "generate_usage.txt", UsageDataGenerate{c, true})
+	err := executeUsage(c.outputStderr(), "generate_usage.txt", UsageDataGenerate{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -366,6 +366,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.dir, "dir", ".", "Project root directory containing go.mod")
 
@@ -416,7 +417,7 @@ func (c *RootCmd) NewGenerate() *Generate {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

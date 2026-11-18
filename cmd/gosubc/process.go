@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/arran4/go-subcommand/cmd"
 )
@@ -17,11 +18,29 @@ var (
 )
 
 func generatedRun(args []string, stderr io.Writer) int {
-	root, err := NewRoot("gosubc", version, commit, date)
+	return generatedRunWithStreams(args, nil, stderr)
+}
+
+func generatedRunWithStreams(args []string, stdout, stderr io.Writer) int {
+	return generatedRunWithIO(args, nil, stdout, stderr)
+}
+
+func generatedRunWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	root, err := NewRootWithOptions("gosubc", version, commit, date, RootOptions{
+		IO: CommandIO{
+			Stdin:  stdin,
+			Stdout: stdout,
+			Stderr: stderr,
+		},
+	})
 	if err == nil {
 		err = root.Execute(args)
 	}
-	generatedRenderError(stderr, err)
+	outErr := stderr
+	if outErr == nil && root != nil {
+		outErr = root.outputStderr()
+	}
+	generatedRenderError(outErr, err)
 	return generatedExitCode(err)
 }
 
@@ -44,6 +63,9 @@ func generatedExitCode(err error) int {
 func generatedRenderError(stderr io.Writer, err error) {
 	if err == nil {
 		return
+	}
+	if stderr == nil {
+		stderr = os.Stderr
 	}
 	var exit *cmd.ErrExitCode
 	if errors.As(err, &exit) {
