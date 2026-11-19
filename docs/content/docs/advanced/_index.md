@@ -11,6 +11,8 @@ See [Project generation configuration](project-configuration/) for optional vers
 
 See [Functionless command metadata](command-metadata/) for explicit root identity and help without an action, Go/config declarations, documentation and man appendices.
 
+See [Scoped providers and command initializers](scoped-lifecycle/) for the merged lifecycle syntax, demand-only typed dependencies and selected-path guards. The proposed unified `Requires` syntax is tracked separately in #561.
+
 ## Man Page Generation
 
 `go-subcommand` can generate standard Unix man pages.

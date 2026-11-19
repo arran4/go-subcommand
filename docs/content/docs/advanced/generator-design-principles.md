@@ -37,27 +37,11 @@ Generation discovers the function comment and creates the command. Generated fil
 
 ## Execution lifecycle
 
-Normal invocation should resolve the selected executable route and parse its arguments before resolving runtime dependencies. On a selected executable path, root-level and selected-ancestor command initializers can prepare typed values for that route. Root results belong on the generated root; child results belong on the declaring generated command and are inherited only by its descendants. An initializer may return only an error when there is no value to provide.
+Normal invocation resolves the selected executable route and binds its arguments before business initialization. [#522 / PR #555](https://github.com/arran4/go-subcommand/pull/555) merged two lifecycle capabilities: mandatory selected-path error-only `Initializer` guards and invocation-scoped, demand-only typed `Shared provider` dependencies. See the [scoped lifecycle guide](../scoped-lifecycle/) for working source and native-config examples.
 
-Do not invoke business providers/initializers merely for `help`, `usage`, `version`, documentation or an unselected sibling. Each required provider should run at most once per invocation. Prefer standard `io.Closer` for owned cleanup, in reverse acquisition order. Error wrapping must preserve `errors.Is` and `errors.As`.
+An unrelated sibling does not acquire an unused provider. Built-in help, usage and version should not run business initializers. Acquired `io.Closer` resources are released using the invocation's cleanup policy. Keep consumer packages independent of generated `package main` code.
 
-The **selected-path initializer API is proposed work**, tracked in [#522](https://github.com/arran4/go-subcommand/issues/522), building on provider dependencies [#403](https://github.com/arran4/go-subcommand/issues/403) and root context [#483](https://github.com/arran4/go-subcommand/issues/483). These descriptions are architectural acceptance criteria, not a claim that this syntax already exists.
-
-### How to describe provided values
-
-Prefer a clear annotation that explains the receiver scope, for example:
-
-```go
-// LoadSettings provides `settings` to the `myapp` command tree.
-//
-// Flags:
-//   configPath: --config (default: "config.yaml")
-func LoadSettings(configPath string) (*Settings, error) {
-    return ReadSettings(configPath)
-}
-```
-
-The term **command tree** includes the selected command and its descendants; it is not a new command-line flag or a process-global singleton. This annotation is illustrative until #522 finalizes the grammar.
+[#561](https://github.com/arran4/go-subcommand/issues/561) tracks the approved but **not yet implemented** single `Requires:` directive, automatic type binding, and unified dependency ordering. Do not use its proposed syntax as if it were already supported. Existing parameter `generator:` dependencies and root context are documented separately in #403 and #483.
 
 ## Startup customization: exceptional, not a second flag parser
 
