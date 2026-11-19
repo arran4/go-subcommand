@@ -69,7 +69,9 @@ func NewNameAllocator() *NameAllocator {
 	// Reserve names used in generated code
 	reserved := []string{
 		"Cmd", "Root", "RootCmd", "UserError",
-		"NewRoot", "NewUserError", "executeUsage",
+		"NewRoot", "NewRootWithContext", "NewRootWithOptions",
+		"CommandIO", "RootOptions", "InternalCommand", "NewLazyCommand", "UsageDataRootCmd",
+		"NewUserError", "executeUsage",
 		"Main", "FlagHelpers",
 		"main", "init", // Standard Go
 	}
@@ -77,6 +79,15 @@ func NewNameAllocator() *NameAllocator {
 		na.used[r] = true
 	}
 	return na
+}
+
+// Reserve marks existing identifiers as used without modifying or sanitizing them.
+func (na *NameAllocator) Reserve(names ...string) {
+	for _, name := range names {
+		if name != "" {
+			na.used[name] = true
+		}
+	}
 }
 
 // Allocate generates a unique name based on the input string.

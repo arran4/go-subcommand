@@ -142,15 +142,49 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 	url           string
 	verbose       bool
 	CommandAction func(c *RootCmd) error
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+type CommandIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+type RootOptions struct {
+	IO CommandIO
+}
+
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -161,9 +195,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -172,14 +206,24 @@ type UsageDataRootCmd struct {
 	Recursive bool
 }
 
+// NewRoot retains the default no-options constructor contract. Call
+// NewRootWithOptions when supplying invocation streams or options.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{})
+}
+
+func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
+		Stdin:    opts.IO.Stdin,
+		Stdout:   opts.IO.Stdout,
+		Stderr:   opts.IO.Stderr,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.BoolVar(&c.verbose, "verbose", false, "Verbose output")
@@ -198,7 +242,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -293,11 +337,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -442,9 +486,9 @@ type UsageDataSub struct {
 }
 
 func (c *Sub) Usage() {
-	err := executeUsage(os.Stderr, "sub_usage.txt", UsageDataSub{c, false})
+	err := executeUsage(c.outputStderr(), "sub_usage.txt", UsageDataSub{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -455,9 +499,9 @@ func (c *Sub) usageError(kind cmd.UsageErrorKind, flag string, cause error, form
 func (c *Sub) commandPath() string { return "app sub" }
 
 func (c *Sub) UsageRecursive() {
-	err := executeUsage(os.Stderr, "sub_usage.txt", UsageDataSub{c, true})
+	err := executeUsage(c.outputStderr(), "sub_usage.txt", UsageDataSub{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -565,6 +609,7 @@ func (c *RootCmd) NewSub() *Sub {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Sub) error {
@@ -580,7 +625,7 @@ func (c *RootCmd) NewSub() *Sub {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -653,9 +698,9 @@ type UsageDataPair struct {
 }
 
 func (c *Pair) Usage() {
-	err := executeUsage(os.Stderr, "pair_usage.txt", UsageDataPair{c, false})
+	err := executeUsage(c.outputStderr(), "pair_usage.txt", UsageDataPair{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -666,9 +711,9 @@ func (c *Pair) usageError(kind cmd.UsageErrorKind, flag string, cause error, for
 func (c *Pair) commandPath() string { return "app pair" }
 
 func (c *Pair) UsageRecursive() {
-	err := executeUsage(os.Stderr, "pair_usage.txt", UsageDataPair{c, true})
+	err := executeUsage(c.outputStderr(), "pair_usage.txt", UsageDataPair{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -785,6 +830,7 @@ func (c *RootCmd) NewPair() *Pair {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 	set.Usage = v.Usage
 
 	v.CommandAction = func(c *Pair) error {
@@ -800,7 +846,7 @@ func (c *RootCmd) NewPair() *Pair {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

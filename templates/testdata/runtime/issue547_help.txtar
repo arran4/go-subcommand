@@ -236,6 +236,16 @@ var generatedOpenWriter = func(name string) (io.WriteCloser, error) {
 	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 }
 
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error { return nil }
+
+func toWriteCloser(w io.Writer) io.WriteCloser {
+	return nopWriteCloser{w}
+}
+
 type Cmd interface {
 	Execute(args []string) error
 	Usage()
@@ -291,16 +301,50 @@ type RootCmd struct {
 	Version       string
 	Commit        string
 	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 	url           string
 	flag          bool
 	dep           string
 	CommandAction func(c *RootCmd) error
 }
 
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+type CommandIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+type RootOptions struct {
+	IO CommandIO
+}
+
 func (c *RootCmd) Usage() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, false})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -311,9 +355,9 @@ func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, 
 func (c *RootCmd) commandPath() string { return "app" }
 
 func (c *RootCmd) UsageRecursive() {
-	err := executeUsage(os.Stderr, "app_usage.txt", UsageDataRootCmd{c, true})
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -322,14 +366,24 @@ type UsageDataRootCmd struct {
 	Recursive bool
 }
 
+// NewRoot retains the default no-options constructor contract. Call
+// NewRootWithOptions when supplying invocation streams or options.
 func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{})
+}
+
+func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*RootCmd, error) {
 	c := &RootCmd{
 		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
 		Commands: make(map[string]func() Cmd),
 		Version:  version,
 		Commit:   commit,
 		Date:     date,
+		Stdin:    opts.IO.Stdin,
+		Stdout:   opts.IO.Stdout,
+		Stderr:   opts.IO.Stderr,
 	}
+	c.FlagSet.SetOutput(c.outputStderr())
 	c.FlagSet.Usage = c.Usage
 
 	c.BoolVar(&c.flag, "flag", false, "Toggle flag.")
@@ -348,7 +402,7 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {
@@ -451,11 +505,11 @@ func NewRoot(name, version, commit, date string) (*RootCmd, error) {
 	c.Commands["version"] = func() Cmd {
 		return &InternalCommand{
 			Exec: func(args []string) error {
-				fmt.Printf("Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
 				return nil
 			},
 			UsageFunc: func() {
-				fmt.Fprintf(os.Stderr, "Usage: %s version\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
 			},
 		}
 	}
@@ -628,9 +682,9 @@ type UsageDataGroupLeaf struct {
 }
 
 func (c *GroupLeaf) Usage() {
-	err := executeUsage(os.Stderr, "leaf_usage.txt", UsageDataGroupLeaf{c, false})
+	err := executeUsage(c.outputStderr(), "leaf_usage.txt", UsageDataGroupLeaf{c, false})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -641,9 +695,9 @@ func (c *GroupLeaf) usageError(kind cmd.UsageErrorKind, flag string, cause error
 func (c *GroupLeaf) commandPath() string { return "app group leaf" }
 
 func (c *GroupLeaf) UsageRecursive() {
-	err := executeUsage(os.Stderr, "leaf_usage.txt", UsageDataGroupLeaf{c, true})
+	err := executeUsage(c.outputStderr(), "leaf_usage.txt", UsageDataGroupLeaf{c, true})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating usage: %s\n", err)
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
 	}
 }
 
@@ -707,7 +761,7 @@ func (c *GroupLeaf) Execute(args []string) (err error) {
 				ioVal := value
 				stagedIO = append(stagedIO, func() error {
 					if ioVal == "-" {
-						c.output = os.Stdout
+						c.output = c.outputStdout()
 					} else {
 						f, err := generatedOpenWriter(ioVal)
 						if err != nil {
@@ -731,7 +785,7 @@ func (c *GroupLeaf) Execute(args []string) (err error) {
 				ioVal := value
 				stagedIO = append(stagedIO, func() error {
 					if ioVal == "-" {
-						c.input = os.Stdin
+						c.input = c.inputStdin()
 					} else {
 						f, err := generatedOpenReader(ioVal)
 						if err != nil {
@@ -813,7 +867,7 @@ func (c *GroupLeaf) Execute(args []string) (err error) {
 					ioVal := value
 					stagedIO = append(stagedIO, func() error {
 						if ioVal == "-" {
-							c.output = os.Stdout
+							c.output = c.outputStdout()
 						} else {
 							f, err := generatedOpenWriter(ioVal)
 							if err != nil {
@@ -849,7 +903,7 @@ func (c *GroupLeaf) Execute(args []string) (err error) {
 					ioVal := value
 					stagedIO = append(stagedIO, func() error {
 						if ioVal == "-" {
-							c.input = os.Stdin
+							c.input = c.inputStdin()
 						} else {
 							f, err := generatedOpenReader(ioVal)
 							if err != nil {
@@ -972,6 +1026,7 @@ func (c *Group) NewGroupLeaf() *GroupLeaf {
 		Flags:       set,
 		SubCommands: make(map[string]func() Cmd),
 	}
+	set.SetOutput(v.outputStderr())
 
 	set.StringVar(&v.tag, "tag", "default", "Tag label.")
 	set.StringVar(&v.tag, "t", "default", "Tag label.")
@@ -1011,7 +1066,7 @@ func (c *Group) NewGroupLeaf() *GroupLeaf {
 				return nil
 			}
 			if errors.Is(err, cmd.ErrHelp) {
-				fmt.Fprintf(os.Stderr, "Use '%s help' for more information.\n", os.Args[0])
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
 				return nil
 			}
 			if errors.Is(err, cmd.ErrUsage) {

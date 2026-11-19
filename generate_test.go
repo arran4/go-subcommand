@@ -820,7 +820,7 @@ func TestGenerateConstructorFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
-				if *updateGolden {
+				if *updateGolden || os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_GOLDENS") == "1" {
 					ar := txtar.Parse(constructorPresenceFixture)
 					for i, f := range ar.Files {
 						for _, name := range []string{"root.go", "child_grandchild.go"} {
@@ -1630,7 +1630,7 @@ func TestGenerateProviderFlagPresence(t *testing.T) {
 				t.Fatal("nondeterministic generation")
 			}
 			if backend == "gnu" {
-				if *updateGolden {
+				if *updateGolden || os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_GOLDENS") == "1" {
 					ar := txtar.Parse(providerPresenceFixture)
 					for i, f := range ar.Files {
 						for _, name := range []string{"root.go", "group_run.go"} {
@@ -1990,8 +1990,8 @@ func TestGenerate_Issue513_AppRootAndExplicitRootSubcommand(t *testing.T) {
 
 	mainGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "main.go")]
 	processGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "process.go")]
-	if !strings.Contains(mainGo, "generatedRun(os.Args[1:], os.Stderr)") || !strings.Contains(processGo, `NewRoot("downloadsd", version, commit, date)`) {
-		t.Fatalf("generated process must construct application root via NewRoot:\n%s\n%s", mainGo, processGo)
+	if !strings.Contains(mainGo, "generatedRun(os.Args[1:], os.Stderr)") || (!strings.Contains(processGo, `NewRoot("downloadsd", version, commit, date)`) && !strings.Contains(processGo, `NewRootWithOptions("downloadsd", version, commit, date, RootOptions{`)) {
+		t.Fatalf("generated process must construct application root via NewRoot/NewRootWithOptions:\n%s\n%s", mainGo, processGo)
 	}
 	rootGo := firstSnapshot[filepath.Join("cmd", "downloadsd", "root.go")]
 	if !strings.Contains(rootGo, "type RootCmd struct") || !strings.Contains(rootGo, `c.Commands["root"] = subCmd`) {
@@ -4264,22 +4264,8 @@ func TestIssue550Contract_LateHelpNoSideEffects(t *testing.T) {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 
-	binaries := []string{binary}
-
-	// When Go 1.22 toolchain is available or switchable, also build and test with Go 1.22.
-	env122 := append(append([]string{}, goEnv...), "GOTOOLCHAIN=go1.22.12")
-	verCmd := exec.Command("go", "version")
-	verCmd.Env = env122
-	if out, err := verCmd.CombinedOutput(); err == nil && strings.Contains(string(out), "go1.22") {
-		binary122 := filepath.Join(dir, "app-122")
-		build122 := exec.Command("go", "build", "-o", binary122, "./cmd/app")
-		build122.Dir = dir
-		build122.Env = env122
-		if out, err := build122.CombinedOutput(); err == nil {
-			binaries = append(binaries, binary122)
-			t.Logf("Go 1.22 toolchain verified: %s", strings.TrimSpace(string(out)))
-		}
-	}
+	binary122 := buildGeneratedGo122Binary(t, dir, filepath.Join(dir, "app-122"), "./cmd/app")
+	binaries := []string{binary, binary122}
 
 	testInvocations := []struct {
 		Args       []string
@@ -5145,6 +5131,11 @@ func Sub() error { return nil }
 	}
 }
 
+//go:embed templates/testdata/runtime/issue549_streams.txtar
+var streamsFixture []byte
+
+//go:embed templates/testdata/runtime/issue549_collisions.txtar
+var streamsCollisionsFixture []byte
 
 func TestGenerateIssue522Lifecycle(t *testing.T) {
 	archive := txtar.Parse(issue522LifecycleFixture)
@@ -5428,4 +5419,576 @@ func TestRootCmd_ReusedExecution(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestGenerateIssue549Streams(t *testing.T) {
+	archive := txtar.Parse(streamsFixture)
+	input, expected := splitInputExpected(archive)
+
+	generate := func() map[string][]byte {
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		return writer.Files
+	}
+
+	files := generate()
+	if !reflect.DeepEqual(files, generate()) {
+		t.Fatal("nondeterministic generation")
+	}
+
+	for name, data := range files {
+		if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+			t.Fatalf("runtime generator dependency in %s", name)
+		}
+	}
+
+	if *updateGolden || os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_GOLDENS") == "1" {
+		var buf bytes.Buffer
+		buf.WriteString(strings.TrimSpace(string(archive.Comment)) + "\n")
+		for _, f := range archive.Files {
+			if strings.HasPrefix(f.Name, "input/") || f.Name == "expected/invocations.json" {
+				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+			}
+		}
+		for _, name := range []string{"root.go", "child.go", "mixed.go", "echo.go"} {
+			if files["cmd/app/"+name] != nil {
+				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+					Name: "expected/" + name,
+					Data: files["cmd/app/"+name],
+				}}})))
+			}
+		}
+		if err := os.WriteFile("templates/testdata/runtime/issue549_streams.txtar", buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		streamsFixture = buf.Bytes()
+		archive = txtar.Parse(streamsFixture)
+		_, expected = splitInputExpected(archive)
+	}
+
+	for _, name := range []string{"root.go", "child.go", "mixed.go", "echo.go"} {
+		golden, ok := expected[name]
+		if !ok {
+			t.Fatalf("missing expected golden %s", name)
+		}
+		generated, ok := files["cmd/app/"+name]
+		if !ok {
+			t.Fatalf("missing generated file cmd/app/%s", name)
+		}
+		if !bytes.Equal(generated, golden.Data) {
+			t.Fatalf("generated %s differs from golden:\n%s", name, string(generated))
+		}
+	}
+
+	dir := t.TempDir()
+	for name, file := range input {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+	}
+	for name, data := range files {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
+
+	streamUnitTest := `package main
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type countingReadCloser struct {
+	r          io.Reader
+	closeCount int
+}
+
+func (c *countingReadCloser) Read(p []byte) (int, error) { return c.r.Read(p) }
+func (c *countingReadCloser) Close() error {
+	c.closeCount++
+	return nil
+}
+
+type countingWriteCloser struct {
+	w          io.Writer
+	closeCount int
+	closed     bool
+}
+
+func (c *countingWriteCloser) Write(p []byte) (int, error) {
+	if c.closed {
+		return 0, errors.New("write after close")
+	}
+	return c.w.Write(p)
+}
+func (c *countingWriteCloser) Close() error {
+	c.closeCount++
+	c.closed = true
+	return nil
+}
+
+type hookedFileReadCloser struct {
+	*os.File
+	onClose func()
+}
+
+func (h *hookedFileReadCloser) Close() error {
+	if h.onClose != nil {
+		h.onClose()
+	}
+	return h.File.Close()
+}
+
+type hookedFileWriteCloser struct {
+	*os.File
+	onClose func()
+}
+
+func (h *hookedFileWriteCloser) Close() error {
+	if h.onClose != nil {
+		h.onClose()
+	}
+	return h.File.Close()
+}
+
+func TestGeneratedRunWithStreamsHelpAndVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := generatedRunWithStreams([]string{"--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("help exit code = %d, want 0", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("help stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage: app [flags...]") {
+		t.Fatalf("help stderr missing usage: %q", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = generatedRunWithStreams([]string{"version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("version exit code = %d, want 0", code)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("version stderr = %q, want empty", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Version: dev") {
+		t.Fatalf("version stdout missing version: %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = generatedRunWithStreams([]string{"--exit-err"}, &stdout, &stderr)
+	if code != 42 {
+		t.Fatalf("exit-err code = %d, want 42", code)
+	}
+	if !strings.Contains(stderr.String(), "Error: custom exit code") {
+		t.Fatalf("exit-err stderr missing custom error: %q", stderr.String())
+	}
+}
+
+func TestGeneratedRunWithStreamsConcurrency(t *testing.T) {
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			var stdout, stderr bytes.Buffer
+			switch id % 4 {
+			case 0:
+				code := generatedRunWithStreams([]string{"version"}, &stdout, &stderr)
+				if code != 0 || !strings.Contains(stdout.String(), "Version: dev") || stderr.Len() != 0 {
+					t.Errorf("routine %d version failed: code=%d out=%q err=%q", id, code, stdout.String(), stderr.String())
+				}
+			case 1:
+				code := generatedRunWithStreams([]string{"--help"}, &stdout, &stderr)
+				if code != 0 || !strings.Contains(stderr.String(), "Usage: app") || stdout.Len() != 0 {
+					t.Errorf("routine %d help failed: code=%d out=%q err=%q", id, code, stdout.String(), stderr.String())
+				}
+			case 2:
+				code := generatedRunWithStreams([]string{"child", "-h"}, &stdout, &stderr)
+				if code != 0 || !strings.Contains(stderr.String(), "Child command with go-flag parser.") || stdout.Len() != 0 {
+					t.Errorf("routine %d child help failed: code=%d out=%q err=%q", id, code, stdout.String(), stderr.String())
+				}
+			case 3:
+				code := generatedRunWithStreams([]string{"unknown"}, &stdout, &stderr)
+				if code != 1 || !strings.Contains(stderr.String(), "unknown command: unknown") {
+					t.Errorf("routine %d unknown failed: code=%d out=%q err=%q", id, code, stdout.String(), stderr.String())
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func TestRootCmdNewRootWithOptionsAndDashStreams(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	stdin := strings.NewReader("hello from injected stdin")
+	root, err := NewRootWithOptions("app", "1.0", "none", "today", RootOptions{
+		IO: CommandIO{
+			Stdin:  stdin,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRootWithOptions: %v", err)
+	}
+
+	err = root.Execute([]string{"echo", "--in=-", "--out=-"})
+	if err != nil {
+		t.Fatalf("Execute echo: %v", err)
+	}
+	if got := stdout.String(); got != "hello from injected stdin" {
+		t.Fatalf("echo stdout = %q, want %q", got, "hello from injected stdin")
+	}
+}
+
+func TestRootCmdBorrowedCloserOwnership(t *testing.T) {
+	var outBuf, errBuf bytes.Buffer
+	inCloser := &countingReadCloser{r: strings.NewReader("borrowed closer payload")}
+	outCloser := &countingWriteCloser{w: &outBuf}
+
+	root, err := NewRootWithOptions("app", "1.0", "none", "today", RootOptions{
+		IO: CommandIO{
+			Stdin:  inCloser,
+			Stdout: outCloser,
+			Stderr: &errBuf,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRootWithOptions: %v", err)
+	}
+
+	if err := root.Execute([]string{"echo", "--close-in=-", "--close-out=-"}); err != nil {
+		t.Fatalf("Execute echo borrowed closer: %v", err)
+	}
+	if got := outBuf.String(); got != "borrowed closer payload" {
+		t.Fatalf("stdout = %q, want %q", got, "borrowed closer payload")
+	}
+	if inCloser.closeCount != 0 {
+		t.Fatalf("borrowed stdin close count = %d, want 0", inCloser.closeCount)
+	}
+	if outCloser.closeCount != 0 {
+		t.Fatalf("borrowed stdout close count = %d, want 0", outCloser.closeCount)
+	}
+	if _, err := outCloser.Write([]byte("!")); err != nil {
+		t.Fatalf("caller write after command returned failed: %v", err)
+	}
+}
+
+func TestRootCmdActualFileCleanup(t *testing.T) {
+	tmpDir := t.TempDir()
+	inPath := filepath.Join(tmpDir, "in.txt")
+	outPath := filepath.Join(tmpDir, "out.txt")
+	if err := os.WriteFile(inPath, []byte("file cleanup payload"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	origOpenReader, origOpenWriter := generatedOpenReader, generatedOpenWriter
+	t.Cleanup(func() {
+		generatedOpenReader, generatedOpenWriter = origOpenReader, origOpenWriter
+	})
+
+	var inCloseCount, outCloseCount int
+	generatedOpenReader = func(name string) (io.ReadCloser, error) {
+		f, err := origOpenReader(name)
+		if err != nil {
+			return nil, err
+		}
+		return &hookedFileReadCloser{File: f.(*os.File), onClose: func() { inCloseCount++ }}, nil
+	}
+	generatedOpenWriter = func(name string) (io.WriteCloser, error) {
+		f, err := origOpenWriter(name)
+		if err != nil {
+			return nil, err
+		}
+		return &hookedFileWriteCloser{File: f.(*os.File), onClose: func() { outCloseCount++ }}, nil
+	}
+
+	root, err := NewRoot("app", "1.0", "none", "today")
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if err := root.Execute([]string{"echo", "--in=" + inPath, "--out=" + outPath}); err != nil {
+		t.Fatalf("Execute file copy: %v", err)
+	}
+	got, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if string(got) != "file cleanup payload" {
+		t.Fatalf("output file = %q, want %q", string(got), "file cleanup payload")
+	}
+	if inCloseCount != 1 || outCloseCount != 1 {
+		t.Fatalf("file close counts: in=%d out=%d, want 1 each", inCloseCount, outCloseCount)
+	}
+}
+
+func TestRootCmdStandaloneBorrowedStdoutNotClosed(t *testing.T) {
+	emptyIn := filepath.Join(t.TempDir(), "empty.txt")
+	if err := os.WriteFile(emptyIn, nil, 0o644); err != nil {
+		t.Fatalf("write empty input: %v", err)
+	}
+	root, err := NewRoot("app", "1.0", "none", "today")
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if err := root.Execute([]string{"echo", "--in=" + emptyIn, "--close-out=-"}); err != nil {
+		t.Fatalf("Execute standalone borrowed closer: %v", err)
+	}
+	if _, err := os.Stdout.Stat(); err != nil {
+		t.Fatalf("os.Stdout should remain open after closing borrowed adapter: %v", err)
+	}
+}
+`
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/stream_test.go"), streamUnitTest)
+
+	unitTest := exec.Command("go", "test", "-race", "./cmd/app", "-run", "TestGeneratedRunWithStreams|TestRootCmd")
+	unitTest.Dir = dir
+	if out, err := unitTest.CombinedOutput(); err != nil {
+		t.Fatalf("stream race unit tests failed: %v\n%s", err, out)
+	}
+
+	binary := filepath.Join(dir, "app")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+
+	binary122 := buildGeneratedGo122Binary(t, dir, filepath.Join(dir, "app-122"), "./cmd/app")
+	binaries := []string{binary, binary122}
+
+	var invocations []struct {
+		Args   []string
+		Stdout string
+		Stderr string
+		Status int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatalf("unmarshal invocations: %v", err)
+	}
+
+	for _, bin := range binaries {
+		for _, inv := range invocations {
+			cmd := exec.Command(bin, inv.Args...)
+			cmd.Dir = dir
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			status := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					status = exitErr.ExitCode()
+				} else {
+					t.Fatalf("run failed: %v", err)
+				}
+			}
+			gotStderr := strings.ReplaceAll(stderr.String(), bin, "app")
+			if status != inv.Status || stdout.String() != inv.Stdout || gotStderr != inv.Stderr {
+				t.Errorf("%v on %s: status=%d stdout=%q stderr=%q; want status=%d stdout=%q stderr=%q",
+					inv.Args, filepath.Base(bin), status, stdout.String(), gotStderr, inv.Status, inv.Stdout, inv.Stderr)
+			}
+		}
+	}
+}
+
+func buildGeneratedGo122Binary(t *testing.T, dir, outPath, pkg string) string {
+	t.Helper()
+	var env122 []string
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "GOROOT=") || strings.HasPrefix(env, "GOTOOLDIR=") || strings.HasPrefix(env, "GOTOOLCHAIN=") {
+			continue
+		}
+		env122 = append(env122, env)
+	}
+	env122 = append(env122, "GOTOOLCHAIN=go1.22.12")
+
+	verCmd := exec.Command("go", "version")
+	verCmd.Env = env122
+	verOut, err := verCmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(verOut), "go1.22") {
+		t.Fatalf("expected Go 1.22 toolchain for compatibility test, got %q (err: %v)", strings.TrimSpace(string(verOut)), err)
+	}
+
+	build122 := exec.Command("go", "build", "-o", outPath, pkg)
+	build122.Dir = dir
+	build122.Env = env122
+	if out, err := build122.CombinedOutput(); err != nil {
+		t.Fatalf("go 1.22.12 build failed: %v\n%s", err, out)
+	}
+	t.Logf("Go 1.22 toolchain verified: %s", strings.TrimSpace(string(verOut)))
+	return outPath
+}
+
+func TestGenerateIssue549Collisions(t *testing.T) {
+	archive := txtar.Parse(streamsCollisionsFixture)
+	input, expected := splitInputExpected(archive)
+
+	generate := func() map[string][]byte {
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		return writer.Files
+	}
+
+	files := generate()
+	if !reflect.DeepEqual(files, generate()) {
+		t.Fatal("nondeterministic generation")
+	}
+
+	for name, data := range files {
+		if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+			t.Fatalf("runtime generator dependency in %s", name)
+		}
+	}
+
+	goldenNames := []string{"root.go", "process.go", "sub_a.go"}
+	if *updateGolden || os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_GOLDENS") == "1" {
+		var buf bytes.Buffer
+		buf.WriteString(strings.TrimSpace(string(archive.Comment)) + "\n")
+		for _, f := range archive.Files {
+			if strings.HasPrefix(f.Name, "input/") {
+				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+			}
+		}
+		for _, name := range goldenNames {
+			if files["cmd/app/"+name] != nil {
+				buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+					Name: "expected/" + name,
+					Data: files["cmd/app/"+name],
+				}}})))
+			}
+		}
+		if err := os.WriteFile("templates/testdata/runtime/issue549_collisions.txtar", buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		streamsCollisionsFixture = buf.Bytes()
+		archive = txtar.Parse(streamsCollisionsFixture)
+		_, expected = splitInputExpected(archive)
+	}
+
+	for _, name := range goldenNames {
+		golden, ok := expected[name]
+		if !ok {
+			t.Fatalf("missing expected golden %s", name)
+		}
+		generated, ok := files["cmd/app/"+name]
+		if !ok {
+			t.Fatalf("missing generated file cmd/app/%s", name)
+		}
+		if !bytes.Equal(generated, golden.Data) {
+			t.Fatalf("generated %s differs from golden:\n%s", name, string(generated))
+		}
+	}
+
+	dir := t.TempDir()
+	for name, file := range input {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+	}
+	for name, data := range files {
+		writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+	}
+
+	collisionTest := `package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+func TestCollisionsRuntimeConstructorsAndCommands(t *testing.T) {
+	if _, err := NewRoot("app", "1.0", "c", "d"); err != nil {
+		t.Fatalf("NewRoot failed: %v", err)
+	}
+
+	ctxRoot, err := NewRootWithContext("app", "1.0", "c", "d", "ctx-io", "ctx-name")
+	if err != nil {
+		t.Fatalf("NewRootWithContext failed: %v", err)
+	}
+	if ctxRoot.IO != "ctx-io" || ctxRoot.name != "ctx-name" {
+		t.Fatalf("context fields mismatch: IO=%q name=%q", ctxRoot.IO, ctxRoot.name)
+	}
+
+	var out, errOut bytes.Buffer
+	optsRoot, err := NewRootWithOptions("app", "1.0", "c", "d", RootOptions{
+		Streams: CommandIO{
+			Stdout: &out,
+			Stderr: &errOut,
+		},
+		IO:   "opt-io",
+		name: "opt-name",
+	})
+	if err != nil {
+		t.Fatalf("NewRootWithOptions failed: %v", err)
+	}
+	if err := optsRoot.Execute([]string{"version"}); err != nil {
+		t.Fatalf("version execute failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Version: 1.0") {
+		t.Fatalf("version stdout = %q, want Version: 1.0", out.String())
+	}
+
+	if err := optsRoot.Execute([]string{"--in-arg=vIn", "--out-arg=vOut", "--err-arg=vErr"}); err != nil {
+		t.Fatalf("root action execute failed: %v", err)
+	}
+	if optsRoot.Stdin != "vIn" || optsRoot.Stdout != "vOut" || optsRoot.Stderr != "vErr" {
+		t.Fatalf("root param fields mismatch: %q %q %q", optsRoot.Stdin, optsRoot.Stdout, optsRoot.Stderr)
+	}
+	if err := optsRoot.Execute([]string{"sub-a", "--sub-stdout=val"}); err != nil {
+		t.Fatalf("sub-a execute failed: %v", err)
+	}
+	if err := optsRoot.Execute([]string{"sub-b"}); err != nil {
+		t.Fatalf("sub-b execute failed: %v", err)
+	}
+}
+`
+	writeRuntimeFixture(t, filepath.Join(dir, "cmd/app/collisions_test.go"), collisionTest)
+
+	unitCmd := exec.Command("go", "test", "-race", "./...")
+	unitCmd.Dir = dir
+	if out, err := unitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("collision module go test failed: %v\n%s", err, out)
+	}
+
+	bin := filepath.Join(dir, "collisions")
+	buildLocal := exec.Command("go", "build", "-o", bin, "./cmd/app")
+	buildLocal.Dir = dir
+	buildLocal.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	if out, err := buildLocal.CombinedOutput(); err != nil {
+		t.Fatalf("local build failed: %v\n%s", err, out)
+	}
+
+	bin122 := buildGeneratedGo122Binary(t, dir, filepath.Join(dir, "collisions-122"), "./cmd/app")
+
+	for _, b := range []string{bin, bin122} {
+		for _, args := range [][]string{
+			{"version"},
+			{"--in-arg=a", "--out-arg=b", "--err-arg=c"},
+			{"sub-a", "--sub-stdout=x"},
+			{"sub-b"},
+			{"command-io"},
+			{"root-options"},
+			{"new-root-with-options"},
+			{"new-root-with-context"},
+		} {
+			cmd := exec.Command(b, args...)
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("%s %v failed: %v\n%s", filepath.Base(b), args, err, out)
+			}
+		}
+	}
 }

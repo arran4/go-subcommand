@@ -776,3 +776,57 @@ func TestValidateParametersUnmatchedArgv(t *testing.T) {
 		})
 	}
 }
+
+func TestIssue549GeneratedIdentifierDisambiguation(t *testing.T) {
+	ioParam := &FunctionParameter{Name: "IO", Type: "string", Generator: GeneratorConfig{Type: SourceTypeConstructor}}
+	nameParam := &FunctionParameter{Name: "name", Type: "string", Generator: GeneratorConfig{Type: SourceTypeConstructor}}
+	cmd := &Command{
+		MainCmdName: "app",
+		Parameters: []*FunctionParameter{
+			{Name: "Stdin", Type: "string"},
+			{Name: "Stdout", Type: "string"},
+			{Name: "Stderr", Type: "string"},
+			{Name: "stdout", Type: "string"},
+			ioParam,
+			nameParam,
+		},
+		SharedProviders: []*SharedProviderConfig{
+			{
+				Name: "stdout",
+				Type: "string",
+				Func: &FuncRef{FunctionName: "ProvideStdout"},
+			},
+		},
+	}
+
+	if err := cmd.ResolveSharedProviders(); err != nil {
+		t.Fatalf("ResolveSharedProviders: %v", err)
+	}
+
+	if got := cmd.StdinFieldName(); got != "stdinStream" {
+		t.Errorf("StdinFieldName() = %q, want stdinStream", got)
+	}
+	if got := cmd.StdoutFieldName(); got != "stdoutStream" {
+		t.Errorf("StdoutFieldName() = %q, want stdoutStream", got)
+	}
+	if got := cmd.StderrFieldName(); got != "stderrStream" {
+		t.Errorf("StderrFieldName() = %q, want stderrStream", got)
+	}
+	if got := cmd.RootOptionsIOFieldName(); got != "Streams" {
+		t.Errorf("RootOptionsIOFieldName() = %q, want Streams", got)
+	}
+	if got := cmd.ConstructorArgName(ioParam); got != "IO" {
+		t.Errorf("ConstructorArgName(ioParam) = %q, want IO", got)
+	}
+	if got := cmd.ConstructorArgName(nameParam); got != "nameArg" {
+		t.Errorf("ConstructorArgName(nameParam) = %q, want nameArg", got)
+	}
+
+	sp := cmd.SharedProviders[0]
+	if got := sp.MethodName(); got != "ProvideStdout" {
+		t.Errorf("sp.MethodName() = %q, want ProvideStdout", got)
+	}
+	if got := sp.ValueFieldName(); got != "stdoutValue" {
+		t.Errorf("sp.ValueFieldName() = %q, want stdoutValue", got)
+	}
+}
