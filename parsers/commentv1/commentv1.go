@@ -971,13 +971,13 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				DefaultRoute:           defaultRoute,
 				IsDefault:              isDefault,
 				// SubCommandStructName is assigned during collection
-				DefinitionFile: filename,
-				DocStart:       s.Doc.Pos(),
-				DocEnd:         s.Doc.End(),
-				Parameters:     params,
-				ReturnsError:   returnsError,
-				ReturnCount:    returnCount,
-				Initializers:   inits,
+				DefinitionFile:  filename,
+				DocStart:        s.Doc.Pos(),
+				DocEnd:          s.Doc.End(),
+				Parameters:      params,
+				ReturnsError:    returnsError,
+				ReturnCount:     returnCount,
+				Initializers:    inits,
 				SharedProviders: shared,
 			})
 		}
