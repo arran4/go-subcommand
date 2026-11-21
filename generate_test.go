@@ -5137,6 +5137,9 @@ var streamsFixture []byte
 //go:embed templates/testdata/runtime/issue549_collisions.txtar
 var streamsCollisionsFixture []byte
 
+//go:embed templates/testdata/runtime/issue561_requires.txtar
+var issue561RequiresFixture []byte
+
 func TestGenerateIssue522Lifecycle(t *testing.T) {
 	archive := txtar.Parse(issue522LifecycleFixture)
 	input, expected := splitInputExpected(archive)
@@ -5991,4 +5994,470 @@ func TestCollisionsRuntimeConstructorsAndCommands(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGenerateIssue561Requires(t *testing.T) {
+	archive := txtar.Parse(issue561RequiresFixture)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args   []string
+		Stdout string
+		Status int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	goldenFiles := []string{
+		"root.go",
+		"api.go",
+		"api_health.go",
+		"api_profile.go",
+		"api_users.go",
+		"api_users_list.go",
+		"api_users_delete.go",
+		"admin.go",
+		"admin_ping.go",
+		"admin_inspect.go",
+		"jobs.go",
+		"jobs_run.go",
+		"jobs_custom.go",
+		"db.go",
+		"db_query.go",
+		"stores.go",
+		"stores_sync.go",
+		"compat.go",
+	}
+
+	for _, backend := range []string{"gnu", "go-flag"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+
+			// Verify zero runtime dependency on go-subcommand.
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+			}
+
+			// Type-alias leaf api_profile.go uses *app.UserAlias and must not emit unused auth import.
+			if bytes.Contains(files["cmd/app/api_profile.go"], []byte(`"example.com/requiresapp/auth"`)) {
+				t.Fatalf("api_profile.go unexpectedly imports auth package:\n%s", files["cmd/app/api_profile.go"])
+			}
+
+			if *updateGolden && backend == "gnu" {
+				var buf bytes.Buffer
+				buf.WriteString(strings.TrimSpace(string(archive.Comment)) + "\n")
+				for _, f := range archive.Files {
+					if strings.HasPrefix(f.Name, "input/") || f.Name == "expected/invocations.json" {
+						buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+					}
+				}
+				for _, name := range goldenFiles {
+					buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+						Name: "expected/" + name,
+						Data: files["cmd/app/"+name],
+					}}})))
+				}
+				if err := os.WriteFile("templates/testdata/runtime/issue561_requires.txtar", buf.Bytes(), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Log("updated issue561_requires.txtar")
+				return
+			}
+
+			if backend == "gnu" {
+				for _, name := range goldenFiles {
+					golden, ok := expected[name]
+					if !ok {
+						t.Fatalf("missing expected golden %s", name)
+					}
+					if !bytes.Equal(files["cmd/app/"+name], golden.Data) {
+						t.Fatalf("generated %s differs from golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+
+			// Materialize and compile with local Go toolchain.
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("local build: %v\n%s", err, out)
+			}
+
+			// Also verify actual Go 1.22 toolchain compilation and execution!
+			go122Binary := buildGeneratedGo122Binary(t, dir, filepath.Join(dir, "app-go122"), "./cmd/app")
+
+			for _, bin := range []string{binary, go122Binary} {
+				for _, invocation := range invocations {
+					command := exec.Command(bin, invocation.Args...)
+					command.Dir = dir
+					command.Env = append(os.Environ(), "COLUMNS=80")
+					var stdout, stderr bytes.Buffer
+					command.Stdout, command.Stderr = &stdout, &stderr
+					err := command.Run()
+					status := 0
+					if err != nil {
+						if exit, ok := err.(*exec.ExitError); ok {
+							status = exit.ExitCode()
+						} else {
+							t.Fatal(err)
+						}
+					}
+					if status != invocation.Status || stdout.String() != invocation.Stdout {
+						t.Errorf("%s %v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q",
+							filepath.Base(bin), invocation.Args, status, stdout.String(), stderr.String(), invocation.Status, invocation.Stdout)
+					}
+				}
+			}
+
+			// Verify help, usage, version, unknown command, and invalid flag suppress business execution.
+			suppressCases := []struct {
+				args   []string
+				wantOK bool
+			}{
+				{[]string{"api", "--help"}, true},
+				{[]string{"api", "users", "list", "--help"}, true},
+				{[]string{"admin", "--help"}, true},
+				{[]string{"jobs", "run", "--help"}, true},
+				{[]string{"help", "api", "users", "list"}, true},
+				{[]string{"usage"}, true},
+				{[]string{"version"}, true},
+				{[]string{"api", "unknown-cmd"}, false},
+				{[]string{"admin", "unknown-cmd"}, false},
+				{[]string{"jobs", "run", "--unknown-flag"}, false},
+			}
+			if backend == "gnu" {
+				suppressCases = append(suppressCases, struct {
+					args   []string
+					wantOK bool
+				}{[]string{"unknown-cmd"}, false})
+			}
+			for _, suppress := range suppressCases {
+				command := exec.Command(binary, suppress.args...)
+				command.Dir = dir
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				err := command.Run()
+				if suppress.wantOK && err != nil {
+					t.Errorf("%v: unexpected error %v (stderr=%q)", suppress.args, err, stderr.String())
+				}
+				if !suppress.wantOK && err == nil {
+					t.Errorf("%v: expected error, got nil", suppress.args)
+				}
+				combined := stdout.String() + stderr.String()
+				for _, marker := range []string{"auth:", "jobs:", "db:", "storea:", "storeb:", "action:", "close:"} {
+					if strings.Contains(combined, marker) {
+						t.Errorf("%v: unexpected business side effect %q in output:\n%s", suppress.args, marker, combined)
+					}
+				}
+			}
+
+			// Failures and partial cleanup verification.
+			t.Run("failure_and_partial_cleanup", func(t *testing.T) {
+				for _, fc := range []struct {
+					name        string
+					args        []string
+					env         string
+					wantStdout  string
+					forbidOut   []string
+					wantErrText string
+				}{
+					{
+						name:        "FAIL_USER",
+						args:        []string{"api", "users", "list"},
+						env:         "FAIL_USER=1",
+						wantStdout:  "auth:current-user:fail\n",
+						forbidOut:   []string{"auth:require-admin", "action:"},
+						wantErrText: "user lookup failed",
+					},
+					{
+						name:        "FAIL_ADMIN",
+						args:        []string{"admin", "inspect"},
+						env:         "FAIL_ADMIN=1",
+						wantStdout:  "auth:current-user\nauth:require-admin:admin\n",
+						forbidOut:   []string{"auth:audit-trail", "action:"},
+						wantErrText: "admin authorization failed",
+					},
+					{
+						name:        "FAIL_CLIENT_CLOSES_STORE",
+						args:        []string{"jobs", "run", "--check-err"},
+						env:         "FAIL_CLIENT=1",
+						wantStdout:  "jobs:load-meta\njobs:open-store:prod:cli-default\njobs:open-client:prod\naction:jobs-run:check-err:true:true\nclose:store:prod\n",
+						forbidOut:   []string{"close:client"},
+						wantErrText: "client open failed",
+					},
+					{
+						name:        "FAIL_CLOSE",
+						args:        []string{"jobs", "run"},
+						env:         "FAIL_CLOSE=1",
+						wantStdout:  "jobs:load-meta\njobs:open-store:prod:cli-default\njobs:open-client:prod\naction:jobs-run:live:prod:cli-default:v1\nclose:client:prod\nclose:store:prod\n",
+						wantErrText: "store close failed",
+					},
+				} {
+					command := exec.Command(binary, fc.args...)
+					command.Dir = dir
+					command.Env = append(os.Environ(), fc.env)
+					var stdout, stderr bytes.Buffer
+					command.Stdout, command.Stderr = &stdout, &stderr
+					err := command.Run()
+					if err == nil {
+						t.Errorf("%s: expected error, got nil", fc.name)
+					}
+					if stdout.String() != fc.wantStdout {
+						t.Errorf("%s: stdout = %q, want %q", fc.name, stdout.String(), fc.wantStdout)
+					}
+					if !strings.Contains(stderr.String(), fc.wantErrText) {
+						t.Errorf("%s: stderr = %q, want %q", fc.name, stderr.String(), fc.wantErrText)
+					}
+					for _, bad := range fc.forbidOut {
+						if strings.Contains(stdout.String(), bad) {
+							t.Errorf("%s: unexpected output %q in %q", fc.name, bad, stdout.String())
+						}
+					}
+				}
+			})
+
+			// In-process reuse, root constructor context injection, stream capture, cached error, and -race verification.
+			{
+				testSrc := `package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"example.com/requiresapp/jobs"
+)
+
+func TestRequires_InProcessReuseContextAndCachedError(t *testing.T) {
+	var out, errBuf bytes.Buffer
+	root, err := NewRootWithOptions("app", "", "", "", RootOptions{
+		IO: CommandIO{Stdout: &out, Stderr: &errBuf},
+		rt: &jobs.Runtime{ID: "ctx-42"},
+	})
+	if err != nil {
+		t.Fatalf("NewRootWithOptions: %v", err)
+	}
+
+	// Sequential reuse across different routes resets memoization and cleanups cleanly.
+	if err := root.Execute([]string{"api", "health"}); err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if err := root.Execute([]string{"jobs", "run"}); err != nil {
+		t.Fatalf("jobs run 1: %v", err)
+	}
+	if err := root.Execute([]string{"jobs", "run"}); err != nil {
+		t.Fatalf("jobs run 2: %v", err)
+	}
+
+	// Help on reused root suppresses business execution.
+	if err := root.Execute([]string{"api", "users", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if strings.Contains(out.String()+errBuf.String(), "auth:current-user") {
+		t.Fatalf("help unexpectedly triggered auth acquisition: out=%q err=%q", out.String(), errBuf.String())
+	}
+
+	// Cached error on repeated lazy callable invocation without duplicate acquisition.
+	t.Setenv("FAIL_CLIENT", "1")
+	err = root.Execute([]string{"jobs", "run", "--check-err"})
+	if err == nil || !strings.Contains(err.Error(), "client open failed") {
+		t.Fatalf("expected client open failed, got %v", err)
+	}
+	// Reset worked again after error if FAIL_CLIENT is cleared.
+	t.Setenv("FAIL_CLIENT", "0")
+	if err := root.Execute([]string{"api", "users", "list"}); err != nil {
+		t.Fatalf("post-error reuse failed: %v", err)
+	}
+}
+`
+				writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "requires_runtime_test.go"), testSrc)
+				cmd := exec.Command("go", "test", "-race", "-v", "./cmd/app")
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("go test -race ./cmd/app failed: %v\n%s", err, out)
+				}
+				if strings.Count(string(out), "jobs:open-store:prod:ctx-42") != 3 {
+					t.Fatalf("expected 3 isolated ctx-42 executions in output:\n%s", out)
+				}
+			}
+		})
+	}
+
+	// Native .mdc configuration equivalence: strip Requires directives & metadata comments into CommandDeclarations.
+	if !*updateGolden {
+		t.Run("mdc_native_config_equivalence", func(t *testing.T) {
+		mdcDecls := []parsers.CommandDeclaration{
+			{Kind: "command", Path: "app api", Text: "Description: API endpoints.\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 1},
+			{Kind: "command", Path: "app api users", Text: "Description: User management.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin\n", Filename: "commands.mdc", Line: 4},
+			{Kind: "command", Path: "app admin", Text: "Description: Admin commands.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin, \"example.com/requiresapp/auth\".AuditTrail (always)\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 7},
+			{Kind: "command", Path: "app admin ping", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 11},
+			{Kind: "command", Path: "app jobs", Text: "Description: Background jobs.\nRequires: \"example.com/requiresapp/jobs\".OpenClient, \"example.com/requiresapp/jobs\".OpenStore, \"example.com/requiresapp/jobs\".LoadMeta\n", Filename: "commands.mdc", Line: 13},
+			{Kind: "command", Path: "app db", Text: "Description: Database commands.\nRequires: \"example.com/requiresapp/db\".PrimaryDB, \"example.com/requiresapp/db\".ReplicaDB\n", Filename: "commands.mdc", Line: 16},
+			{Kind: "command", Path: "app stores", Text: "Description: Multiple packages exporting Open.\nRequires: \"example.com/requiresapp/storea\".Open, \"example.com/requiresapp/storeb\".Open\n", Filename: "commands.mdc", Line: 19},
+			{Kind: "command", Path: "app compat", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 22},
+		}
+
+		mdcInput := fstest.MapFS{}
+		for k, v := range input {
+			if k == "app.go" {
+				s := string(v.Data)
+				for _, rm := range []string{
+					"// API is a command `app api` -- API endpoints.\n// Requires: auth.CurrentUser\n\n",
+					"// Users is a command `app api users` -- User management.\n// Requires: auth.RequireAdmin\n\n",
+					"// Admin is a command `app admin` -- Admin commands.\n// Requires: auth.RequireAdmin, auth.AuditTrail (always)\n// Requires: auth.CurrentUser\n\n",
+					"// Requires: auth.CurrentUser\n",
+					"// Jobs is a command `app jobs` -- Background jobs.\n// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta\n\n",
+					"// DB is a command `app db` -- Database commands.\n// Requires: db.PrimaryDB, db.ReplicaDB\n\n",
+					"// Stores is a command `app stores` -- Multiple packages exporting Open.\n// Requires: storea.Open, storeb.Open\n\n",
+				} {
+					s = strings.ReplaceAll(s, rm, "")
+				}
+				mdcInput[k] = &fstest.MapFile{Data: []byte(s)}
+			} else {
+				mdcInput[k] = v
+			}
+		}
+
+		writer := NewCollectingFileWriter()
+		if err := GenerateWithFS(mdcInput, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu", CommandDeclarations: mdcDecls}); err != nil {
+			t.Fatalf("mdc generation failed: %v", err)
+		}
+		for _, name := range goldenFiles {
+			if expected[name] == nil {
+				t.Fatalf("missing expected %s (run with -update first)", name)
+			}
+			if !bytes.Equal(writer.Files["cmd/app/"+name], expected[name].Data) {
+				t.Fatalf("mdc generated %s differs from comment golden:\n%s", name, writer.Files["cmd/app/"+name])
+			}
+		}
+		})
+	}
+
+	// Negative generation tests covering #561 diagnostics.
+	t.Run("negative_diagnostics", func(t *testing.T) {
+		baseAuth := input["auth/auth.go"].Data
+		baseDB := input["db/db.go"].Data
+		baseMod := input["go.mod"].Data
+		cases := []struct {
+			name    string
+			extra   map[string]string
+			appSrc  string
+			wantErr string
+		}{
+			{
+				name: "ambiguous_type",
+				appSrc: `package app
+import "example.com/requiresapp/db"
+// Root is a subcommand ` + "`app`" + `
+// Requires: db.PrimaryDB, db.ReplicaDB
+func Root(c *db.Conn) error { return nil }
+`,
+				wantErr: "ambiguous",
+			},
+			{
+				name: "ambiguous_type_alias",
+				appSrc: `package app
+import "example.com/requiresapp/db"
+type ConnAlias = db.Conn
+// Root is a subcommand ` + "`app`" + `
+// Requires: db.PrimaryDB, db.ReplicaDB
+func Root(c *ConnAlias) error { return nil }
+`,
+				wantErr: "ambiguous",
+			},
+			{
+				name: "cycle",
+				extra: map[string]string{
+					"cyc/cyc.go": "package cyc\ntype A struct{}\ntype B struct{}\nfunc MakeA(b *B) (*A, error) { return nil, nil }\nfunc MakeB(a *A) (*B, error) { return nil, nil }\n",
+				},
+				appSrc: `package app
+import "example.com/requiresapp/cyc"
+// Root is a subcommand ` + "`app`" + `
+// Requires: cyc.MakeA, cyc.MakeB
+func Root() error { return nil }
+`,
+				wantErr: "cycle",
+			},
+			{
+				name: "unimported_qualifier",
+				appSrc: `package app
+// Root is a subcommand ` + "`app`" + `
+// Requires: auth.CurrentUser
+func Root() error { return nil }
+`,
+				wantErr: "unimported package qualifier",
+			},
+			{
+				name: "negated_requirement",
+				appSrc: `package app
+// Root is a subcommand ` + "`app`" + `
+// Requires: !auth.Check
+func Root() error { return nil }
+`,
+				wantErr: "negative requirement",
+			},
+			{
+				name: "invalid_signature_zero_returns",
+				extra: map[string]string{
+					"bad/bad.go": "package bad\nfunc Nothing() {}\n",
+				},
+				appSrc: `package app
+import "example.com/requiresapp/bad"
+// Root is a subcommand ` + "`app`" + `
+// Requires: bad.Nothing
+func Root() error { return nil }
+`,
+				wantErr: "0 return values",
+			},
+			{
+				name: "infallible_callable_on_fallible_provider",
+				appSrc: `package app
+import "example.com/requiresapp/auth"
+// Root is a subcommand ` + "`app`" + `
+// Requires: auth.CurrentUser
+func Root(u func() *auth.User) error { return nil }
+`,
+				wantErr: "infallible callable",
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				fsys := fstest.MapFS{
+					"go.mod":       &fstest.MapFile{Data: baseMod},
+					"auth/auth.go": &fstest.MapFile{Data: baseAuth},
+					"db/db.go":     &fstest.MapFile{Data: baseDB},
+					"app.go":       &fstest.MapFile{Data: []byte(tc.appSrc)},
+				}
+				for p, src := range tc.extra {
+					fsys[p] = &fstest.MapFile{Data: []byte(src)}
+				}
+				writer := NewCollectingFileWriter()
+				err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu"})
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err=%v, want %q", err, tc.wantErr)
+				}
+			})
+		}
+	})
 }

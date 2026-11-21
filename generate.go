@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -1038,7 +1039,9 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 		if p.TypeImportPath != "" {
 			alias := ""
 			if !p.IsReader() && !p.IsWriter() {
-				if dot := strings.IndexByte(p.BaseType(), '.'); dot >= 0 {
+				if p.IsLazyCallableType() || strings.ContainsAny(p.Type, "(){} ") {
+					alias = p.TypePackageName
+				} else if dot := strings.IndexByte(p.BaseType(), '.'); dot >= 0 {
 					qualifier := p.BaseType()[:dot]
 					if qualifier != path.Base(p.TypeImportPath) {
 						alias = qualifier
@@ -1048,6 +1051,11 @@ func parameterImportsExcept(params []*model.FunctionParameter, excludedPath stri
 				}
 			}
 			add(&model.FuncRef{ImportPath: p.TypeImportPath, CommandPackageName: alias})
+		}
+		if !p.IsReader() && !p.IsWriter() {
+			for _, tr := range p.TypeImports {
+				add(&model.FuncRef{ImportPath: tr.ImportPath, CommandPackageName: tr.PackageName})
+			}
 		}
 		if p.Parser.Type == model.ParserTypeCustom {
 			add(p.Parser.Func)
@@ -1226,6 +1234,62 @@ func sanitizeImportIdentifier(identifier string) string {
 	return result
 }
 
+func addFuncRefImport(imports *[]templateImport, ref *model.FuncRef, excludedPath string) {
+	if ref == nil || ref.ImportPath == "" || ref.ImportPath == excludedPath {
+		return
+	}
+	alias := ""
+	if ref.CommandPackageName != "" && ref.CommandPackageName != path.Base(ref.ImportPath) {
+		alias = ref.CommandPackageName
+	}
+	*imports = append(*imports, templateImport{Alias: alias, Path: ref.ImportPath})
+}
+
+func addTypeImportRefs(imports *[]templateImport, typeImpPath, typePkgName string, typeImports []model.TypeImportRef, excludedPath string) {
+	if typeImpPath != "" && typeImpPath != excludedPath {
+		alias := ""
+		if typePkgName != "" && typePkgName != path.Base(typeImpPath) {
+			alias = typePkgName
+		}
+		*imports = append(*imports, templateImport{Alias: alias, Path: typeImpPath})
+	}
+	for _, tr := range typeImports {
+		if tr.ImportPath == "" || tr.ImportPath == excludedPath {
+			continue
+		}
+		alias := ""
+		if tr.PackageName != "" && tr.PackageName != path.Base(tr.ImportPath) {
+			alias = tr.PackageName
+		}
+		*imports = append(*imports, templateImport{Alias: alias, Path: tr.ImportPath})
+	}
+}
+
+func addExecutionStepImports(imports *[]templateImport, steps []*model.ExecutionStep, excludedPath string) {
+	for _, step := range steps {
+		if step.Kind == model.ExecutionStepGuard {
+			addFuncRefImport(imports, step.Func, excludedPath)
+		}
+		for _, in := range step.Inputs {
+			if in.Kind == model.DependencyInputProvider && in.LazyCallable && !in.LazyReturnsErr && in.Provider != nil {
+				addTypeImportRefs(imports, in.Provider.TypeImportPath, in.Provider.TypePackageName, in.Provider.TypeImports, excludedPath)
+			}
+		}
+	}
+}
+
+func addSharedProviderImports(imports *[]templateImport, sps []*model.SharedProviderConfig, excludedPath string) {
+	for _, sp := range sps {
+		addFuncRefImport(imports, sp.Func, excludedPath)
+		addTypeImportRefs(imports, sp.TypeImportPath, sp.TypePackageName, sp.TypeImports, excludedPath)
+		for _, in := range sp.ResolvedInputs {
+			if in.Kind == model.DependencyInputProvider && in.LazyCallable && !in.LazyReturnsErr && in.Provider != nil {
+				addTypeImportRefs(imports, in.Provider.TypeImportPath, in.Provider.TypePackageName, in.Provider.TypeImports, excludedPath)
+			}
+		}
+	}
+}
+
 func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 	imports := parameterImportsExcept(cmd.Parameters, excludedPath)
 	imports = append(imports, templateImport{Path: "flag"}, templateImport{Path: "fmt"})
@@ -1239,40 +1303,15 @@ func subCommandImports(cmd *model.SubCommand, excludedPath string) fileImports {
 		imports = append(imports, templateImport{Path: "sync"}, templateImport{Path: "io"})
 	}
 
-	for _, ic := range cmd.HierarchyInitializers() {
-		if ic.Func != nil && ic.Func.ImportPath != "" && ic.Func.ImportPath != excludedPath {
-			alias := ""
-			if ic.Func.CommandPackageName != "" && ic.Func.CommandPackageName != path.Base(ic.Func.ImportPath) {
-				alias = ic.Func.CommandPackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: ic.Func.ImportPath})
-		}
+	if cmd.SubCommandFunctionName != "" {
+		addExecutionStepImports(&imports, cmd.EffectiveExecutionSteps(), excludedPath)
 	}
 
-	for _, sp := range cmd.SharedProviders {
-		if sp.Func != nil && sp.Func.ImportPath != "" && sp.Func.ImportPath != excludedPath {
-			alias := ""
-			if sp.Func.CommandPackageName != "" && sp.Func.CommandPackageName != path.Base(sp.Func.ImportPath) {
-				alias = sp.Func.CommandPackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: sp.Func.ImportPath})
-		}
-		if sp.TypeImportPath != "" && sp.TypeImportPath != excludedPath {
-			alias := ""
-			if sp.TypePackageName != "" && sp.TypePackageName != path.Base(sp.TypeImportPath) {
-				alias = sp.TypePackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: sp.TypeImportPath})
-		}
-	}
+	addSharedProviderImports(&imports, cmd.SharedProviders, excludedPath)
 
 	for _, p := range cmd.Parameters {
-		if p.SharedProvider != nil && p.SharedProvider.TypeImportPath != "" && p.SharedProvider.TypeImportPath != excludedPath {
-			alias := ""
-			if p.SharedProvider.TypePackageName != "" && p.SharedProvider.TypePackageName != path.Base(p.SharedProvider.TypeImportPath) {
-				alias = p.SharedProvider.TypePackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: p.SharedProvider.TypeImportPath})
+		if p.SharedProvider != nil && p.IsCallableInfallible {
+			addTypeImportRefs(&imports, p.SharedProvider.TypeImportPath, p.SharedProvider.TypePackageName, p.SharedProvider.TypeImports, excludedPath)
 		}
 		if p.HasGenerator() && !p.IsFlagPresence() && p.SharedProvider == nil {
 			imports = append(imports, templateImport{Path: "io"})
@@ -1309,40 +1348,15 @@ func commandImports(cmd *model.Command, excludedPath string) fileImports {
 		imports = append(imports, templateImport{Path: "errors"})
 	}
 
-	for _, ic := range cmd.Initializers {
-		if ic.Func != nil && ic.Func.ImportPath != "" && ic.Func.ImportPath != excludedPath {
-			alias := ""
-			if ic.Func.CommandPackageName != "" && ic.Func.CommandPackageName != path.Base(ic.Func.ImportPath) {
-				alias = ic.Func.CommandPackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: ic.Func.ImportPath})
-		}
+	if cmd.FunctionName != "" {
+		addExecutionStepImports(&imports, cmd.EffectiveExecutionSteps(), excludedPath)
 	}
 
-	for _, sp := range cmd.SharedProviders {
-		if sp.Func != nil && sp.Func.ImportPath != "" && sp.Func.ImportPath != excludedPath {
-			alias := ""
-			if sp.Func.CommandPackageName != "" && sp.Func.CommandPackageName != path.Base(sp.Func.ImportPath) {
-				alias = sp.Func.CommandPackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: sp.Func.ImportPath})
-		}
-		if sp.TypeImportPath != "" && sp.TypeImportPath != excludedPath {
-			alias := ""
-			if sp.TypePackageName != "" && sp.TypePackageName != path.Base(sp.TypeImportPath) {
-				alias = sp.TypePackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: sp.TypeImportPath})
-		}
-	}
+	addSharedProviderImports(&imports, cmd.SharedProviders, excludedPath)
 
 	for _, p := range cmd.Parameters {
-		if p.SharedProvider != nil && p.SharedProvider.TypeImportPath != "" && p.SharedProvider.TypeImportPath != excludedPath {
-			alias := ""
-			if p.SharedProvider.TypePackageName != "" && p.SharedProvider.TypePackageName != path.Base(p.SharedProvider.TypeImportPath) {
-				alias = p.SharedProvider.TypePackageName
-			}
-			imports = append(imports, templateImport{Alias: alias, Path: p.SharedProvider.TypeImportPath})
+		if p.SharedProvider != nil && p.IsCallableInfallible {
+			addTypeImportRefs(&imports, p.SharedProvider.TypeImportPath, p.SharedProvider.TypePackageName, p.SharedProvider.TypeImports, excludedPath)
 		}
 		if p.IsDuration() {
 			imports = append(imports, templateImport{Path: "time"})
@@ -1546,21 +1560,82 @@ func getGoVersion(fsys fs.FS) string {
 // paths; only transient Go spelling is changed while one Go template is being
 // rendered.  This keeps type identity distinct from emitted identifiers and
 // avoids teaching every template a parallel alias lookup API.
+func rewriteTypeExprQualifiers(typeStr string, typeImports []model.TypeImportRef, fallbackImpPath, fallbackPkgName string, identifiers map[string]string) string {
+	if typeStr == "" {
+		return typeStr
+	}
+	replacements := make(map[string]string)
+	for _, tr := range typeImports {
+		if tr.ImportPath == "" || tr.PackageName == "" {
+			continue
+		}
+		if id, ok := identifiers[tr.ImportPath]; ok && tr.PackageName != id {
+			replacements[tr.PackageName] = id
+		}
+	}
+	if len(replacements) == 0 && fallbackImpPath != "" && fallbackPkgName != "" {
+		if id, ok := identifiers[fallbackImpPath]; ok && fallbackPkgName != id {
+			replacements[fallbackPkgName] = id
+		}
+	}
+	if len(replacements) == 0 {
+		return typeStr
+	}
+	expr, err := parser.ParseExpr(typeStr)
+	if err != nil {
+		return typeStr
+	}
+	changed := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if target, hit := replacements[ident.Name]; hit {
+			ident.Name = target
+			changed = true
+		}
+		return true
+	})
+	if !changed {
+		return typeStr
+	}
+	var buf bytes.Buffer
+	if err := format.Node(&buf, token.NewFileSet(), expr); err != nil {
+		return typeStr
+	}
+	return buf.String()
+}
+
 func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
 	if templateName != "root.go.gotmpl" && templateName != "cmd.go.gotmpl" {
 		return func() {}
 	}
 
 	var params []*model.FunctionParameter
+	var sharedProviders []*model.SharedProviderConfig
+	var steps []*model.ExecutionStep
 	var imports fileImports
 	var commandRef *model.FuncRef
 	switch value := data.(type) {
 	case *model.Command:
 		params = value.Parameters
+		sharedProviders = value.SharedProviders
+		if value.FunctionName != "" {
+			steps = value.EffectiveExecutionSteps()
+		}
 		imports = commandImports(value, value.ImportPath)
 		commandRef = &model.FuncRef{ImportPath: value.ImportPath, CommandPackageName: value.CommandPackageName}
 	case *model.SubCommand:
 		params = value.Parameters
+		sharedProviders = value.SharedProviders
+		if value.SubCommandFunctionName != "" {
+			steps = value.EffectiveExecutionSteps()
+		}
 		imports = subCommandImports(value, value.ImportPath)
 		commandRef = &model.FuncRef{ImportPath: value.ImportPath, CommandPackageName: value.SubCommandPackageName}
 	default:
@@ -1581,9 +1656,37 @@ func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
 		ref.CommandPackageName = identifier
 		restores = append(restores, func() { ref.CommandPackageName = previous })
 	}
+	rewriteSP := func(sp *model.SharedProviderConfig) {
+		if sp == nil {
+			return
+		}
+		rewriteRef(sp.Func)
+		if sp.Type != "" && (len(sp.TypeImports) > 0 || sp.TypeImportPath != "") {
+			rewritten := rewriteTypeExprQualifiers(sp.Type, sp.TypeImports, sp.TypeImportPath, sp.TypePackageName, identifiers)
+			if rewritten != sp.Type {
+				previous := sp.Type
+				sp.Type = rewritten
+				restores = append(restores, func() { sp.Type = previous })
+			}
+		}
+		if sp.TypeImportPath != "" {
+			if identifier, ok := identifiers[sp.TypeImportPath]; ok && sp.TypePackageName != identifier {
+				previous := sp.TypePackageName
+				sp.TypePackageName = identifier
+				restores = append(restores, func() { sp.TypePackageName = previous })
+			}
+		}
+	}
 
 	for _, parameter := range params {
-		if parameter.TypeImportPath != "" && parameter.TypeName != "" {
+		if parameter.IsLazyCallableType() || strings.ContainsAny(parameter.Type, "(){} ") || len(parameter.TypeImports) > 1 {
+			rewritten := rewriteTypeExprQualifiers(parameter.Type, parameter.TypeImports, parameter.TypeImportPath, parameter.TypePackageName, identifiers)
+			if rewritten != parameter.Type {
+				previous := parameter.Type
+				parameter.Type = rewritten
+				restores = append(restores, func() { parameter.Type = previous })
+			}
+		} else if parameter.TypeImportPath != "" && parameter.TypeName != "" {
 			if identifier, ok := identifiers[parameter.TypeImportPath]; ok {
 				base := parameter.BaseType()
 				if dot := strings.IndexByte(base, '.'); dot >= 0 {
@@ -1610,6 +1713,30 @@ func prepareGeneratedIdentifiers(data interface{}, templateName string) func() {
 		}
 		rewriteRef(parameter.Parser.Func)
 		rewriteRef(parameter.Generator.Func)
+		rewriteRef(parameter.PlusBare.Func)
+		rewriteRef(parameter.PlusValue.Func)
+		if parameter.SharedProvider != nil && parameter.IsCallableInfallible {
+			rewriteSP(parameter.SharedProvider)
+		}
+	}
+
+	for _, sp := range sharedProviders {
+		rewriteSP(sp)
+		for _, in := range sp.ResolvedInputs {
+			if in.Kind == model.DependencyInputProvider && in.LazyCallable && !in.LazyReturnsErr && in.Provider != nil {
+				rewriteSP(in.Provider)
+			}
+		}
+	}
+	for _, step := range steps {
+		if step.Kind == model.ExecutionStepGuard {
+			rewriteRef(step.Func)
+		}
+		for _, in := range step.Inputs {
+			if in.Kind == model.DependencyInputProvider && in.LazyCallable && !in.LazyReturnsErr && in.Provider != nil {
+				rewriteSP(in.Provider)
+			}
+		}
 	}
 
 	if commandRef.ImportPath != "" {

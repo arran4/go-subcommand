@@ -1,0 +1,4883 @@
+Unified Requires directive, inferred typed dependencies, demand-ordered execution graph,
+health-check bypass, lazy callables, ambiguity disambiguation, Go type aliases,
+reverse resource cleanup, error memoization, and native .mdc equivalence.
+-- input/go.mod --
+module example.com/requiresapp
+
+go 1.22
+-- input/auth/auth.go --
+package auth
+
+import (
+	"fmt"
+	"os"
+)
+
+type User struct {
+	Role string
+}
+
+type Audit struct {
+	Tag string
+}
+
+func CurrentUser() (*User, error) {
+	if os.Getenv("FAIL_USER") == "1" {
+		fmt.Println("auth:current-user:fail")
+		return nil, fmt.Errorf("user lookup failed")
+	}
+	role := "admin"
+	if r := os.Getenv("USER_ROLE"); r != "" {
+		role = r
+	}
+	fmt.Println("auth:current-user")
+	return &User{Role: role}, nil
+}
+
+func RequireAdmin(user *User) error {
+	fmt.Printf("auth:require-admin:%s\n", user.Role)
+	if os.Getenv("FAIL_ADMIN") == "1" || user.Role != "admin" {
+		return fmt.Errorf("admin authorization failed")
+	}
+	return nil
+}
+
+func AuditTrail() (*Audit, error) {
+	fmt.Println("auth:audit-trail")
+	if os.Getenv("FAIL_AUDIT") == "1" {
+		return nil, fmt.Errorf("audit failed")
+	}
+	return &Audit{Tag: "audit-1"}, nil
+}
+-- input/jobs/jobs.go --
+package jobs
+
+import (
+	"fmt"
+	"os"
+)
+
+type Runtime struct {
+	ID string
+}
+
+func BuildRuntime() *Runtime {
+	return &Runtime{ID: "rt-1"}
+}
+
+type Store struct {
+	Env  string
+	RtID string
+}
+
+func (s *Store) Close() error {
+	fmt.Printf("close:store:%s\n", s.Env)
+	if os.Getenv("FAIL_CLOSE") == "1" {
+		return fmt.Errorf("store close failed")
+	}
+	return nil
+}
+
+type Client struct {
+	Store *Store
+}
+
+func (c *Client) Close() error {
+	fmt.Printf("close:client:%s\n", c.Store.Env)
+	return nil
+}
+
+type Meta struct {
+	Version string
+}
+
+func OpenStore(env string, rt *Runtime) (*Store, error) {
+	rtID := "cli-default"
+	if rt != nil {
+		rtID = rt.ID
+	}
+	fmt.Printf("jobs:open-store:%s:%s\n", env, rtID)
+	if os.Getenv("FAIL_STORE") == "1" {
+		return nil, fmt.Errorf("store open failed")
+	}
+	return &Store{Env: env, RtID: rtID}, nil
+}
+
+func OpenClient(store *Store) (*Client, error) {
+	fmt.Printf("jobs:open-client:%s\n", store.Env)
+	if os.Getenv("FAIL_CLIENT") == "1" {
+		return nil, fmt.Errorf("client open failed")
+	}
+	return &Client{Store: store}, nil
+}
+
+func LoadMeta() *Meta {
+	fmt.Println("jobs:load-meta")
+	return &Meta{Version: "v1"}
+}
+-- input/db/db.go --
+package db
+
+import "fmt"
+
+type Conn struct {
+	Role string
+}
+
+func PrimaryDB() (*Conn, error) {
+	fmt.Println("db:primary")
+	return &Conn{Role: "primary"}, nil
+}
+
+func ReplicaDB() (*Conn, error) {
+	fmt.Println("db:replica")
+	return &Conn{Role: "replica"}, nil
+}
+-- input/storea/store.go --
+package storea
+
+import "fmt"
+
+type Handle struct {
+	Name string
+}
+
+func Open() (*Handle, error) {
+	fmt.Println("storea:open")
+	return &Handle{Name: "a"}, nil
+}
+-- input/storeb/store.go --
+package storeb
+
+import "fmt"
+
+type Handle struct {
+	Name string
+}
+
+func Open() (*Handle, error) {
+	fmt.Println("storeb:open")
+	return &Handle{Name: "b"}, nil
+}
+-- input/app.go --
+package app
+
+import (
+	"fmt"
+
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/db"
+	"example.com/requiresapp/jobs"
+	"example.com/requiresapp/storea"
+	"example.com/requiresapp/storeb"
+)
+
+type UserAlias = auth.User
+
+// Root is a subcommand `app` -- Application root command.
+//
+// Flags:
+//
+//	env: --env (default: "prod") Target environment.
+//	rt: (root context) Typed runtime context.
+func Root(env string, rt *jobs.Runtime) error {
+	rtID := "cli-default"
+	if rt != nil {
+		rtID = rt.ID
+	}
+	fmt.Printf("action:root:%s:%s\n", env, rtID)
+	return nil
+}
+
+// API is a command `app api` -- API endpoints.
+// Requires: auth.CurrentUser
+
+// Health is a subcommand `app api health` -- Health check without user acquisition.
+func Health() error {
+	fmt.Println("action:health")
+	return nil
+}
+
+// Profile is a subcommand `app api profile` -- Profile using type alias without auth import.
+func Profile(user *UserAlias) error {
+	fmt.Printf("action:profile:%s\n", user.Role)
+	return nil
+}
+
+// Users is a command `app api users` -- User management.
+// Requires: auth.RequireAdmin
+
+// UsersList is a subcommand `app api users list` -- List users.
+func UsersList(user *auth.User) error {
+	fmt.Printf("action:users-list:%s\n", user.Role)
+	return nil
+}
+
+// UsersDelete is a subcommand `app api users delete` -- Delete user via type alias.
+func UsersDelete(user *UserAlias) error {
+	fmt.Printf("action:users-delete:%s\n", user.Role)
+	return nil
+}
+
+// Admin is a command `app admin` -- Admin commands.
+// Requires: auth.RequireAdmin, auth.AuditTrail (always)
+// Requires: auth.CurrentUser
+
+// AdminPing is a subcommand `app admin ping` -- Admin ping.
+// Requires: auth.CurrentUser
+func AdminPing() error {
+	fmt.Println("action:admin-ping")
+	return nil
+}
+
+// AdminInspect is a subcommand `app admin inspect` -- Admin inspection.
+func AdminInspect(audit *auth.Audit, user *auth.User) error {
+	fmt.Printf("action:admin-inspect:%s:%s\n", audit.Tag, user.Role)
+	return nil
+}
+
+// Jobs is a command `app jobs` -- Background jobs.
+// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta
+
+// JobsRun is a subcommand `app jobs run` -- Run jobs with lazy dependencies.
+//
+// Flags:
+//
+//	dryRun: --dry-run Skip opening store and client.
+//	checkErr: --check-err Invoke failing client twice to verify error caching.
+func JobsRun(dryRun bool, checkErr bool, client func() (*jobs.Client, error), meta func() *jobs.Meta) error {
+	m := meta()
+	if dryRun {
+		fmt.Printf("action:jobs-run:dry:%s\n", m.Version)
+		return nil
+	}
+	if checkErr {
+		_, err1 := client()
+		_, err2 := client()
+		fmt.Printf("action:jobs-run:check-err:%v:%v\n", err1 != nil, err1 == err2)
+		return err1
+	}
+	c1, err := client()
+	if err != nil {
+		return err
+	}
+	c2, err := client()
+	if err != nil {
+		return err
+	}
+	if c1 != c2 {
+		return fmt.Errorf("client instance not memoized")
+	}
+	fmt.Printf("action:jobs-run:live:%s:%s:%s\n", c1.Store.Env, c1.Store.RtID, m.Version)
+	return nil
+}
+
+// JobsCustom is a subcommand `app jobs custom` -- Shadowed env flag isolation.
+//
+// Flags:
+//
+//	env: --env (default: "canary") Custom environment.
+func JobsCustom(env string, store *jobs.Store) error {
+	fmt.Printf("action:jobs-custom:%s:%s\n", env, store.Env)
+	return nil
+}
+
+// DB is a command `app db` -- Database commands.
+// Requires: db.PrimaryDB, db.ReplicaDB
+
+// DBQuery is a subcommand `app db query` -- Query primary and replica connections.
+//
+// Flags:
+//
+//	replica: (provider: db.ReplicaDB) Replica connection.
+//	primary: (provider: db.PrimaryDB) Primary connection.
+func DBQuery(replica *db.Conn, primary *db.Conn) error {
+	fmt.Printf("action:db-query:%s:%s\n", replica.Role, primary.Role)
+	return nil
+}
+
+// Stores is a command `app stores` -- Multiple packages exporting Open.
+// Requires: storea.Open, storeb.Open
+
+// StoresSync is a subcommand `app stores sync` -- Sync handles across stores.
+func StoresSync(a *storea.Handle, b *storeb.Handle) error {
+	fmt.Printf("action:stores-sync:%s:%s\n", a.Name, b.Name)
+	return nil
+}
+
+// Compat is a subcommand `app compat` -- Mix legacy Initializer and Requires.
+// Initializer: "example.com/requiresapp/auth".RequireAdmin
+// Requires: auth.CurrentUser
+func Compat(user *auth.User) error {
+	fmt.Printf("action:compat:%s\n", user.Role)
+	return nil
+}
+-- expected/invocations.json --
+[
+  {
+    "Args": ["api", "health"],
+    "Stdout": "action:health\n",
+    "Status": 0
+  },
+  {
+    "Args": ["api", "profile"],
+    "Stdout": "auth:current-user\naction:profile:admin\n",
+    "Status": 0
+  },
+  {
+    "Args": ["api", "users", "list"],
+    "Stdout": "auth:current-user\nauth:require-admin:admin\naction:users-list:admin\n",
+    "Status": 0
+  },
+  {
+    "Args": ["api", "users", "delete"],
+    "Stdout": "auth:current-user\nauth:require-admin:admin\naction:users-delete:admin\n",
+    "Status": 0
+  },
+  {
+    "Args": ["admin", "ping"],
+    "Stdout": "auth:current-user\nauth:require-admin:admin\nauth:audit-trail\naction:admin-ping\n",
+    "Status": 0
+  },
+  {
+    "Args": ["admin", "inspect"],
+    "Stdout": "auth:current-user\nauth:require-admin:admin\nauth:audit-trail\naction:admin-inspect:audit-1:admin\n",
+    "Status": 0
+  },
+  {
+    "Args": ["jobs", "run", "--dry-run"],
+    "Stdout": "jobs:load-meta\naction:jobs-run:dry:v1\n",
+    "Status": 0
+  },
+  {
+    "Args": ["--env", "dev", "jobs", "run"],
+    "Stdout": "jobs:load-meta\njobs:open-store:dev:cli-default\njobs:open-client:dev\naction:jobs-run:live:dev:cli-default:v1\nclose:client:dev\nclose:store:dev\n",
+    "Status": 0
+  },
+  {
+    "Args": ["jobs", "custom"],
+    "Stdout": "jobs:open-store:canary:cli-default\naction:jobs-custom:canary:canary\nclose:store:canary\n",
+    "Status": 0
+  },
+  {
+    "Args": ["--env", "stage", "jobs", "custom", "--env", "hotfix"],
+    "Stdout": "jobs:open-store:hotfix:cli-default\naction:jobs-custom:hotfix:hotfix\nclose:store:hotfix\n",
+    "Status": 0
+  },
+  {
+    "Args": ["db", "query"],
+    "Stdout": "db:replica\ndb:primary\naction:db-query:replica:primary\n",
+    "Status": 0
+  },
+  {
+    "Args": ["stores", "sync"],
+    "Stdout": "storea:open\nstoreb:open\naction:stores-sync:a:b\n",
+    "Status": 0
+  },
+  {
+    "Args": ["compat"],
+    "Stdout": "auth:current-user\nauth:require-admin:admin\naction:compat:admin\n",
+    "Status": 0
+  },
+  {
+    "Args": ["version"],
+    "Stdout": "Version: dev\nCommit: none\nDate: unknown\n",
+    "Status": 0
+  }
+]
+-- expected/root.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+	"example.com/requiresapp/cmd/app/templates"
+	"example.com/requiresapp/jobs"
+)
+
+type Cmd interface {
+	Execute(args []string) error
+	Usage()
+}
+
+type InternalCommand struct {
+	Exec      func(args []string) error
+	UsageFunc func()
+}
+
+func (c *InternalCommand) Execute(args []string) error {
+	return c.Exec(args)
+}
+
+func (c *InternalCommand) Usage() {
+	c.UsageFunc()
+}
+
+func NewLazyCommand(f func() Cmd) func() Cmd {
+	var once sync.Once
+	var cmd Cmd
+	return func() Cmd {
+		once.Do(func() {
+			cmd = f()
+		})
+		return cmd
+	}
+}
+
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Msg, e.Err)
+	}
+	return e.Msg
+}
+
+func NewUserError(err error, msg string) *UserError {
+	return &UserError{Err: err, Msg: msg}
+}
+
+func executeUsage(out io.Writer, templateName string, data any) error {
+	return templates.GetTemplates().ExecuteTemplate(out, templateName, data)
+}
+
+type RootCmd struct {
+	*flag.FlagSet
+	Commands      map[string]func() Cmd
+	Version       string
+	Commit        string
+	Date          string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
+	env           string
+	rt            *jobs.Runtime
+	CommandAction func(c *RootCmd) error
+	cleanups      []func() error
+	cleanupMu     sync.Mutex
+	resets        []func()
+}
+
+func (c *RootCmd) registerCleanup(fn func() error) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+	c.cleanups = append(c.cleanups, fn)
+}
+
+func (c *RootCmd) registerReset(fn func()) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+	c.resets = append(c.resets, fn)
+}
+
+func (c *RootCmd) outputStdout() io.Writer {
+	if c != nil && c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
+}
+
+func (c *RootCmd) outputStderr() io.Writer {
+	if c != nil && c.Stderr != nil {
+		return c.Stderr
+	}
+	return os.Stderr
+}
+
+func (c *RootCmd) inputStdin() io.Reader {
+	if c != nil && c.Stdin != nil {
+		return c.Stdin
+	}
+	return os.Stdin
+}
+
+type CommandIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+type RootOptions struct {
+	IO CommandIO
+	rt *jobs.Runtime
+}
+
+func (c *RootCmd) Usage() {
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *RootCmd) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *RootCmd) commandPath() string { return "app" }
+
+func (c *RootCmd) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "app_usage.txt", UsageDataRootCmd{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+type UsageDataRootCmd struct {
+	*RootCmd
+	Recursive bool
+}
+
+// NewRoot retains the default no-options constructor contract. Call
+// NewRootWithOptions when supplying invocation streams or options, or
+// NewRootWithContext when the application owns typed root context.
+func NewRoot(name, version, commit, date string) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{})
+}
+func NewRootWithContext(name, version, commit, date string, rt *jobs.Runtime) (*RootCmd, error) {
+	return NewRootWithOptions(name, version, commit, date, RootOptions{
+		rt: rt,
+	})
+}
+
+func NewRootWithOptions(name, version, commit, date string, opts RootOptions) (*RootCmd, error) {
+	c := &RootCmd{
+		FlagSet:  flag.NewFlagSet(name, flag.ExitOnError),
+		Commands: make(map[string]func() Cmd),
+		Version:  version,
+		Commit:   commit,
+		Date:     date,
+		Stdin:    opts.IO.Stdin,
+		Stdout:   opts.IO.Stdout,
+		Stderr:   opts.IO.Stderr,
+		rt:       opts.rt,
+	}
+	c.FlagSet.SetOutput(c.outputStderr())
+	c.FlagSet.Usage = c.Usage
+
+	c.StringVar(&c.env, "env", "prod", "Target environment.")
+
+	c.CommandAction = func(c *RootCmd) error {
+
+		err := app.Root(c.env, c.rt)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("app failed: %w", err)
+		}
+		return nil
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewAdmin() })
+		c.Commands["admin"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewApi() })
+		c.Commands["api"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewCompat() })
+		c.Commands["compat"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewDb() })
+		c.Commands["db"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewJobs() })
+		c.Commands["jobs"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return c.NewStores() })
+		c.Commands["stores"] = subCmd
+
+	}
+	c.Commands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := c.Commands[target[0]]; ok && target[0] != "help" && target[0] != "usage" && target[0] != "version" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					c.Usage()
+					return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					c.UsageRecursive()
+					return nil
+				}
+				c.Usage()
+				return nil
+			},
+			UsageFunc: c.Usage,
+		}
+	}
+	c.Commands["version"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				fmt.Fprintf(c.outputStdout(), "Version: %s\nCommit: %s\nDate: %s\n", c.Version, c.Commit, c.Date)
+				return nil
+			},
+			UsageFunc: func() {
+				fmt.Fprintf(c.outputStderr(), "Usage: %s version\n", os.Args[0])
+			},
+		}
+	}
+	return c, nil
+}
+
+func (c *RootCmd) Execute(args []string) (err error) {
+	defer func() {
+		c.cleanupMu.Lock()
+		defer c.cleanupMu.Unlock()
+		for i := len(c.cleanups) - 1; i >= 0; i-- {
+			if cerr := c.cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+		c.cleanups = nil
+		for _, reset := range c.resets {
+			reset()
+		}
+		c.resets = nil
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "env":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.env = value
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage" || remainingArgs[0] == "version")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.Commands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+		c.Usage()
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+-- expected/api.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"slices"
+	"strings"
+	"sync"
+
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Api)(nil)
+
+type Api struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Api) error
+	currentUserOnce sync.Once
+	currentUser     *auth.User
+	currentUserErr  error
+}
+
+func (c *Api) CurrentUser() (*auth.User, error) {
+	c.currentUserOnce.Do(func() {
+		c.registerReset(func() {
+			c.currentUserOnce = sync.Once{}
+			var zero *auth.User
+			c.currentUser = zero
+			c.currentUserErr = nil
+		})
+		c.currentUser, c.currentUserErr = auth.CurrentUser()
+		if c.currentUserErr == nil {
+			if closer, ok := interface{}(c.currentUser).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.currentUser, c.currentUserErr
+}
+
+type UsageDataApi struct {
+	*Api
+	Recursive bool
+}
+
+func (c *Api) Usage() {
+	err := executeUsage(c.outputStderr(), "api_usage.txt", UsageDataApi{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Api) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Api) commandPath() string { return "app api" }
+
+func (c *Api) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "api_usage.txt", UsageDataApi{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Api) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewApi() *Api {
+	set := flag.NewFlagSet("api", flag.ContinueOnError)
+	v := &Api{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewApiHealth() })
+		v.SubCommands["health"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewApiProfile() })
+		v.SubCommands["profile"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewApiUsers() })
+		v.SubCommands["users"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/api_health.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*ApiHealth)(nil)
+
+type ApiHealth struct {
+	*Api
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *ApiHealth) error
+}
+
+type UsageDataApiHealth struct {
+	*ApiHealth
+	Recursive bool
+}
+
+func (c *ApiHealth) Usage() {
+	err := executeUsage(c.outputStderr(), "health_usage.txt", UsageDataApiHealth{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiHealth) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ApiHealth) commandPath() string { return "app api health" }
+
+func (c *ApiHealth) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "health_usage.txt", UsageDataApiHealth{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiHealth) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Api) NewApiHealth() *ApiHealth {
+	set := flag.NewFlagSet("health", flag.ContinueOnError)
+	v := &ApiHealth{
+		Api:         c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *ApiHealth) error {
+
+		err := app.Health()
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("health failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/api_profile.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*ApiProfile)(nil)
+
+type ApiProfile struct {
+	*Api
+	Flags         *flag.FlagSet
+	user          *app.UserAlias
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *ApiProfile) error
+}
+
+type UsageDataApiProfile struct {
+	*ApiProfile
+	Recursive bool
+}
+
+func (c *ApiProfile) Usage() {
+	err := executeUsage(c.outputStderr(), "profile_usage.txt", UsageDataApiProfile{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiProfile) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ApiProfile) commandPath() string { return "app api profile" }
+
+func (c *ApiProfile) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "profile_usage.txt", UsageDataApiProfile{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiProfile) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		v, err := c.CurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to provide user: %w", err)
+		}
+		c.user = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Api) NewApiProfile() *ApiProfile {
+	set := flag.NewFlagSet("profile", flag.ContinueOnError)
+	v := &ApiProfile{
+		Api:         c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *ApiProfile) error {
+
+		err := app.Profile(c.user)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("profile failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/api_users.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"slices"
+	"strings"
+
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*ApiUsers)(nil)
+
+type ApiUsers struct {
+	*Api
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *ApiUsers) error
+}
+
+type UsageDataApiUsers struct {
+	*ApiUsers
+	Recursive bool
+}
+
+func (c *ApiUsers) Usage() {
+	err := executeUsage(c.outputStderr(), "users_usage.txt", UsageDataApiUsers{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsers) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ApiUsers) commandPath() string { return "app api users" }
+
+func (c *ApiUsers) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "users_usage.txt", UsageDataApiUsers{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsers) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *Api) NewApiUsers() *ApiUsers {
+	set := flag.NewFlagSet("users", flag.ContinueOnError)
+	v := &ApiUsers{
+		Api:         c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewApiUsersDelete() })
+		v.SubCommands["delete"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewApiUsersList() })
+		v.SubCommands["list"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/api_users_list.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*ApiUsersList)(nil)
+
+type ApiUsersList struct {
+	*ApiUsers
+	Flags         *flag.FlagSet
+	user          *auth.User
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *ApiUsersList) error
+}
+
+type UsageDataApiUsersList struct {
+	*ApiUsersList
+	Recursive bool
+}
+
+func (c *ApiUsersList) Usage() {
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataApiUsersList{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsersList) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ApiUsersList) commandPath() string { return "app api users list" }
+
+func (c *ApiUsersList) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "list_usage.txt", UsageDataApiUsersList{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsersList) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		dep0, depErr0 := c.CurrentUser()
+		if depErr0 != nil {
+			return depErr0
+		}
+		if err := auth.RequireAdmin(dep0); err != nil {
+			return err
+		}
+	}
+	{
+		v, err := c.CurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to provide user: %w", err)
+		}
+		c.user = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *ApiUsers) NewApiUsersList() *ApiUsersList {
+	set := flag.NewFlagSet("list", flag.ContinueOnError)
+	v := &ApiUsersList{
+		ApiUsers:    c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *ApiUsersList) error {
+
+		err := app.UsersList(c.user)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("list failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/api_users_delete.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*ApiUsersDelete)(nil)
+
+type ApiUsersDelete struct {
+	*ApiUsers
+	Flags         *flag.FlagSet
+	user          *app.UserAlias
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *ApiUsersDelete) error
+}
+
+type UsageDataApiUsersDelete struct {
+	*ApiUsersDelete
+	Recursive bool
+}
+
+func (c *ApiUsersDelete) Usage() {
+	err := executeUsage(c.outputStderr(), "delete_usage.txt", UsageDataApiUsersDelete{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsersDelete) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *ApiUsersDelete) commandPath() string { return "app api users delete" }
+
+func (c *ApiUsersDelete) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "delete_usage.txt", UsageDataApiUsersDelete{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *ApiUsersDelete) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		dep0, depErr0 := c.CurrentUser()
+		if depErr0 != nil {
+			return depErr0
+		}
+		if err := auth.RequireAdmin(dep0); err != nil {
+			return err
+		}
+	}
+	{
+		v, err := c.CurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to provide user: %w", err)
+		}
+		c.user = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *ApiUsers) NewApiUsersDelete() *ApiUsersDelete {
+	set := flag.NewFlagSet("delete", flag.ContinueOnError)
+	v := &ApiUsersDelete{
+		ApiUsers:    c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *ApiUsersDelete) error {
+
+		err := app.UsersDelete(c.user)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("delete failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/admin.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"slices"
+	"strings"
+	"sync"
+
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Admin)(nil)
+
+type Admin struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Admin) error
+	currentUserOnce sync.Once
+	currentUser     *auth.User
+	currentUserErr  error
+	auditTrailOnce  sync.Once
+	auditTrail      *auth.Audit
+	auditTrailErr   error
+}
+
+func (c *Admin) CurrentUser() (*auth.User, error) {
+	c.currentUserOnce.Do(func() {
+		c.registerReset(func() {
+			c.currentUserOnce = sync.Once{}
+			var zero *auth.User
+			c.currentUser = zero
+			c.currentUserErr = nil
+		})
+		c.currentUser, c.currentUserErr = auth.CurrentUser()
+		if c.currentUserErr == nil {
+			if closer, ok := interface{}(c.currentUser).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.currentUser, c.currentUserErr
+}
+
+func (c *Admin) AuditTrail() (*auth.Audit, error) {
+	c.auditTrailOnce.Do(func() {
+		c.registerReset(func() {
+			c.auditTrailOnce = sync.Once{}
+			var zero *auth.Audit
+			c.auditTrail = zero
+			c.auditTrailErr = nil
+		})
+		c.auditTrail, c.auditTrailErr = auth.AuditTrail()
+		if c.auditTrailErr == nil {
+			if closer, ok := interface{}(c.auditTrail).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.auditTrail, c.auditTrailErr
+}
+
+type UsageDataAdmin struct {
+	*Admin
+	Recursive bool
+}
+
+func (c *Admin) Usage() {
+	err := executeUsage(c.outputStderr(), "admin_usage.txt", UsageDataAdmin{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Admin) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Admin) commandPath() string { return "app admin" }
+
+func (c *Admin) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "admin_usage.txt", UsageDataAdmin{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Admin) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewAdmin() *Admin {
+	set := flag.NewFlagSet("admin", flag.ContinueOnError)
+	v := &Admin{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewAdminInspect() })
+		v.SubCommands["inspect"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewAdminPing() })
+		v.SubCommands["ping"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/admin_ping.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*AdminPing)(nil)
+
+type AdminPing struct {
+	*Admin
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *AdminPing) error
+}
+
+type UsageDataAdminPing struct {
+	*AdminPing
+	Recursive bool
+}
+
+func (c *AdminPing) Usage() {
+	err := executeUsage(c.outputStderr(), "ping_usage.txt", UsageDataAdminPing{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *AdminPing) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *AdminPing) commandPath() string { return "app admin ping" }
+
+func (c *AdminPing) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "ping_usage.txt", UsageDataAdminPing{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *AdminPing) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		dep0, depErr0 := c.CurrentUser()
+		if depErr0 != nil {
+			return depErr0
+		}
+		if err := auth.RequireAdmin(dep0); err != nil {
+			return err
+		}
+	}
+	if _, err := c.AuditTrail(); err != nil {
+		return err
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Admin) NewAdminPing() *AdminPing {
+	set := flag.NewFlagSet("ping", flag.ContinueOnError)
+	v := &AdminPing{
+		Admin:       c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *AdminPing) error {
+
+		err := app.AdminPing()
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("ping failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/admin_inspect.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*AdminInspect)(nil)
+
+type AdminInspect struct {
+	*Admin
+	Flags         *flag.FlagSet
+	audit         *auth.Audit
+	user          *auth.User
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *AdminInspect) error
+}
+
+type UsageDataAdminInspect struct {
+	*AdminInspect
+	Recursive bool
+}
+
+func (c *AdminInspect) Usage() {
+	err := executeUsage(c.outputStderr(), "inspect_usage.txt", UsageDataAdminInspect{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *AdminInspect) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *AdminInspect) commandPath() string { return "app admin inspect" }
+
+func (c *AdminInspect) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "inspect_usage.txt", UsageDataAdminInspect{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *AdminInspect) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		dep0, depErr0 := c.CurrentUser()
+		if depErr0 != nil {
+			return depErr0
+		}
+		if err := auth.RequireAdmin(dep0); err != nil {
+			return err
+		}
+	}
+	if _, err := c.AuditTrail(); err != nil {
+		return err
+	}
+	{
+		v, err := c.AuditTrail()
+		if err != nil {
+			return fmt.Errorf("failed to provide audit: %w", err)
+		}
+		c.audit = v
+	}
+	{
+		v, err := c.CurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to provide user: %w", err)
+		}
+		c.user = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Admin) NewAdminInspect() *AdminInspect {
+	set := flag.NewFlagSet("inspect", flag.ContinueOnError)
+	v := &AdminInspect{
+		Admin:       c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *AdminInspect) error {
+
+		err := app.AdminInspect(c.audit, c.user)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("inspect failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/jobs.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"slices"
+	"strings"
+
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Jobs)(nil)
+
+type Jobs struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Jobs) error
+}
+
+type UsageDataJobs struct {
+	*Jobs
+	Recursive bool
+}
+
+func (c *Jobs) Usage() {
+	err := executeUsage(c.outputStderr(), "jobs_usage.txt", UsageDataJobs{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Jobs) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Jobs) commandPath() string { return "app jobs" }
+
+func (c *Jobs) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "jobs_usage.txt", UsageDataJobs{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Jobs) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewJobs() *Jobs {
+	set := flag.NewFlagSet("jobs", flag.ContinueOnError)
+	v := &Jobs{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewJobsCustom() })
+		v.SubCommands["custom"] = subCmd
+
+	}
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewJobsRun() })
+		v.SubCommands["run"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/jobs_run.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+	"example.com/requiresapp/jobs"
+)
+
+var _ Cmd = (*JobsRun)(nil)
+
+type JobsRun struct {
+	*Jobs
+	Flags         *flag.FlagSet
+	dryRun        bool
+	checkErr      bool
+	client        func() (*jobs.Client, error)
+	meta          func() *jobs.Meta
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *JobsRun) error
+	storeOnce     sync.Once
+	store         *jobs.Store
+	storeErr      error
+	clientOnce    sync.Once
+	clientValue   *jobs.Client
+	clientErr     error
+	loadMetaOnce  sync.Once
+	loadMeta      *jobs.Meta
+	loadMetaErr   error
+}
+
+func (c *JobsRun) Store() (*jobs.Store, error) {
+	c.storeOnce.Do(func() {
+		c.registerReset(func() {
+			c.storeOnce = sync.Once{}
+			var zero *jobs.Store
+			c.store = zero
+			c.storeErr = nil
+		})
+		c.store, c.storeErr = jobs.OpenStore(c.env, c.rt)
+		if c.storeErr == nil {
+			if closer, ok := interface{}(c.store).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.store, c.storeErr
+}
+
+func (c *JobsRun) Client() (*jobs.Client, error) {
+	c.clientOnce.Do(func() {
+		c.registerReset(func() {
+			c.clientOnce = sync.Once{}
+			var zero *jobs.Client
+			c.clientValue = zero
+			c.clientErr = nil
+		})
+		dep0, depErr0 := c.Store()
+		if depErr0 != nil {
+			c.clientErr = depErr0
+			return
+		}
+		c.clientValue, c.clientErr = jobs.OpenClient(dep0)
+		if c.clientErr == nil {
+			if closer, ok := interface{}(c.clientValue).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.clientValue, c.clientErr
+}
+
+func (c *JobsRun) LoadMeta() (*jobs.Meta, error) {
+	c.loadMetaOnce.Do(func() {
+		c.registerReset(func() {
+			c.loadMetaOnce = sync.Once{}
+			var zero *jobs.Meta
+			c.loadMeta = zero
+			c.loadMetaErr = nil
+		})
+		c.loadMeta = jobs.LoadMeta()
+		if closer, ok := interface{}(c.loadMeta).(io.Closer); ok {
+			c.registerCleanup(closer.Close)
+		}
+	})
+	return c.loadMeta, c.loadMetaErr
+}
+
+type UsageDataJobsRun struct {
+	*JobsRun
+	Recursive bool
+}
+
+func (c *JobsRun) Usage() {
+	err := executeUsage(c.outputStderr(), "run_usage.txt", UsageDataJobsRun{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *JobsRun) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *JobsRun) commandPath() string { return "app jobs run" }
+
+func (c *JobsRun) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "run_usage.txt", UsageDataJobsRun{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *JobsRun) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "dryRun", "dry-run":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.dryRun = b
+				} else {
+					c.dryRun = true
+				}
+
+			case "checkErr", "check-err":
+				if hasValue {
+					b, err := strconv.ParseBool(value)
+					if err != nil {
+						return c.usageError(cmd.UsageInvalidValue, name, err, "invalid boolean value for flag %s: %s", name, value)
+					}
+					c.checkErr = b
+				} else {
+					c.checkErr = true
+				}
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.client = c.Client
+	c.meta = func() *jobs.Meta {
+		v, _ := c.LoadMeta()
+		return v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Jobs) NewJobsRun() *JobsRun {
+	set := flag.NewFlagSet("run", flag.ContinueOnError)
+	v := &JobsRun{
+		Jobs:        c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+
+	set.BoolVar(&v.dryRun, "dry-run", false, "Skip opening store and client.")
+
+	set.BoolVar(&v.checkErr, "check-err", false, "Invoke failing client twice to verify error caching.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *JobsRun) error {
+
+		err := app.JobsRun(c.dryRun, c.checkErr, c.client, c.meta)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("run failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/jobs_custom.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+	"example.com/requiresapp/jobs"
+)
+
+var _ Cmd = (*JobsCustom)(nil)
+
+type JobsCustom struct {
+	*Jobs
+	Flags         *flag.FlagSet
+	env           string
+	store         *jobs.Store
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *JobsCustom) error
+	storeOnce     sync.Once
+	storeValue    *jobs.Store
+	storeErr      error
+}
+
+func (c *JobsCustom) Store() (*jobs.Store, error) {
+	c.storeOnce.Do(func() {
+		c.registerReset(func() {
+			c.storeOnce = sync.Once{}
+			var zero *jobs.Store
+			c.storeValue = zero
+			c.storeErr = nil
+		})
+		c.storeValue, c.storeErr = jobs.OpenStore(c.env, c.rt)
+		if c.storeErr == nil {
+			if closer, ok := interface{}(c.storeValue).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.storeValue, c.storeErr
+}
+
+type UsageDataJobsCustom struct {
+	*JobsCustom
+	Recursive bool
+}
+
+func (c *JobsCustom) Usage() {
+	err := executeUsage(c.outputStderr(), "custom_usage.txt", UsageDataJobsCustom{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *JobsCustom) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *JobsCustom) commandPath() string { return "app jobs custom" }
+
+func (c *JobsCustom) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "custom_usage.txt", UsageDataJobsCustom{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *JobsCustom) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+
+			case "env":
+				if !hasValue {
+					if i+1 < len(args) {
+						value = args[i+1]
+						i++
+					} else {
+						return c.usageError(cmd.UsageMissingFlagValue, name, nil, "flag %s requires a value", name)
+					}
+				}
+				c.env = value
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		v, err := c.Store()
+		if err != nil {
+			return fmt.Errorf("failed to provide store: %w", err)
+		}
+		c.store = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Jobs) NewJobsCustom() *JobsCustom {
+	set := flag.NewFlagSet("custom", flag.ContinueOnError)
+	v := &JobsCustom{
+		Jobs:        c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+
+	set.StringVar(&v.env, "env", "canary", "Custom environment.")
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *JobsCustom) error {
+
+		err := app.JobsCustom(c.env, c.store)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("custom failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/db.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"slices"
+	"strings"
+
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Db)(nil)
+
+type Db struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Db) error
+}
+
+type UsageDataDb struct {
+	*Db
+	Recursive bool
+}
+
+func (c *Db) Usage() {
+	err := executeUsage(c.outputStderr(), "db_usage.txt", UsageDataDb{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Db) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Db) commandPath() string { return "app db" }
+
+func (c *Db) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "db_usage.txt", UsageDataDb{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Db) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewDb() *Db {
+	set := flag.NewFlagSet("db", flag.ContinueOnError)
+	v := &Db{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewDbQuery() })
+		v.SubCommands["query"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/db_query.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+	"example.com/requiresapp/db"
+)
+
+var _ Cmd = (*DbQuery)(nil)
+
+type DbQuery struct {
+	*Db
+	Flags         *flag.FlagSet
+	replica       *db.Conn
+	primary       *db.Conn
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *DbQuery) error
+	replicaDBOnce sync.Once
+	replicaDB     *db.Conn
+	replicaDBErr  error
+	primaryDBOnce sync.Once
+	primaryDB     *db.Conn
+	primaryDBErr  error
+}
+
+func (c *DbQuery) ReplicaDB() (*db.Conn, error) {
+	c.replicaDBOnce.Do(func() {
+		c.registerReset(func() {
+			c.replicaDBOnce = sync.Once{}
+			var zero *db.Conn
+			c.replicaDB = zero
+			c.replicaDBErr = nil
+		})
+		c.replicaDB, c.replicaDBErr = db.ReplicaDB()
+		if c.replicaDBErr == nil {
+			if closer, ok := interface{}(c.replicaDB).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.replicaDB, c.replicaDBErr
+}
+
+func (c *DbQuery) PrimaryDB() (*db.Conn, error) {
+	c.primaryDBOnce.Do(func() {
+		c.registerReset(func() {
+			c.primaryDBOnce = sync.Once{}
+			var zero *db.Conn
+			c.primaryDB = zero
+			c.primaryDBErr = nil
+		})
+		c.primaryDB, c.primaryDBErr = db.PrimaryDB()
+		if c.primaryDBErr == nil {
+			if closer, ok := interface{}(c.primaryDB).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.primaryDB, c.primaryDBErr
+}
+
+type UsageDataDbQuery struct {
+	*DbQuery
+	Recursive bool
+}
+
+func (c *DbQuery) Usage() {
+	err := executeUsage(c.outputStderr(), "query_usage.txt", UsageDataDbQuery{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *DbQuery) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *DbQuery) commandPath() string { return "app db query" }
+
+func (c *DbQuery) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "query_usage.txt", UsageDataDbQuery{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *DbQuery) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		v, err := c.ReplicaDB()
+		if err != nil {
+			return fmt.Errorf("failed to provide replica: %w", err)
+		}
+		c.replica = v
+	}
+	{
+		v, err := c.PrimaryDB()
+		if err != nil {
+			return fmt.Errorf("failed to provide primary: %w", err)
+		}
+		c.primary = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Db) NewDbQuery() *DbQuery {
+	set := flag.NewFlagSet("query", flag.ContinueOnError)
+	v := &DbQuery{
+		Db:          c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *DbQuery) error {
+
+		err := app.DBQuery(c.replica, c.primary)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("query failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/stores.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"slices"
+	"strings"
+
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Stores)(nil)
+
+type Stores struct {
+	*RootCmd
+	Flags         *flag.FlagSet
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *Stores) error
+}
+
+type UsageDataStores struct {
+	*Stores
+	Recursive bool
+}
+
+func (c *Stores) Usage() {
+	err := executeUsage(c.outputStderr(), "stores_usage.txt", UsageDataStores{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Stores) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Stores) commandPath() string { return "app stores" }
+
+func (c *Stores) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "stores_usage.txt", UsageDataStores{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Stores) Execute(args []string) (err error) {
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	c.Usage()
+	if len(remainingArgs) > 0 {
+		return c.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", remainingArgs[0])
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewStores() *Stores {
+	set := flag.NewFlagSet("stores", flag.ContinueOnError)
+	v := &Stores{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	{
+		subCmd := NewLazyCommand(func() Cmd { return v.NewStoresSync() })
+		v.SubCommands["sync"] = subCmd
+
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"help"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				deep := slices.Contains(args, "-deep")
+				var target []string
+				for _, arg := range args {
+					if arg == "-deep" {
+						continue
+					}
+					if arg == "-h" || arg == "--help" {
+						continue
+					}
+					target = append(target, arg)
+				}
+				if len(target) > 0 {
+					if sub, ok := v.SubCommands[target[0]]; ok && target[0] != "help" && target[0] != "usage" {
+						nextArgs := append([]string{"usage"}, target[1:]...)
+						if deep {
+							nextArgs = append(nextArgs, "-deep")
+						}
+						return sub().Execute(nextArgs)
+					}
+					v.Usage()
+					return v.usageError(cmd.UsageUnknownCommand, "", nil, "unknown command: %s", target[0])
+				}
+				if deep {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/stores_sync.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/cmd"
+	"example.com/requiresapp/storea"
+	"example.com/requiresapp/storeb"
+)
+
+var _ Cmd = (*StoresSync)(nil)
+
+type StoresSync struct {
+	*Stores
+	Flags         *flag.FlagSet
+	a             *storea.Handle
+	b             *storeb.Handle
+	SubCommands   map[string]func() Cmd
+	CommandAction func(c *StoresSync) error
+	openOnce      sync.Once
+	open          *storea.Handle
+	openErr       error
+	openOnce2     sync.Once
+	openValue     *storeb.Handle
+	openErr2      error
+}
+
+func (c *StoresSync) Open() (*storea.Handle, error) {
+	c.openOnce.Do(func() {
+		c.registerReset(func() {
+			c.openOnce = sync.Once{}
+			var zero *storea.Handle
+			c.open = zero
+			c.openErr = nil
+		})
+		c.open, c.openErr = storea.Open()
+		if c.openErr == nil {
+			if closer, ok := interface{}(c.open).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.open, c.openErr
+}
+
+func (c *StoresSync) ProvideOpen() (*storeb.Handle, error) {
+	c.openOnce2.Do(func() {
+		c.registerReset(func() {
+			c.openOnce2 = sync.Once{}
+			var zero *storeb.Handle
+			c.openValue = zero
+			c.openErr2 = nil
+		})
+		c.openValue, c.openErr2 = storeb.Open()
+		if c.openErr2 == nil {
+			if closer, ok := interface{}(c.openValue).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.openValue, c.openErr2
+}
+
+type UsageDataStoresSync struct {
+	*StoresSync
+	Recursive bool
+}
+
+func (c *StoresSync) Usage() {
+	err := executeUsage(c.outputStderr(), "sync_usage.txt", UsageDataStoresSync{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *StoresSync) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *StoresSync) commandPath() string { return "app stores sync" }
+
+func (c *StoresSync) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "sync_usage.txt", UsageDataStoresSync{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *StoresSync) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		v, err := c.Open()
+		if err != nil {
+			return fmt.Errorf("failed to provide a: %w", err)
+		}
+		c.a = v
+	}
+	{
+		v, err := c.ProvideOpen()
+		if err != nil {
+			return fmt.Errorf("failed to provide b: %w", err)
+		}
+		c.b = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *Stores) NewStoresSync() *StoresSync {
+	set := flag.NewFlagSet("sync", flag.ContinueOnError)
+	v := &StoresSync{
+		Stores:      c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *StoresSync) error {
+
+		err := app.StoresSync(c.a, c.b)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("sync failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}
+-- expected/compat.go --
+// Code generated by github.com/arran4/go-subcommand/cmd/gosubc. DO NOT EDIT.
+
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+
+	app "example.com/requiresapp"
+	"example.com/requiresapp/auth"
+	"example.com/requiresapp/cmd"
+)
+
+var _ Cmd = (*Compat)(nil)
+
+type Compat struct {
+	*RootCmd
+	Flags           *flag.FlagSet
+	user            *auth.User
+	SubCommands     map[string]func() Cmd
+	CommandAction   func(c *Compat) error
+	currentUserOnce sync.Once
+	currentUser     *auth.User
+	currentUserErr  error
+}
+
+func (c *Compat) CurrentUser() (*auth.User, error) {
+	c.currentUserOnce.Do(func() {
+		c.registerReset(func() {
+			c.currentUserOnce = sync.Once{}
+			var zero *auth.User
+			c.currentUser = zero
+			c.currentUserErr = nil
+		})
+		c.currentUser, c.currentUserErr = auth.CurrentUser()
+		if c.currentUserErr == nil {
+			if closer, ok := interface{}(c.currentUser).(io.Closer); ok {
+				c.registerCleanup(closer.Close)
+			}
+		}
+	})
+	return c.currentUser, c.currentUserErr
+}
+
+type UsageDataCompat struct {
+	*Compat
+	Recursive bool
+}
+
+func (c *Compat) Usage() {
+	err := executeUsage(c.outputStderr(), "compat_usage.txt", UsageDataCompat{c, false})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Compat) usageError(kind cmd.UsageErrorKind, flag string, cause error, format string, args ...any) error {
+	return newUsageError(c.commandPath(), kind, flag, cause, format, args...)
+}
+
+func (c *Compat) commandPath() string { return "app compat" }
+
+func (c *Compat) UsageRecursive() {
+	err := executeUsage(c.outputStderr(), "compat_usage.txt", UsageDataCompat{c, true})
+	if err != nil {
+		fmt.Fprintf(c.outputStderr(), "Error generating usage: %s\n", err)
+	}
+}
+
+func (c *Compat) Execute(args []string) (err error) {
+	var cleanups []func() error
+	defer func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			if cerr := cleanups[i](); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
+	var remainingArgs []string
+	dashDashSeen := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			dashDashSeen = true
+			remainingArgs = append(remainingArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if arg == "--help" {
+				c.Usage()
+				return nil
+			}
+			name := arg[2:]
+			value := ""
+			hasValue := false
+			if strings.Contains(name, "=") {
+				parts := strings.SplitN(name, "=", 2)
+				name = parts[0]
+				value = parts[1]
+				hasValue = true
+			}
+			_ = value
+			_ = hasValue
+			switch name {
+			default:
+				return c.usageError(cmd.UsageUnknownFlag, name, nil, "unknown flag: --%s", name)
+			}
+		} else if strings.HasPrefix(arg, "-") && arg != "-" {
+			// Short flags
+			shorts := arg[1:]
+			for j := 0; j < len(shorts); j++ {
+				char := string(shorts[j])
+				if char == "h" {
+					c.Usage()
+					return nil
+				}
+				found := false
+				if !found {
+					return c.usageError(cmd.UsageUnknownFlag, char, nil, "unknown flag: -%s", char)
+				}
+			}
+		} else {
+			remainingArgs = append(remainingArgs, args[i:]...)
+			break
+		}
+	}
+
+	isHelpRequest := !dashDashSeen && len(remainingArgs) > 0 && (remainingArgs[0] == "help" || remainingArgs[0] == "usage")
+	if !isHelpRequest && !dashDashSeen {
+		for _, arg := range remainingArgs {
+			if arg == "--" {
+				break
+			}
+			if arg == "-h" || arg == "--help" {
+				isHelpRequest = true
+				break
+			}
+		}
+	}
+
+	if !dashDashSeen && len(remainingArgs) > 0 {
+		if cmd, ok := c.SubCommands[remainingArgs[0]]; ok {
+			return cmd().Execute(remainingArgs[1:])
+		}
+	}
+
+	if isHelpRequest && len(remainingArgs) > 0 {
+		c.Usage()
+		return nil
+	}
+
+	{
+		dep0, depErr0 := c.CurrentUser()
+		if depErr0 != nil {
+			return depErr0
+		}
+		if err := auth.RequireAdmin(dep0); err != nil {
+			return err
+		}
+	}
+	{
+		v, err := c.CurrentUser()
+		if err != nil {
+			return fmt.Errorf("failed to provide user: %w", err)
+		}
+		c.user = v
+	}
+	if c.CommandAction != nil {
+		if err := c.CommandAction(c); err != nil {
+			return err
+		}
+	} else {
+		c.Usage()
+	}
+
+	return nil
+}
+
+func (c *RootCmd) NewCompat() *Compat {
+	set := flag.NewFlagSet("compat", flag.ContinueOnError)
+	v := &Compat{
+		RootCmd:     c,
+		Flags:       set,
+		SubCommands: make(map[string]func() Cmd),
+	}
+	set.SetOutput(v.outputStderr())
+	set.Usage = v.Usage
+
+	v.CommandAction = func(c *Compat) error {
+
+		err := app.Compat(c.user)
+		if err != nil {
+			var exitCode *cmd.ErrExitCode
+			if errors.As(err, &exitCode) {
+				return err
+			}
+			if errors.Is(err, cmd.ErrPrintHelp) {
+				c.Usage()
+				return nil
+			}
+			if errors.Is(err, cmd.ErrHelp) {
+				fmt.Fprintf(c.outputStderr(), "Use '%s help' for more information.\n", os.Args[0])
+				return nil
+			}
+			if errors.Is(err, cmd.ErrUsage) {
+				return err
+			}
+			return fmt.Errorf("compat failed: %w", err)
+		}
+		return nil
+	}
+
+	v.SubCommands["help"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	v.SubCommands["usage"] = func() Cmd {
+		return &InternalCommand{
+			Exec: func(args []string) error {
+				if slices.Contains(args, "-deep") {
+					v.UsageRecursive()
+					return nil
+				}
+				v.Usage()
+				return nil
+			},
+			UsageFunc: v.Usage,
+		}
+	}
+	return v
+}

@@ -86,3 +86,78 @@ func TestMetadataConflictsAndCombination(t *testing.T) {
 		t.Fatalf("root-alias collision=%v", err)
 	}
 }
+
+func TestMetadataRequiresDeclarationsAndDiagnostics(t *testing.T) {
+	baseFiles := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/metareq\n\ngo 1.22\n")},
+		"auth/auth.go": {Data: []byte(`package auth
+
+type User struct{}
+
+func CurrentUser() (*User, error) { return nil, nil }
+`)},
+		"commands/meta.go": {Data: []byte(`// App is a command ` + "`app`" + ` -- Declared help.
+// Requires: auth.CurrentUser
+package commands
+
+import "example.com/metareq/auth"
+
+// Run is a subcommand ` + "`app run`" + ` -- Run command.
+func Run(user *auth.User) error { return nil }
+`)},
+	}
+
+	// Go functionless command metadata must use the file's Go imports to resolve Requires.
+	data, err := (&CommentParser{}).Parse(baseFiles, ".", &parsers.ParseOptions{Recursive: true})
+	if err != nil {
+		t.Fatalf("functionless Go metadata Requires failed: %v", err)
+	}
+	if len(data.Commands[0].Requirements) != 1 || data.Commands[0].Requirements[0].Func.ImportPath != "example.com/metareq/auth" {
+		t.Fatalf("go metadata reqs = %+v", data.Commands[0].Requirements)
+	}
+
+	// Native .mdc CommandDeclarations with quoted import path works cleanly.
+	mdcFS := fstest.MapFS{
+		"go.mod":       baseFiles["go.mod"],
+		"auth/auth.go": baseFiles["auth/auth.go"],
+		"commands/app.go": {Data: []byte(`package commands
+
+import "example.com/metareq/auth"
+
+// Run is a subcommand ` + "`app run`" + ` -- Run command.
+func Run(user *auth.User) error { return nil }
+`)},
+	}
+	data, err = (&CommentParser{}).Parse(mdcFS, ".", &parsers.ParseOptions{
+		Recursive: true,
+		CommandDeclarations: []parsers.CommandDeclaration{{
+			Kind:     "command",
+			Path:     "app",
+			Text:     "Description: App.\nRequires: \"example.com/metareq/auth\".CurrentUser\n",
+			Filename: "gosubc.mdc",
+			Line:     3,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("native .mdc quoted Requires failed: %v", err)
+	}
+	if len(data.Commands[0].Requirements) != 1 || data.Commands[0].Requirements[0].Func.ImportPath != "example.com/metareq/auth" {
+		t.Fatalf("mdc reqs = %+v", data.Commands[0].Requirements)
+	}
+
+	// Native .mdc with unqualified Go alias must fail with explicit diagnostic.
+	_, err = (&CommentParser{}).Parse(mdcFS, ".", &parsers.ParseOptions{
+		Recursive: true,
+		CommandDeclarations: []parsers.CommandDeclaration{{
+			Kind:     "command",
+			Path:     "app",
+			Text:     "Requires: auth.CurrentUser\n",
+			Filename: "gosubc.mdc",
+			Line:     5,
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "unqualified package alias") || !strings.Contains(err.Error(), "gosubc.mdc:") {
+		t.Fatalf("expected unqualified alias diagnostic for .mdc, got %v", err)
+	}
+}
+

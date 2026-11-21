@@ -18,11 +18,28 @@ import (
 
 func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 	{{if .Parent}}
+	{{- if .Parent.Parent}}
+	root := &RootCmd{
+		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
+		Commands: make(map[string]func() Cmd),
+	}
+	{{- range .ParentAncestors}}
+	parent{{.SubCommandStructName}} := &{{.SubCommandStructName}}{
+		{{- if .Parent}}
+		{{.Parent.SubCommandStructName}}: parent{{.Parent.SubCommandStructName}},
+		{{- else}}
+		RootCmd: root,
+		{{- end}}
+	}
+	{{- end}}
+	parent := parent{{.Parent.SubCommandStructName}}
+	{{- else}}
 	parent := &{{.Parent.SubCommandStructName}}{}
 	parent.RootCmd = &RootCmd{
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
+	{{- end}}
 	cmd := parent.{{.ConstructorMethodName}}()
 	{{else}}
 	parent := &RootCmd{
@@ -176,11 +193,28 @@ func Test{{.SubCommandStructName}}_Execute(t *testing.T) {
 
 func Test{{.SubCommandStructName}}_ExecuteHelpAndUnknownFlags(t *testing.T) {
 	{{if .Parent}}
+	{{- if .Parent.Parent}}
+	root := &RootCmd{
+		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
+		Commands: make(map[string]func() Cmd),
+	}
+	{{- range .ParentAncestors}}
+	parent{{.SubCommandStructName}} := &{{.SubCommandStructName}}{
+		{{- if .Parent}}
+		{{.Parent.SubCommandStructName}}: parent{{.Parent.SubCommandStructName}},
+		{{- else}}
+		RootCmd: root,
+		{{- end}}
+	}
+	{{- end}}
+	parent := parent{{.Parent.SubCommandStructName}}
+	{{- else}}
 	parent := &{{.Parent.SubCommandStructName}}{}
 	parent.RootCmd = &RootCmd{
 		FlagSet: flag.NewFlagSet("root", flag.ContinueOnError),
 		Commands: make(map[string]func() Cmd),
 	}
+	{{- end}}
 	cmd := parent.{{.ConstructorMethodName}}()
 	{{else}}
 	parent := &RootCmd{

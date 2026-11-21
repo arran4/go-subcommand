@@ -82,15 +82,22 @@ type GeneratorConfig struct {
 	Func *FuncRef
 	// Inputs names parameters made available to a provider. They are resolved
 	// within the command's generated field graph, not through globals.
-	Inputs []string
+	Inputs              []string
+	ExplicitlyQualified bool `json:"-"`
 }
 
 // InitializerConfig specifies a mandatory initialization guard attached to a command node.
 type InitializerConfig struct {
-	Name         string
-	Func         *FuncRef
-	Inputs       []string
-	ReturnsError bool
+	Name            string
+	Func            *FuncRef
+	Inputs          []string
+	ReturnsError    bool
+	SignatureParams []ResolvedParamSpec `json:",omitempty"`
+	SignatureKnown  bool                `json:",omitempty"`
+	Filename        string              `json:",omitempty"`
+	Line            int                 `json:",omitempty"`
+	ResolvedInputs  []DependencyInput   `json:"-"`
+	IdentityKey     string              `json:"-"`
 }
 
 func (ic *InitializerConfig) CallFor(receiver string) string {
@@ -118,13 +125,22 @@ type SharedProviderConfig struct {
 	Type                    string
 	TypeImportPath          string
 	TypePackageName         string
+	CanonicalTypeKey        string              `json:",omitempty"`
+	TypeImports             []TypeImportRef     `json:",omitempty"`
 	Func                    *FuncRef
 	Inputs                  []string
 	ReturnsError            bool
-	AllocatedMethodName     string `json:"-"`
-	AllocatedOnceFieldName  string `json:"-"`
-	AllocatedValueFieldName string `json:"-"`
-	AllocatedErrorFieldName string `json:"-"`
+	SignatureParams         []ResolvedParamSpec `json:",omitempty"`
+	SignatureKnown          bool                `json:",omitempty"`
+	Filename                string              `json:",omitempty"`
+	Line                    int                 `json:",omitempty"`
+	ResolvedInputs          []DependencyInput   `json:"-"`
+	IdentityKey             string              `json:"-"`
+	GeneratedByResolver     bool                `json:"-"`
+	AllocatedMethodName     string              `json:"-"`
+	AllocatedOnceFieldName  string              `json:"-"`
+	AllocatedValueFieldName string              `json:"-"`
+	AllocatedErrorFieldName string              `json:"-"`
 }
 
 func (sp *SharedProviderConfig) MethodName() string {
@@ -155,11 +171,28 @@ func (sp *SharedProviderConfig) ErrorFieldName() string {
 	return toCamelCase(sp.Name) + "Err"
 }
 
+func isPredeclaredGoTypeName(name string) bool {
+	switch name {
+	case "any", "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64", "rune", "string",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr":
+		return true
+	default:
+		return false
+	}
+}
+
 func (sp *SharedProviderConfig) QualifiedType() string {
 	if sp.Type == "" {
 		return "any"
 	}
 	if sp.TypePackageName != "" && sp.TypePackageName != "main" && !strings.Contains(sp.Type, ".") {
+		trimmed := strings.TrimPrefix(sp.Type, "[]*")
+		trimmed = strings.TrimPrefix(trimmed, "[]")
+		trimmed = strings.TrimLeft(trimmed, "*")
+		if isPredeclaredGoTypeName(trimmed) || strings.ContainsAny(trimmed, "[](){}* ") {
+			return sp.Type
+		}
 		if strings.HasPrefix(sp.Type, "*") {
 			return "*" + sp.TypePackageName + "." + strings.TrimPrefix(sp.Type, "*")
 		}
@@ -172,6 +205,37 @@ func (sp *SharedProviderConfig) QualifiedType() string {
 		return sp.TypePackageName + "." + sp.Type
 	}
 	return sp.Type
+}
+
+// ResolvedCallFor renders the provider invocation using resolved graph inputs when available.
+func (sp *SharedProviderConfig) ResolvedCallFor(receiver string) string {
+	if sp.Func == nil || sp.Func.FunctionName == "" {
+		return ""
+	}
+	if len(sp.ResolvedInputs) == 0 && len(sp.Inputs) > 0 {
+		return sp.CallFor(receiver)
+	}
+	args := make([]string, 0, len(sp.ResolvedInputs))
+	for i, in := range sp.ResolvedInputs {
+		if in.Kind == DependencyInputProvider {
+			args = append(args, fmt.Sprintf("dep%d", i))
+			continue
+		}
+		expr := in.ParamExpr
+		if expr == "" {
+			expr = in.ParamName
+		}
+		if receiver != "" {
+			args = append(args, receiver+"."+expr)
+		} else {
+			args = append(args, expr)
+		}
+	}
+	argumentList := strings.Join(args, ", ")
+	if sp.Func.CommandPackageName != "" {
+		return fmt.Sprintf("%s.%s(%s)", sp.Func.CommandPackageName, sp.Func.FunctionName, argumentList)
+	}
+	return fmt.Sprintf("%s(%s)", sp.Func.FunctionName, argumentList)
 }
 
 func (sp *SharedProviderConfig) CallFor(receiver string) string {
@@ -251,6 +315,8 @@ type Command struct {
 	ManSections     []ManSection
 	Initializers    []*InitializerConfig
 	SharedProviders []*SharedProviderConfig
+	Requirements    []*RequirementConfig
+	ExecutionSteps  []*ExecutionStep `json:"-"`
 	// MainCmdName is the name of the command (usually derived from the function name).
 	MainCmdName string
 	// SubCommands is the list of direct subcommands for this command.
@@ -394,9 +460,16 @@ type FunctionParameter struct {
 	// IsUnmatchedArgv indicates that the parameter receives otherwise-unrecognized argv tokens.
 	IsUnmatchedArgv bool `json:",omitempty"`
 
-	TypeImportPath  string
-	TypePackageName string
-	TypeName        string
+	TypeImportPath        string
+	TypePackageName       string
+	TypeName              string
+	CanonicalTypeKey      string          `json:"-"`
+	TypeImports           []TypeImportRef `json:"-"`
+	HasExplicitCLISpec    bool            `json:"-"`
+	CallableReturnTypeKey string          `json:"-"`
+	CallableReturnsError  bool            `json:"-"`
+	IsCallableInfallible  bool            `json:"-"`
+	BoundByResolver       bool            `json:"-"`
 
 	SharedProvider *SharedProviderConfig
 	IsLazyCallable bool
@@ -404,6 +477,24 @@ type FunctionParameter struct {
 
 func (p *FunctionParameter) IsLazyCallableType() bool {
 	return strings.HasPrefix(p.Type, "func()")
+}
+
+// IsBuiltinCLIType reports whether p has a built-in CLI flag/positional type
+// that must never be silently converted into an implicitly bound provider.
+func (p *FunctionParameter) IsBuiltinCLIType() bool {
+	if p.IsLazyCallableType() || p.IsFlagPresence() {
+		return false
+	}
+	if p.IsReader() || p.IsWriter() || p.IsDuration() {
+		return true
+	}
+	if strings.Contains(p.Type, "map[") || strings.Contains(p.Type, "func(") || strings.Contains(p.Type, "chan ") || strings.Contains(p.Type, "<-chan") || strings.Contains(p.Type, "interface{") || strings.Contains(p.Type, "struct{") {
+		return false
+	}
+	if p.TypeImportPath != "" {
+		return false
+	}
+	return isPredeclaredGoTypeName(p.BaseType()) && p.BaseType() != "error" && p.BaseType() != "any" && p.BaseType() != "uintptr"
 }
 
 func (dm *DataModel) Validate() error {
@@ -429,9 +520,11 @@ func (cmd *Command) Validate() (err error) {
 			return fmt.Errorf("command %s: duplicate initializer %q", cmd.MainCmdName, ic.Name)
 		}
 		seenInits[ic.Name] = true
-		for _, in := range ic.Inputs {
-			if cmd.FindParameter(in) == nil {
-				return fmt.Errorf("command %s: initializer %q references unknown parameter %q", cmd.MainCmdName, ic.Name, in)
+		if len(ic.ResolvedInputs) != len(ic.Inputs) {
+			for _, in := range ic.Inputs {
+				if cmd.FindParameter(in) == nil {
+					return fmt.Errorf("command %s: initializer %q references unknown parameter %q", cmd.MainCmdName, ic.Name, in)
+				}
 			}
 		}
 	}
@@ -440,13 +533,17 @@ func (cmd *Command) Validate() (err error) {
 		if sp.Func == nil || sp.Func.FunctionName == "" {
 			return fmt.Errorf("command %s: shared provider declaration has no function", cmd.MainCmdName)
 		}
-		if seenShared[sp.Name] {
-			return fmt.Errorf("command %s: duplicate shared provider %q", cmd.MainCmdName, sp.Name)
+		if !sp.GeneratedByResolver {
+			if seenShared[sp.Name] {
+				return fmt.Errorf("command %s: duplicate shared provider %q", cmd.MainCmdName, sp.Name)
+			}
+			seenShared[sp.Name] = true
 		}
-		seenShared[sp.Name] = true
-		for _, in := range sp.Inputs {
-			if cmd.FindParameter(in) == nil {
-				return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", cmd.MainCmdName, sp.Name, in)
+		if len(sp.ResolvedInputs) != len(sp.Inputs) {
+			for _, in := range sp.Inputs {
+				if cmd.FindParameter(in) == nil {
+					return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", cmd.MainCmdName, sp.Name, in)
+				}
 			}
 		}
 	}
@@ -569,9 +666,11 @@ func (sc *SubCommand) Validate() (err error) {
 			return fmt.Errorf("command %s: duplicate initializer %q", sc.ProgName(), ic.Name)
 		}
 		seenInits[ic.Name] = true
-		for _, in := range ic.Inputs {
-			if sc.FindParameter(in) == nil {
-				return fmt.Errorf("command %s: initializer %q references unknown parameter %q", sc.ProgName(), ic.Name, in)
+		if len(ic.ResolvedInputs) != len(ic.Inputs) {
+			for _, in := range ic.Inputs {
+				if sc.FindParameter(in) == nil {
+					return fmt.Errorf("command %s: initializer %q references unknown parameter %q", sc.ProgName(), ic.Name, in)
+				}
 			}
 		}
 	}
@@ -580,13 +679,17 @@ func (sc *SubCommand) Validate() (err error) {
 		if sp.Func == nil || sp.Func.FunctionName == "" {
 			return fmt.Errorf("command %s: shared provider declaration has no function", sc.ProgName())
 		}
-		if seenShared[sp.Name] {
-			return fmt.Errorf("command %s: duplicate shared provider %q", sc.ProgName(), sp.Name)
+		if !sp.GeneratedByResolver {
+			if seenShared[sp.Name] {
+				return fmt.Errorf("command %s: duplicate shared provider %q", sc.ProgName(), sp.Name)
+			}
+			seenShared[sp.Name] = true
 		}
-		seenShared[sp.Name] = true
-		for _, in := range sp.Inputs {
-			if sc.FindParameter(in) == nil {
-				return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", sc.ProgName(), sp.Name, in)
+		if len(sp.ResolvedInputs) != len(sp.Inputs) {
+			for _, in := range sp.Inputs {
+				if sc.FindParameter(in) == nil {
+					return fmt.Errorf("command %s: shared provider %q references unknown parameter %q", sc.ProgName(), sp.Name, in)
+				}
 			}
 		}
 	}
@@ -618,7 +721,7 @@ func (sc *SubCommand) Validate() (err error) {
 // acquisition helpers for reader or writer parameters.
 func (cmd *Command) HasIOParameters() bool {
 	for _, p := range cmd.Parameters {
-		if p.IsReader() || p.IsWriter() {
+		if !p.HasGenerator() && !p.HasConstructor() && (p.IsReader() || p.IsWriter()) {
 			return true
 		}
 	}
@@ -787,7 +890,7 @@ func (cmd *Command) ConstructorArgName(target *FunctionParameter) string {
 // acquisition helpers for reader or writer parameters.
 func (sc *SubCommand) HasIOParameters() bool {
 	for _, p := range sc.Parameters {
-		if p.IsReader() || p.IsWriter() {
+		if !p.HasGenerator() && !p.HasConstructor() && (p.IsReader() || p.IsWriter()) {
 			return true
 		}
 	}
@@ -953,8 +1056,14 @@ func validateParameters(params []*FunctionParameter, cmdName string) error {
 				return fmt.Errorf("command %s: parameter %s has type %s which is unsupported for (optional value); supported types are scalar primitives (T), pointers (*T, **T), and slices ([]T, []*T)", cmdName, p.Name, p.Type)
 			}
 		}
-		if p.IsFile() {
+		if p.IsFile() && !p.HasGenerator() && !p.HasConstructor() && !p.HasCustomParser() {
 			return fmt.Errorf("parameter %q has type *os.File but no implicit file access mode; use io.Reader/io.ReadCloser for input, io.Writer/io.WriteCloser for output, or configure an explicit provider", p.Name)
+		}
+		if strings.Contains(p.Type, "map[") && !p.IsFlagPresence() && !p.HasGenerator() && !p.HasConstructor() && !p.HasCustomParser() {
+			return fmt.Errorf("parameter %s: unsupported type %s without (flag presence)", p.Name, p.Type)
+		}
+		if p.IsLazyCallableType() && !p.HasGenerator() && !p.HasConstructor() {
+			return fmt.Errorf("command %s: parameter %q has lazy callable type %s without a matching provider in scope", cmdName, p.Name, p.Type)
 		}
 	}
 	return validateGeneratorDependencies(params, cmdName)
@@ -965,7 +1074,7 @@ func validateGeneratorDependencies(params []*FunctionParameter, cmdName string) 
 	providers := make(map[string]*FunctionParameter)
 	for _, param := range params {
 		all[param.Name] = param
-		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited && param.SharedProvider == nil {
 			providers[param.Name] = param
 		}
 	}
@@ -1410,6 +1519,8 @@ type SubCommand struct {
 	ManSections     []ManSection
 	Initializers    []*InitializerConfig
 	SharedProviders []*SharedProviderConfig
+	Requirements    []*RequirementConfig
+	ExecutionSteps  []*ExecutionStep `json:"-"`
 	*Command
 	// Parent points to the parent command.
 	Parent *SubCommand
@@ -2004,6 +2115,22 @@ func (sc *SubCommand) HasPathRequiredFlags() bool {
 	return len(sc.PathRequiredFlags()) > 0
 }
 
+// ParentAncestors returns the subcommand's ancestors ordered from top-most child
+// of the root command down to sc.Parent.
+func (sc *SubCommand) ParentAncestors() []*SubCommand {
+	if sc == nil || sc.Parent == nil {
+		return nil
+	}
+	var chain []*SubCommand
+	for curr := sc.Parent; curr != nil; curr = curr.Parent {
+		chain = append(chain, curr)
+	}
+	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+	return chain
+}
+
 func (sc *SubCommand) ResolveInheritance() {
 	for _, p := range sc.Parameters {
 		if p.DeclaredIn != sc.SubCommandName && p.DeclaredIn != "" {
@@ -2102,9 +2229,9 @@ func (cmd *Command) HierarchyInitializers() []*InitializerConfig {
 	return cmd.Initializers
 }
 
-// HasLifecycle reports whether any command in the tree uses shared providers or initializers.
+// HasLifecycle reports whether any command in the tree uses shared providers, initializers, or execution steps.
 func (cmd *Command) HasLifecycle() bool {
-	if len(cmd.Initializers) > 0 || len(cmd.SharedProviders) > 0 {
+	if len(cmd.Initializers) > 0 || len(cmd.SharedProviders) > 0 || len(cmd.ExecutionSteps) > 0 {
 		return true
 	}
 	for _, sc := range cmd.SubCommands {
@@ -2116,7 +2243,7 @@ func (cmd *Command) HasLifecycle() bool {
 }
 
 func (sc *SubCommand) HasLifecycle() bool {
-	if len(sc.Initializers) > 0 || len(sc.SharedProviders) > 0 {
+	if len(sc.Initializers) > 0 || len(sc.SharedProviders) > 0 || len(sc.ExecutionSteps) > 0 {
 		return true
 	}
 	for _, child := range sc.SubCommands {
@@ -2146,160 +2273,7 @@ func (sc *SubCommand) FindParameter(name string) *FunctionParameter {
 }
 
 func (cmd *Command) ResolveSharedProviders() error {
-	for _, sc := range cmd.SubCommands {
-		bindExplicitProviders(sc)
-	}
-
-	type paramPair struct {
-		subCmd *SubCommand
-		param  *FunctionParameter
-	}
-	type groupKey struct {
-		importPath string
-		funcName   string
-		inputs     string
-	}
-
-	usages := make(map[groupKey][]paramPair)
-	var collectUsages func(sc *SubCommand)
-	collectUsages = func(sc *SubCommand) {
-		for _, p := range sc.Parameters {
-			if p.SharedProvider != nil {
-				continue
-			}
-			if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
-				k := groupKey{
-					importPath: p.Generator.Func.ImportPath,
-					funcName:   p.Generator.Func.FunctionName,
-					inputs:     strings.Join(p.Generator.Inputs, ","),
-				}
-				usages[k] = append(usages[k], paramPair{subCmd: sc, param: p})
-			}
-		}
-		for _, child := range sc.SubCommands {
-			collectUsages(child)
-		}
-	}
-	for _, sc := range cmd.SubCommands {
-		collectUsages(sc)
-	}
-
-	for _, pairs := range usages {
-		if len(pairs) < 2 {
-			continue
-		}
-		distinctFuncs := make(map[string]bool)
-		for _, pair := range pairs {
-			fn := pair.subCmd.SubCommandFunctionName
-			if fn != "" && fn != cmd.FunctionName {
-				distinctFuncs[fn] = true
-			}
-		}
-		if len(distinctFuncs) < 2 {
-			continue
-		}
-		first := pairs[0]
-		commonPath := subCommandPath(first.subCmd)
-		for _, pair := range pairs[1:] {
-			p := subCommandPath(pair.subCmd)
-			commonPath = commonPrefix(commonPath, p)
-			if len(commonPath) == 0 {
-				break
-			}
-		}
-
-		p0 := first.param
-		actualType := p0.Type
-		if p0.IsLazyCallableType() {
-			actualType = ExtractCallableReturnType(p0.Type)
-		}
-
-		if len(commonPath) == 0 {
-			canProvide := true
-			for _, in := range p0.Generator.Inputs {
-				if cmd.FindParameter(in) == nil {
-					canProvide = false
-					break
-				}
-			}
-			if !canProvide {
-				continue
-			}
-
-			var sp *SharedProviderConfig
-			for _, existing := range cmd.SharedProviders {
-				if existing.Func != nil && existing.Func.FunctionName == p0.Generator.Func.FunctionName && existing.Func.ImportPath == p0.Generator.Func.ImportPath {
-					sp = existing
-					break
-				}
-			}
-			if sp == nil {
-				sp = &SharedProviderConfig{
-					Name:            p0.Name,
-					Type:            actualType,
-					TypeImportPath:  p0.TypeImportPath,
-					TypePackageName: p0.TypePackageName,
-					Func:            p0.Generator.Func,
-					Inputs:          p0.Generator.Inputs,
-					ReturnsError:    true,
-				}
-				cmd.SharedProviders = append(cmd.SharedProviders, sp)
-			}
-			for _, pair := range pairs {
-				pair.param.SharedProvider = sp
-				pair.param.FlagAliases = nil
-				pair.param.ShortAliases = nil
-				pair.param.LongAliases = nil
-				if pair.param.IsLazyCallableType() {
-					pair.param.IsLazyCallable = true
-				}
-			}
-		} else {
-			lca := commonPath[len(commonPath)-1]
-			canProvide := true
-			for _, in := range p0.Generator.Inputs {
-				if lca.FindParameter(in) == nil {
-					canProvide = false
-					break
-				}
-			}
-			if !canProvide {
-				continue
-			}
-
-			var sp *SharedProviderConfig
-			for _, existing := range lca.SharedProviders {
-				if existing.Func != nil && existing.Func.FunctionName == p0.Generator.Func.FunctionName && existing.Func.ImportPath == p0.Generator.Func.ImportPath {
-					sp = existing
-					break
-				}
-			}
-			if sp == nil {
-				sp = &SharedProviderConfig{
-					Name:            p0.Name,
-					Type:            actualType,
-					TypeImportPath:  p0.TypeImportPath,
-					TypePackageName: p0.TypePackageName,
-					Func:            p0.Generator.Func,
-					Inputs:          p0.Generator.Inputs,
-					ReturnsError:    true,
-				}
-				lca.SharedProviders = append(lca.SharedProviders, sp)
-			}
-			for _, pair := range pairs {
-				pair.param.SharedProvider = sp
-				pair.param.FlagAliases = nil
-				pair.param.ShortAliases = nil
-				pair.param.LongAliases = nil
-				if pair.param.IsLazyCallableType() {
-					pair.param.IsLazyCallable = true
-				}
-			}
-		}
-	}
-
-	cmd.allocateSharedProviderNames()
-	return nil
+	return cmd.ResolveDependencies()
 }
 
 func (cmd *Command) allocateSharedProviderNames() {
@@ -2372,7 +2346,11 @@ func (cmd *Command) allocateSharedProviderNames() {
 
 	allocateHost := func(providers []*SharedProviderConfig, hostMembers, subtreeMethodBlockers map[string]bool) {
 		for _, sp := range providers {
-			baseMethod := toPascalCase(sp.Name)
+			nameBase := sp.Name
+			if nameBase == "" && sp.Func != nil {
+				nameBase = deriveDefaultProviderName(sp.Func.FunctionName, sp.Func.CommandPackageName)
+			}
+			baseMethod := toPascalCase(nameBase)
 			if baseMethod == "" {
 				baseMethod = "Resource"
 			}
@@ -2383,7 +2361,7 @@ func (cmd *Command) allocateSharedProviderNames() {
 			hostMembers[methodName] = true
 			subtreeMethodBlockers[methodName] = true
 
-			baseField := toCamelCase(sp.Name)
+			baseField := toCamelCase(nameBase)
 			if baseField == "" {
 				baseField = "resource"
 			}
@@ -2409,9 +2387,11 @@ func (cmd *Command) allocateSharedProviderNames() {
 
 	rootMembers := copySet(builtIns)
 	rootMethodBlockers := copySet(builtIns)
+	rootAncestorParams := make(map[string]bool)
 	for _, p := range cmd.Parameters {
 		rootMembers[p.Name] = true
 		rootMethodBlockers[p.Name] = true
+		rootAncestorParams[p.Name] = true
 	}
 	for _, sc := range cmd.SubCommands {
 		if sc.ConstructorMethodName != "" {
@@ -2422,10 +2402,13 @@ func (cmd *Command) allocateSharedProviderNames() {
 	}
 	allocateHost(cmd.SharedProviders, rootMembers, rootMethodBlockers)
 
-	var visitSub func(sc *SubCommand, ancestorMethods map[string]bool)
-	visitSub = func(sc *SubCommand, ancestorMethods map[string]bool) {
+	var visitSub func(sc *SubCommand, ancestorMethods, ancestorParams map[string]bool)
+	visitSub = func(sc *SubCommand, ancestorMethods, ancestorParams map[string]bool) {
 		members := copySet(builtIns)
 		for k := range ancestorMethods {
+			members[k] = true
+		}
+		for k := range ancestorParams {
 			members[k] = true
 		}
 		if sc.Parent != nil && sc.Parent.SubCommandStructName != "" {
@@ -2434,11 +2417,13 @@ func (cmd *Command) allocateSharedProviderNames() {
 			members["RootCmd"] = true
 		}
 		methodBlockers := copySet(members)
+		nextAncestorParams := copySet(ancestorParams)
 		for _, p := range sc.Parameters {
 			methodBlockers[p.Name] = true
 			methodBlockers[p.ValueFieldName()] = true
 			if !p.Inherited {
 				members[p.Name] = true
+				nextAncestorParams[p.Name] = true
 			}
 		}
 		for _, child := range sc.SubCommands {
@@ -2454,7 +2439,7 @@ func (cmd *Command) allocateSharedProviderNames() {
 			nextAncestorMethods[sp.MethodName()] = true
 		}
 		for _, child := range sc.SubCommands {
-			visitSub(child, nextAncestorMethods)
+			visitSub(child, nextAncestorMethods, nextAncestorParams)
 		}
 	}
 
@@ -2463,102 +2448,7 @@ func (cmd *Command) allocateSharedProviderNames() {
 		rootAncestorMethods[sp.MethodName()] = true
 	}
 	for _, sc := range cmd.SubCommands {
-		visitSub(sc, rootAncestorMethods)
-	}
-}
-
-func subCommandPath(sc *SubCommand) []*SubCommand {
-	var path []*SubCommand
-	for curr := sc; curr != nil; curr = curr.Parent {
-		path = append(path, curr)
-	}
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-	return path
-}
-
-func commonPrefix(a, b []*SubCommand) []*SubCommand {
-	var prefix []*SubCommand
-	minLen := len(a)
-	if len(b) < minLen {
-		minLen = len(b)
-	}
-	for i := 0; i < minLen; i++ {
-		if a[i] == b[i] {
-			prefix = append(prefix, a[i])
-		} else {
-			break
-		}
-	}
-	return prefix
-}
-
-func bindExplicitProviders(sc *SubCommand) {
-	for _, p := range sc.Parameters {
-		if p.SharedProvider != nil {
-			continue
-		}
-		genName := ""
-		if p.Generator.Func != nil {
-			genName = p.Generator.Func.FunctionName
-		}
-		for curr := sc.Parent; curr != nil; curr = curr.Parent {
-			for _, sp := range curr.SharedProviders {
-				if matchSharedProvider(p, genName, sp) {
-					p.SharedProvider = sp
-					bindProviderType(p, sp)
-					break
-				}
-			}
-			if p.SharedProvider != nil {
-				break
-			}
-		}
-		if p.SharedProvider == nil && sc.Command != nil {
-			for _, sp := range sc.Command.SharedProviders {
-				if matchSharedProvider(p, genName, sp) {
-					p.SharedProvider = sp
-					bindProviderType(p, sp)
-					break
-				}
-			}
-		}
-	}
-	for _, child := range sc.SubCommands {
-		bindExplicitProviders(child)
-	}
-}
-
-func matchSharedProvider(p *FunctionParameter, genName string, sp *SharedProviderConfig) bool {
-	if p.Generator.Type != SourceTypeGenerator && p.Generator.Type != "" {
-		return false
-	}
-	if p.Name == sp.Name || genName == sp.Name {
-		return true
-	}
-	if sp.Func != nil && genName != "" && genName == sp.Func.FunctionName {
-		return true
-	}
-	return false
-}
-
-func bindProviderType(p *FunctionParameter, sp *SharedProviderConfig) {
-	p.Generator.Type = SourceTypeGenerator
-	p.FlagAliases = nil
-	p.ShortAliases = nil
-	p.LongAliases = nil
-	if p.IsLazyCallableType() {
-		p.IsLazyCallable = true
-		if sp.Type == "" {
-			sp.Type = ExtractCallableReturnType(p.Type)
-			sp.TypeImportPath = p.TypeImportPath
-			sp.TypePackageName = p.TypePackageName
-		}
-	} else if sp.Type == "" {
-		sp.Type = p.Type
-		sp.TypeImportPath = p.TypeImportPath
-		sp.TypePackageName = p.TypePackageName
+		visitSub(sc, rootAncestorMethods, rootAncestorParams)
 	}
 }
 
@@ -2817,7 +2707,7 @@ func (sc *SubCommand) MaxUsageDefaultLength() int {
 }
 
 func (p *FunctionParameter) HasGenerator() bool {
-	return p.Generator.Type == SourceTypeGenerator || p.IsFlagPresence()
+	return p.Generator.Type == SourceTypeGenerator || p.IsFlagPresence() || p.SharedProvider != nil
 }
 
 func (p *FunctionParameter) IsFlagPresence() bool {
@@ -2860,7 +2750,7 @@ func (p *FunctionParameter) GeneratorCallFor(receiver string, fields bool) strin
 func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
 	byName := make(map[string]*FunctionParameter)
 	for _, param := range params {
-		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited && param.SharedProvider == nil {
 			byName[param.Name] = param
 		}
 	}
@@ -2881,7 +2771,7 @@ func OrderedGenerators(params []*FunctionParameter) []*FunctionParameter {
 		ordered = append(ordered, param)
 	}
 	for _, param := range params {
-		if param.Generator.Type == SourceTypeGenerator && !param.Inherited {
+		if param.Generator.Type == SourceTypeGenerator && !param.Inherited && param.SharedProvider == nil {
 			visit(param)
 		}
 	}

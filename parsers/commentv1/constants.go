@@ -39,6 +39,11 @@ const (
 	//   default: help simple
 	//   default: true
 	DirectiveDefault = "default:"
+
+	// DirectiveRequires declares scoped runtime requirements (error guards or typed providers).
+	// Example:
+	//   Requires: auth.RequireAdmin, session.OpenAdminSession
+	DirectiveRequires = "requires"
 )
 
 // Prefixes used to identify parameter definitions in comments.
