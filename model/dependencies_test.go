@@ -405,3 +405,289 @@ func TestResolveDependencies_IdentityOrderingPromotionAndCallables(t *testing.T)
 		t.Fatalf("shadowed flag input produced identical provider IdentityKey %q", shadowRoot.ExecutionSteps[0].Provider.IdentityKey)
 	}
 }
+
+func TestResolveDependencies_ExplicitInferredArgs(t *testing.T) {
+	authPkg := "example.com/app/auth"
+	userType := `*` + `"` + authPkg + `".User`
+	badgeType := `*` + `"` + authPkg + `".Badge`
+
+	makeCurrentUser := func() *RequirementConfig {
+		return &RequirementConfig{
+			Func:             &FuncRef{ImportPath: authPkg, PackagePath: authPkg, CommandPackageName: "auth", FunctionName: "CurrentUser"},
+			Kind:             RequirementKindProvider,
+			ReturnType:       "*auth.User",
+			CanonicalTypeKey: userType,
+			TypeImportPath:   authPkg,
+			TypePackageName:  "auth",
+			TypeName:         "User",
+			ReturnsError:     true,
+			SignatureKnown:   true,
+		}
+	}
+
+	// 1. Explicit guard arg consuming inferred action parameter resolves to provider edge.
+	root := &Command{MainCmdName: "app", PackagePath: "example.com/app"}
+	userParam := &FunctionParameter{Name: "user", Type: "*auth.User", CanonicalTypeKey: userType, DeclaredIn: "list"}
+	list := &SubCommand{
+		Command:                root,
+		SubCommandName:         "list",
+		SubCommandStructName:   "ListCmd",
+		SubCommandFunctionName: "List",
+		Requirements: []*RequirementConfig{
+			makeCurrentUser(),
+			{
+				Func:            &FuncRef{ImportPath: authPkg, PackagePath: authPkg, CommandPackageName: "auth", FunctionName: "RequireAdmin"},
+				Kind:            RequirementKindGuard,
+				ExplicitInputs:  []string{"user"},
+				HasExplicitArgs: true,
+				ReturnsError:    true,
+				SignatureKnown:  true,
+				SignatureParams: []ResolvedParamSpec{{Name: "u", Type: "*auth.User", CanonicalTypeKey: userType}},
+			},
+		},
+		Parameters: []*FunctionParameter{userParam},
+	}
+
+	// 2. Explicit provider arg consuming inferred action parameter (reversed parameter order).
+	badgeParam := &FunctionParameter{Name: "badge", Type: "*auth.Badge", CanonicalTypeKey: badgeType, DeclaredIn: "badge"}
+	badgeUserParam := &FunctionParameter{Name: "user", Type: "*auth.User", CanonicalTypeKey: userType, DeclaredIn: "badge"}
+	badge := &SubCommand{
+		Command:                root,
+		SubCommandName:         "badge",
+		SubCommandStructName:   "BadgeCmd",
+		SubCommandFunctionName: "ShowBadge",
+		Requirements: []*RequirementConfig{
+			makeCurrentUser(),
+			{
+				Func:             &FuncRef{ImportPath: authPkg, PackagePath: authPkg, CommandPackageName: "auth", FunctionName: "BuildBadge"},
+				Kind:             RequirementKindProvider,
+				ReturnType:       "*auth.Badge",
+				CanonicalTypeKey: badgeType,
+				TypeImportPath:   authPkg,
+				TypePackageName:  "auth",
+				TypeName:         "Badge",
+				ExplicitInputs:   []string{"user"},
+				HasExplicitArgs:  true,
+				ReturnsError:     true,
+				SignatureKnown:   true,
+				SignatureParams:  []ResolvedParamSpec{{Name: "u", Type: "*auth.User", CanonicalTypeKey: userType}},
+			},
+		},
+		Parameters: []*FunctionParameter{badgeParam, badgeUserParam},
+	}
+	root.SubCommands = []*SubCommand{list, badge}
+
+	if err := root.ResolveDependencies(); err != nil {
+		t.Fatalf("ResolveDependencies: %v", err)
+	}
+	if len(list.ExecutionSteps) != 1 {
+		t.Fatalf("list.ExecutionSteps len = %d, want 1", len(list.ExecutionSteps))
+	}
+	step := list.ExecutionSteps[0]
+	if len(step.Inputs) != 1 || step.Inputs[0].Kind != DependencyInputProvider || step.Inputs[0].Provider == nil {
+		t.Fatalf("expected RequireAdmin(user) to bind DependencyInputProvider, got %+v", step.Inputs)
+	}
+	if userParam.SharedProvider == nil || step.Inputs[0].Provider != userParam.SharedProvider {
+		t.Fatalf("RequireAdmin provider (%p) != List user provider (%p)", step.Inputs[0].Provider, userParam.SharedProvider)
+	}
+	if badgeParam.SharedProvider == nil || badgeUserParam.SharedProvider == nil {
+		t.Fatalf("expected badge=%v and user=%v to bind", badgeParam.SharedProvider, badgeUserParam.SharedProvider)
+	}
+	if len(badgeParam.SharedProvider.ResolvedInputs) != 1 || badgeParam.SharedProvider.ResolvedInputs[0].Kind != DependencyInputProvider || badgeParam.SharedProvider.ResolvedInputs[0].Provider != badgeUserParam.SharedProvider {
+		t.Fatalf("BuildBadge(user) inputs = %+v, want CurrentUser provider", badgeParam.SharedProvider.ResolvedInputs)
+	}
+
+	// 3. Cycle through explicit inferred args must be rejected.
+	typeA := `*"example.com/cyc".A`
+	typeB := `*"example.com/cyc".B`
+	cycRoot := &Command{
+		MainCmdName:  "app",
+		FunctionName: "Run",
+		Requirements: []*RequirementConfig{
+			{
+				Func:             &FuncRef{ImportPath: "example.com/cyc", PackagePath: "example.com/cyc", CommandPackageName: "cyc", FunctionName: "MakeA"},
+				Kind:             RequirementKindProvider,
+				ReturnType:       "*cyc.A",
+				CanonicalTypeKey: typeA,
+				ExplicitInputs:   []string{"b"},
+				HasExplicitArgs:  true,
+				ReturnsError:     true,
+				SignatureKnown:   true,
+				SignatureParams:  []ResolvedParamSpec{{Name: "b", Type: "*cyc.B", CanonicalTypeKey: typeB}},
+			},
+			{
+				Func:             &FuncRef{ImportPath: "example.com/cyc", PackagePath: "example.com/cyc", CommandPackageName: "cyc", FunctionName: "MakeB"},
+				Kind:             RequirementKindProvider,
+				ReturnType:       "*cyc.B",
+				CanonicalTypeKey: typeB,
+				ExplicitInputs:   []string{"a"},
+				HasExplicitArgs:  true,
+				ReturnsError:     true,
+				SignatureKnown:   true,
+				SignatureParams:  []ResolvedParamSpec{{Name: "a", Type: "*cyc.A", CanonicalTypeKey: typeA}},
+			},
+		},
+		Parameters: []*FunctionParameter{
+			{Name: "a", Type: "*cyc.A", CanonicalTypeKey: typeA, DeclaredIn: "app"},
+			{Name: "b", Type: "*cyc.B", CanonicalTypeKey: typeB, DeclaredIn: "app"},
+		},
+	}
+	if err := cycRoot.ResolveDependencies(); err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("expected cycle through explicit inferred args, got %v", err)
+	}
+
+	// 4. Guard referencing unbound non-CLI param with missing provider must fail instead of passing zero value.
+	missingRoot := &Command{
+		MainCmdName:  "app",
+		FunctionName: "Run",
+		Requirements: []*RequirementConfig{
+			{
+				Func:            &FuncRef{ImportPath: authPkg, PackagePath: authPkg, CommandPackageName: "auth", FunctionName: "RequireAdmin"},
+				Kind:            RequirementKindGuard,
+				ExplicitInputs:  []string{"user"},
+				HasExplicitArgs: true,
+				ReturnsError:    true,
+			},
+		},
+		Parameters: []*FunctionParameter{{Name: "user", Type: "*auth.User", CanonicalTypeKey: userType, DeclaredIn: "app"}},
+	}
+	if err := missingRoot.ResolveDependencies(); err == nil || !strings.Contains(err.Error(), "unbound dependency parameter") {
+		t.Fatalf("expected unbound dependency parameter error, got %v", err)
+	}
+}
+
+func TestResolveDependencies_LegacyNamedProvidersAndScopedMutation(t *testing.T) {
+	dbPkg := "example.com/app/db"
+	dbType := `*` + `"` + dbPkg + `".Conn`
+	storePkg := "example.com/app/store"
+	storeType := `*` + `"` + storePkg + `".Store`
+
+	primarySP := &SharedProviderConfig{
+		Name:             "primary",
+		Type:             "*db.Conn",
+		CanonicalTypeKey: dbType,
+		Func:             &FuncRef{ImportPath: dbPkg, PackagePath: dbPkg, CommandPackageName: "db", FunctionName: "PrimaryDB"},
+		ReturnsError:     true,
+		SignatureKnown:   true,
+	}
+	replicaSP := &SharedProviderConfig{
+		Name:             "replica",
+		Type:             "*db.Conn",
+		CanonicalTypeKey: dbType,
+		Func:             &FuncRef{ImportPath: dbPkg, PackagePath: dbPkg, CommandPackageName: "db", FunctionName: "ReplicaDB"},
+		ReturnsError:     true,
+		SignatureKnown:   true,
+	}
+
+	root := &Command{MainCmdName: "app", PackagePath: "example.com/app"}
+	dbCmd := &SubCommand{
+		Command:              root,
+		SubCommandName:       "db",
+		SubCommandStructName: "DBCmd",
+		SharedProviders:      []*SharedProviderConfig{primarySP, replicaSP},
+	}
+	primaryParam := &FunctionParameter{Name: "primary", Type: "*db.Conn", CanonicalTypeKey: dbType, DeclaredIn: "report"}
+	replicaParam := &FunctionParameter{Name: "replica", Type: "*db.Conn", CanonicalTypeKey: dbType, DeclaredIn: "report"}
+	report := &SubCommand{
+		Command:                root,
+		Parent:                 dbCmd,
+		SubCommandName:         "report",
+		SubCommandStructName:   "DBReportCmd",
+		SubCommandFunctionName: "Report",
+		Parameters:             []*FunctionParameter{primaryParam, replicaParam},
+	}
+	swapPrimary := &FunctionParameter{
+		Name:             "primary",
+		Type:             "*db.Conn",
+		CanonicalTypeKey: dbType,
+		DeclaredIn:       "swap",
+		Generator: GeneratorConfig{
+			Type: SourceTypeGenerator,
+			Func: &FuncRef{ImportPath: dbPkg, PackagePath: dbPkg, CommandPackageName: "db", FunctionName: "ReplicaDB"},
+		},
+	}
+	swap := &SubCommand{
+		Command:                root,
+		Parent:                 dbCmd,
+		SubCommandName:         "swap",
+		SubCommandStructName:   "DBSwapCmd",
+		SubCommandFunctionName: "Swap",
+		Parameters:             []*FunctionParameter{swapPrimary},
+	}
+	dbCmd.SubCommands = []*SubCommand{report, swap}
+	root.SubCommands = []*SubCommand{dbCmd}
+
+	if err := root.ResolveDependencies(); err != nil {
+		t.Fatalf("legacy named binding failed: %v", err)
+	}
+	if primaryParam.SharedProvider != primarySP || replicaParam.SharedProvider != replicaSP {
+		t.Fatalf("legacy named binding mismatch: primary=%+v replica=%+v", primaryParam.SharedProvider, replicaParam.SharedProvider)
+	}
+	if swapPrimary.SharedProvider != replicaSP {
+		t.Fatalf("explicit override failed: got %+v, want replicaSP", swapPrimary.SharedProvider)
+	}
+
+	// Unmatched parameter name of same type still reports ambiguity.
+	other := &SubCommand{
+		Command:                root,
+		Parent:                 dbCmd,
+		SubCommandName:         "other",
+		SubCommandStructName:   "DBOtherCmd",
+		SubCommandFunctionName: "Other",
+		Parameters:             []*FunctionParameter{{Name: "conn", Type: "*db.Conn", CanonicalTypeKey: dbType, DeclaredIn: "other"}},
+	}
+	dbCmd.SubCommands = append(dbCmd.SubCommands, other)
+	if err := root.ResolveDependencies(); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected ambiguity for unmatched parameter name, got %v", err)
+	}
+
+	// Shadowed --env input across legacy SharedProvider must not mutate root's SharedProviderConfig.
+	rootStoreSP := &SharedProviderConfig{
+		Name:             "store",
+		Type:             "*store.Store",
+		CanonicalTypeKey: storeType,
+		Func:             &FuncRef{ImportPath: storePkg, PackagePath: storePkg, CommandPackageName: "store", FunctionName: "OpenStore"},
+		Inputs:           []string{"env"},
+		ReturnsError:     true,
+		SignatureKnown:   true,
+	}
+	runStore := &FunctionParameter{Name: "store", Type: "*store.Store", CanonicalTypeKey: storeType, DeclaredIn: "run"}
+	customStore := &FunctionParameter{Name: "store", Type: "*store.Store", CanonicalTypeKey: storeType, DeclaredIn: "custom"}
+	shadowRoot := &Command{
+		MainCmdName:     "app",
+		SharedProviders: []*SharedProviderConfig{rootStoreSP},
+		Parameters:      []*FunctionParameter{{Name: "env", Type: "string", CanonicalTypeKey: "string", DeclaredIn: "app"}},
+		SubCommands: []*SubCommand{
+			{
+				SubCommandName:         "run",
+				SubCommandStructName:   "RunCmd",
+				SubCommandFunctionName: "Run",
+				Parameters:             []*FunctionParameter{runStore},
+			},
+			{
+				SubCommandName:         "custom",
+				SubCommandStructName:   "CustomCmd",
+				SubCommandFunctionName: "Custom",
+				Parameters: []*FunctionParameter{
+					{Name: "env", Type: "string", CanonicalTypeKey: "string", DeclaredIn: "custom"},
+					customStore,
+				},
+			},
+		},
+	}
+	for _, sc := range shadowRoot.SubCommands {
+		sc.Command = shadowRoot
+	}
+	if err := shadowRoot.ResolveDependencies(); err != nil {
+		t.Fatalf("shadowed legacy store ResolveDependencies: %v", err)
+	}
+	if runStore.SharedProvider != rootStoreSP {
+		t.Fatalf("expected runStore to claim rootStoreSP")
+	}
+	if customStore.SharedProvider == nil || customStore.SharedProvider == rootStoreSP {
+		t.Fatalf("customStore reused/mutated rootStoreSP instead of allocating scoped instance")
+	}
+	if rootStoreSP.ResolvedInputs[0].ParamOwnerPath != "<root>" || customStore.SharedProvider.ResolvedInputs[0].ParamOwnerPath != "custom" {
+		t.Fatalf("unexpected input owner paths: root=%+v custom=%+v", rootStoreSP.ResolvedInputs, customStore.SharedProvider.ResolvedInputs)
+	}
+}

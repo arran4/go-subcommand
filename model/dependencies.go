@@ -290,12 +290,13 @@ type resolvedProvider struct {
 }
 
 type depResolver struct {
-	cmd              *Command
-	root             *depScope
-	allScopes        []*depScope
-	providersByID map[string]*resolvedProvider
-	providerOrder []string
-	nextDeclOrder int
+	cmd             *Command
+	root            *depScope
+	allScopes       []*depScope
+	providersByID   map[string]*resolvedProvider
+	providerOrder   []string
+	claimedLegacySP map[*SharedProviderConfig]string
+	nextDeclOrder   int
 }
 
 // ResolveDependencies validates and resolves the unified dependency graph
@@ -307,8 +308,9 @@ func (cmd *Command) ResolveDependencies() error {
 		return nil
 	}
 	r := &depResolver{
-		cmd:           cmd,
-		providersByID: make(map[string]*resolvedProvider),
+		cmd:             cmd,
+		providersByID:   make(map[string]*resolvedProvider),
+		claimedLegacySP: make(map[*SharedProviderConfig]string),
 	}
 	r.resetCommandTree()
 	if err := r.buildScopes(); err != nil {
@@ -317,6 +319,7 @@ func (cmd *Command) ResolveDependencies() error {
 	if err := r.resolveExecutableRoutes(); err != nil {
 		return err
 	}
+	r.populateUnclaimedLegacyProviderInputs()
 	if err := r.validateUnusedRequirements(); err != nil {
 		return err
 	}
@@ -852,27 +855,33 @@ func (r *depResolver) resolveProvider(execScope *depScope, decl *providerDecl, s
 	rp, exists := r.providersByID[idKey]
 	if !exists {
 		var sp *SharedProviderConfig
-		if decl.isLegacy && decl.legacySP != nil {
+		var host *depScope
+		reuseLegacy := decl.isLegacy && decl.legacySP != nil && r.inputsAvailableInScope(inputs, decl.owner) &&
+			(r.claimedLegacySP[decl.legacySP] == "" || r.claimedLegacySP[decl.legacySP] == idKey)
+		if reuseLegacy {
 			sp = decl.legacySP
 			sp.ResolvedInputs = inputs
 			sp.IdentityKey = idKey
+			r.claimedLegacySP[sp] = idKey
+			host = decl.owner
 		} else {
 			sp = &SharedProviderConfig{
-				Name:             decl.name,
-				Type:             decl.returnType,
-				TypeImportPath:   decl.typeImportPath,
-				TypePackageName:  decl.typePackageName,
-				CanonicalTypeKey: decl.canonicalTypeKey,
-				TypeImports:      cloneTypeImports(decl.typeImports),
-				Func:             cloneFuncRef(decl.funcRef),
-				ReturnsError:     decl.returnsError,
-				SignatureParams:  decl.signatureParams,
-				SignatureKnown:   decl.signatureKnown,
-				Filename:         decl.filename,
-				Line:             decl.line,
-				ResolvedInputs:   inputs,
-				IdentityKey:      idKey,
-				GeneratedByResolver: !decl.isLegacy,
+				Name:                decl.name,
+				Type:                decl.returnType,
+				TypeImportPath:      decl.typeImportPath,
+				TypePackageName:     decl.typePackageName,
+				CanonicalTypeKey:    decl.canonicalTypeKey,
+				TypeImports:         cloneTypeImports(decl.typeImports),
+				Func:                cloneFuncRef(decl.funcRef),
+				Inputs:              append([]string(nil), decl.explicitInputs...),
+				ReturnsError:        decl.returnsError,
+				SignatureParams:     decl.signatureParams,
+				SignatureKnown:      decl.signatureKnown,
+				Filename:            decl.filename,
+				Line:                decl.line,
+				ResolvedInputs:      inputs,
+				IdentityKey:         idKey,
+				GeneratedByResolver: true,
 			}
 		}
 		fallible := sp.ReturnsError
@@ -882,10 +891,6 @@ func (r *depResolver) resolveProvider(execScope *depScope, decl *providerDecl, s
 					fallible = true
 				}
 			}
-		}
-		var host *depScope
-		if decl.isLegacy {
-			host = decl.owner
 		}
 		rp = &resolvedProvider{
 			sp:               sp,
@@ -903,6 +908,56 @@ func (r *depResolver) resolveProvider(execScope *depScope, decl *providerDecl, s
 		r.recordDemanderRecursive(rp, execScope)
 	}
 	return rp, nil
+}
+
+func (r *depResolver) inputsAvailableInScope(inputs []DependencyInput, target *depScope) bool {
+	if target == nil {
+		return false
+	}
+	for _, in := range inputs {
+		switch in.Kind {
+		case DependencyInputParam:
+			owner := r.scopeByPathKey(in.ParamOwnerPath)
+			if owner == nil || !isAncestorScope(owner, target) {
+				return false
+			}
+		case DependencyInputProvider:
+			if in.Provider == nil {
+				return false
+			}
+			up := r.providersByID[in.Provider.IdentityKey]
+			if up == nil || up.declHost == nil || !isAncestorScope(up.declHost, target) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (r *depResolver) populateUnclaimedLegacyProviderInputs() {
+	for _, scope := range r.allScopes {
+		for _, decl := range scope.declProviders {
+			if !decl.isLegacy || decl.legacySP == nil {
+				continue
+			}
+			if r.claimedLegacySP[decl.legacySP] != "" {
+				continue
+			}
+			if !decl.signatureKnown || len(decl.signatureParams) == 0 || len(decl.legacySP.ResolvedInputs) > 0 || len(decl.legacySP.Inputs) > 0 {
+				continue
+			}
+			ins, err := r.resolveFunctionInputs(scope, scope, decl.funcRef, nil, false, decl.signatureParams, true, nil, false, decl.filename, decl.line, decl.name)
+			if err == nil && r.inputsAvailableInScope(ins, scope) {
+				for i := range ins {
+					if ins[i].Kind == DependencyInputParam {
+						owner := r.scopeByPathKey(ins[i].ParamOwnerPath)
+						ins[i].ParamExpr = computeParamExpr(scope, owner, ins[i].ParamName)
+					}
+				}
+				decl.legacySP.ResolvedInputs = ins
+			}
+		}
+	}
 }
 
 func (r *depResolver) findCanonicalAncestorDeclScope(target *providerDecl) *depScope {
@@ -1034,35 +1089,35 @@ func (r *depResolver) resolveExplicitInput(
 	diagName string,
 	fnRef *FuncRef,
 ) (DependencyInput, error) {
-	if ownerScope, param := r.findNearestParam(execScope, argName); param != nil {
-		if param.Generator.Type == SourceTypeGenerator && !param.Inherited && param.SharedProvider == nil {
-			rp, err := r.promoteLocalGenerator(ownerScope, param, stack, recordDemander)
-			if err != nil {
-				return DependencyInput{}, err
-			}
-			isCallable := expectedSig != nil && expectedSig.IsCallable
-			if isCallable && !expectedSig.CallableReturnsError && rp.isFallible {
-				return DependencyInput{}, declErr(filename, line, execScope, "requirement %s parameter %q has infallible callable type, but provider %s can return an error", formatFuncRefName(fnRef), expectedSig.Name, formatFuncRefName(rp.sp.Func))
-			}
-			return DependencyInput{
-				Kind:           DependencyInputProvider,
-				Provider:       rp.sp,
-				LazyCallable:   isCallable,
-				LazyReturnsErr: expectedSig != nil && expectedSig.CallableReturnsError,
-			}, nil
+	validateProviderForExpectedSig := func(rp *resolvedProvider, providerLabel string) (DependencyInput, error) {
+		isCallable := expectedSig != nil && expectedSig.IsCallable
+		if isCallable && !expectedSig.CallableReturnsError && rp.isFallible {
+			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s parameter %q has infallible callable type, but provider %s can return an error", formatFuncRefName(fnRef), expectedSig.Name, formatFuncRefName(rp.sp.Func))
 		}
-		if param.SharedProvider != nil {
-			if recordDemander {
-				if rp := r.providersByID[param.SharedProvider.IdentityKey]; rp != nil {
-					r.recordDemanderRecursive(rp, execScope)
-				}
-			}
-			return DependencyInput{
-				Kind:           DependencyInputProvider,
-				Provider:       param.SharedProvider,
-				LazyCallable:   expectedSig != nil && expectedSig.IsCallable,
-				LazyReturnsErr: expectedSig != nil && expectedSig.CallableReturnsError,
-			}, nil
+		if expectedSig != nil && !isCallable && expectedSig.CanonicalTypeKey != "" && rp.canonicalTypeKey != "" && rp.canonicalTypeKey != expectedSig.CanonicalTypeKey {
+			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q expects type %s, got provider %s returning %s", formatFuncRefName(fnRef), argName, expectedSig.Type, providerLabel, rp.sp.Type)
+		}
+		if expectedSig != nil && isCallable && expectedSig.CallableReturnTypeKey != "" && rp.canonicalTypeKey != "" && rp.canonicalTypeKey != expectedSig.CallableReturnTypeKey {
+			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q expects callable returning %s, got %s", formatFuncRefName(fnRef), argName, expectedSig.CallableReturnTypeKey, rp.canonicalTypeKey)
+		}
+		return DependencyInput{
+			Kind:           DependencyInputProvider,
+			Provider:       rp.sp,
+			LazyCallable:   isCallable,
+			LazyReturnsErr: expectedSig != nil && expectedSig.CallableReturnsError,
+		}, nil
+	}
+
+	if ownerScope, param := r.findNearestParam(execScope, argName); param != nil {
+		rp, isProvider, err := r.resolveActionParamAsProvider(execScope, ownerScope, param, stack, recordDemander, true)
+		if err != nil {
+			return DependencyInput{}, err
+		}
+		if isProvider && rp != nil {
+			return validateProviderForExpectedSig(rp, param.Name)
+		}
+		if !param.HasExplicitCLISpec && !param.IsBuiltinCLIType() && !param.HasConstructor() && !param.IsFlagPresence() && !param.IsUnmatchedArgv {
+			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q references unbound dependency parameter %q (%s)", formatFuncRefName(fnRef), argName, param.Name, param.Type)
 		}
 		paramType := paramCanonicalType(param)
 		if expectedSig != nil && expectedSig.CanonicalTypeKey != "" && paramType != "" && paramType != expectedSig.CanonicalTypeKey {
@@ -1081,22 +1136,7 @@ func (r *depResolver) resolveExplicitInput(
 		if err != nil {
 			return DependencyInput{}, err
 		}
-		isCallable := expectedSig != nil && expectedSig.IsCallable
-		if isCallable && !expectedSig.CallableReturnsError && rp.isFallible {
-			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q has infallible callable type, but provider %s can return an error", formatFuncRefName(fnRef), argName, formatFuncRefName(rp.sp.Func))
-		}
-		if expectedSig != nil && !isCallable && expectedSig.CanonicalTypeKey != "" && rp.canonicalTypeKey != "" && rp.canonicalTypeKey != expectedSig.CanonicalTypeKey {
-			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q expects type %s, got provider %s returning %s", formatFuncRefName(fnRef), argName, expectedSig.Type, argName, rp.sp.Type)
-		}
-		if expectedSig != nil && isCallable && expectedSig.CallableReturnTypeKey != "" && rp.canonicalTypeKey != "" && rp.canonicalTypeKey != expectedSig.CallableReturnTypeKey {
-			return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q expects callable returning %s, got %s", formatFuncRefName(fnRef), argName, expectedSig.CallableReturnTypeKey, rp.canonicalTypeKey)
-		}
-		return DependencyInput{
-			Kind:           DependencyInputProvider,
-			Provider:       rp.sp,
-			LazyCallable:   isCallable,
-			LazyReturnsErr: expectedSig != nil && expectedSig.CallableReturnsError,
-		}, nil
+		return validateProviderForExpectedSig(rp, argName)
 	}
 	if len(matchingDecls) > 1 {
 		return DependencyInput{}, declErr(filename, line, execScope, "requirement %s argument %q is ambiguous across multiple providers", formatFuncRefName(fnRef), argName)
@@ -1124,7 +1164,13 @@ func (r *depResolver) resolveImplicitInput(
 		targetType = sigParam.CallableReturnTypeKey
 	}
 
-	candidates := r.findVisibleProvidersByType(execScope, targetType)
+	var candidates []*providerDecl
+	if sigParam.Name != "" {
+		candidates = r.findNearestLegacyProviderByName(execScope, sigParam.Name, targetType)
+	}
+	if len(candidates) == 0 {
+		candidates = r.findVisibleProvidersByType(execScope, targetType)
+	}
 	var resolvedCandidates []*resolvedProvider
 	seenIDs := make(map[string]bool)
 	for _, cand := range candidates {
@@ -1309,77 +1355,167 @@ func (r *depResolver) promoteLocalGenerator(scope *depScope, param *FunctionPara
 	return rp, nil
 }
 
-func (r *depResolver) bindActionParameters(execScope *depScope) error {
-	for _, p := range execScope.params {
-		if p.Inherited || p.HasConstructor() || p.IsUnmatchedArgv || p.IsFlagPresence() {
-			continue
-		}
-		if p.Generator.Type == SourceTypeGenerator && p.Generator.Func != nil && p.Generator.Func.FunctionName != "" {
-			if err := r.bindExplicitActionParam(execScope, p); err != nil {
-				return err
-			}
-			continue
-		}
-		if p.HasExplicitCLISpec || p.HasGenerator() || p.IsBuiltinCLIType() {
-			continue
-		}
-		if err := r.bindImplicitActionParam(execScope, p); err != nil {
-			return err
-		}
+func (r *depResolver) resolveActionParamAsProvider(
+	execScope *depScope,
+	ownerScope *depScope,
+	param *FunctionParameter,
+	stack []string,
+	recordDemander bool,
+	promoteLocal bool,
+) (*resolvedProvider, bool, error) {
+	if param == nil {
+		return nil, false, nil
 	}
-	return nil
-}
+	if param.SharedProvider != nil {
+		rp := r.providersByID[param.SharedProvider.IdentityKey]
+		if rp != nil {
+			if recordDemander {
+				r.recordDemanderRecursive(rp, execScope)
+			}
+			return rp, true, nil
+		}
+		return &resolvedProvider{
+			sp:               param.SharedProvider,
+			isFallible:       param.SharedProvider.ReturnsError,
+			canonicalTypeKey: param.SharedProvider.CanonicalTypeKey,
+		}, true, nil
+	}
 
-func (r *depResolver) bindExplicitActionParam(execScope *depScope, p *FunctionParameter) error {
-	ref := p.Generator.Func
-	var matching []*providerDecl
-	for curr := execScope; curr != nil; curr = curr.parent {
-		for _, decl := range curr.declProviders {
-			if matchDeclForExplicitParam(p, ref, decl) {
-				matching = append(matching, decl)
+	if param.Generator.Type == SourceTypeGenerator && !param.Inherited && param.Generator.Func != nil && param.Generator.Func.FunctionName != "" {
+		ref := param.Generator.Func
+		var matching []*providerDecl
+		for curr := execScope; curr != nil; curr = curr.parent {
+			var scopeMatches []*providerDecl
+			aliasMatch := false
+			for _, decl := range curr.declProviders {
+				if matchDeclForExplicitParam(param, ref, decl) {
+					scopeMatches = append(scopeMatches, decl)
+					if !param.Generator.ExplicitlyQualified && len(param.Generator.Inputs) == 0 && decl.hasExplicitName && ref.FunctionName == decl.name {
+						aliasMatch = true
+					}
+				}
+			}
+			matching = append(matching, scopeMatches...)
+			if aliasMatch && len(scopeMatches) > 0 {
+				break
 			}
 		}
+		if len(matching) > 0 {
+			var resolved []*resolvedProvider
+			seenID := make(map[string]bool)
+			for _, m := range matching {
+				rp, err := r.resolveProvider(execScope, m, stack, false)
+				if err != nil {
+					return nil, false, err
+				}
+				if !seenID[rp.sp.IdentityKey] {
+					seenID[rp.sp.IdentityKey] = true
+					resolved = append(resolved, rp)
+				}
+			}
+			if len(resolved) > 1 {
+				return nil, false, fmt.Errorf("command %s: parameter %q references ambiguous provider (%s)", execScope.displayName, param.Name, formatCandidateNames(resolved))
+			}
+
+			chosen := resolved[0]
+			targetType := param.CanonicalTypeKey
+			if param.IsLazyCallableType() {
+				targetType = param.CallableReturnTypeKey
+				if !param.CallableReturnsError && chosen.isFallible {
+					return nil, false, fmt.Errorf("command %s: parameter %q has infallible callable type %s, but provider %s can return an error", execScope.displayName, param.Name, param.Type, formatFuncRefName(chosen.sp.Func))
+				}
+			}
+			if targetType != "" && chosen.canonicalTypeKey != "" && targetType != chosen.canonicalTypeKey {
+				return nil, false, fmt.Errorf("command %s: parameter %q expects type %s, but provider %s returns %s", execScope.displayName, param.Name, param.Type, formatFuncRefName(chosen.sp.Func), chosen.sp.Type)
+			}
+			if recordDemander {
+				r.recordDemanderRecursive(chosen, execScope)
+			}
+			return chosen, true, nil
+		}
+		if promoteLocal {
+			rp, err := r.promoteLocalGenerator(ownerScope, param, stack, recordDemander)
+			if err != nil {
+				return nil, false, err
+			}
+			if recordDemander && execScope != ownerScope {
+				r.recordDemanderRecursive(rp, execScope)
+			}
+			return rp, true, nil
+		}
+		return nil, false, nil
 	}
-	if len(matching) == 0 {
-		return nil
+
+	if param.Inherited || param.HasConstructor() || param.IsUnmatchedArgv || param.IsFlagPresence() || param.HasExplicitCLISpec || param.IsBuiltinCLIType() || param.HasGenerator() {
+		return nil, false, nil
+	}
+
+	targetType := param.CanonicalTypeKey
+	if param.IsLazyCallableType() {
+		targetType = param.CallableReturnTypeKey
+	}
+
+	var candidates []*providerDecl
+	if param.Name != "" {
+		candidates = r.findNearestLegacyProviderByName(execScope, param.Name, targetType)
+	}
+	if len(candidates) == 0 && targetType != "" {
+		candidates = r.findVisibleProvidersByType(execScope, targetType)
+	}
+	if len(candidates) == 0 && targetType == "" {
+		candidates = r.findVisibleLegacyProvidersByName(execScope, param.Name)
+	}
+	if len(candidates) == 0 {
+		return nil, false, nil
 	}
 
 	var resolved []*resolvedProvider
 	seenID := make(map[string]bool)
-	for _, m := range matching {
-		rp, err := r.resolveProvider(execScope, m, nil, false)
+	for _, cand := range candidates {
+		rp, err := r.resolveProvider(execScope, cand, stack, false)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		if !seenID[rp.sp.IdentityKey] {
 			seenID[rp.sp.IdentityKey] = true
 			resolved = append(resolved, rp)
 		}
 	}
+
 	if len(resolved) > 1 {
-		return fmt.Errorf("command %s: parameter %q references ambiguous provider (%s)", execScope.displayName, p.Name, formatCandidateNames(resolved))
+		return nil, false, fmt.Errorf("command %s: parameter %q of type %s is ambiguous; multiple providers match (%s); disambiguate with (provider: ...)", execScope.displayName, param.Name, param.Type, formatCandidateNames(resolved))
 	}
 
 	chosen := resolved[0]
-	targetType := p.CanonicalTypeKey
-	if p.IsLazyCallableType() {
-		targetType = p.CallableReturnTypeKey
-		if !p.CallableReturnsError && chosen.isFallible {
-			return fmt.Errorf("command %s: parameter %q has infallible callable type %s, but provider %s can return an error", execScope.displayName, p.Name, p.Type, formatFuncRefName(chosen.sp.Func))
-		}
-	}
-	if targetType != "" && chosen.canonicalTypeKey != "" && targetType != chosen.canonicalTypeKey {
-		return fmt.Errorf("command %s: parameter %q expects type %s, but provider %s returns %s", execScope.displayName, p.Name, p.Type, formatFuncRefName(chosen.sp.Func), chosen.sp.Type)
+	if param.IsLazyCallableType() && !param.CallableReturnsError && chosen.isFallible {
+		return nil, false, fmt.Errorf("command %s: parameter %q has infallible callable type %s, but provider %s can return an error", execScope.displayName, param.Name, param.Type, formatFuncRefName(chosen.sp.Func))
 	}
 
-	r.recordDemanderRecursive(chosen, execScope)
-	applyProviderBindingToParam(p, chosen.sp)
+	if recordDemander {
+		r.recordDemanderRecursive(chosen, execScope)
+	}
+	return chosen, true, nil
+}
+
+func (r *depResolver) bindActionParameters(execScope *depScope) error {
+	for _, p := range execScope.params {
+		if p.Inherited || p.HasConstructor() || p.IsUnmatchedArgv || p.IsFlagPresence() {
+			continue
+		}
+		rp, isProvider, err := r.resolveActionParamAsProvider(execScope, execScope, p, nil, true, false)
+		if err != nil {
+			return err
+		}
+		if isProvider && rp != nil {
+			applyProviderBindingToParam(p, rp.sp)
+		}
+	}
 	return nil
 }
 
 func matchDeclForExplicitParam(p *FunctionParameter, ref *FuncRef, decl *providerDecl) bool {
 	if decl.isLegacy {
-		if p.Name == decl.name || ref.FunctionName == decl.name {
+		if !p.Generator.ExplicitlyQualified && len(p.Generator.Inputs) == 0 && decl.hasExplicitName && ref.FunctionName == decl.name {
 			return true
 		}
 		if decl.funcRef != nil && ref.FunctionName == decl.funcRef.FunctionName {
@@ -1410,50 +1546,6 @@ func matchDeclForExplicitParam(p *FunctionParameter, ref *FuncRef, decl *provide
 		}
 	}
 	return true
-}
-
-func (r *depResolver) bindImplicitActionParam(execScope *depScope, p *FunctionParameter) error {
-	targetType := p.CanonicalTypeKey
-	if p.IsLazyCallableType() {
-		targetType = p.CallableReturnTypeKey
-	}
-
-	var candidates []*providerDecl
-	if targetType != "" {
-		candidates = r.findVisibleProvidersByType(execScope, targetType)
-	}
-	if len(candidates) == 0 {
-		candidates = r.findVisibleLegacyProvidersByName(execScope, p.Name)
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	var resolved []*resolvedProvider
-	seenID := make(map[string]bool)
-	for _, cand := range candidates {
-		rp, err := r.resolveProvider(execScope, cand, nil, false)
-		if err != nil {
-			return err
-		}
-		if !seenID[rp.sp.IdentityKey] {
-			seenID[rp.sp.IdentityKey] = true
-			resolved = append(resolved, rp)
-		}
-	}
-
-	if len(resolved) > 1 {
-		return fmt.Errorf("command %s: parameter %q of type %s is ambiguous; multiple providers match (%s); disambiguate with (provider: ...)", execScope.displayName, p.Name, p.Type, formatCandidateNames(resolved))
-	}
-
-	chosen := resolved[0]
-	if p.IsLazyCallableType() && !p.CallableReturnsError && chosen.isFallible {
-		return fmt.Errorf("command %s: parameter %q has infallible callable type %s, but provider %s can return an error", execScope.displayName, p.Name, p.Type, formatFuncRefName(chosen.sp.Func))
-	}
-
-	r.recordDemanderRecursive(chosen, execScope)
-	applyProviderBindingToParam(p, chosen.sp)
-	return nil
 }
 
 func applyProviderBindingToParam(p *FunctionParameter, sp *SharedProviderConfig) {
@@ -1493,6 +1585,26 @@ func (r *depResolver) findVisibleProvidersByType(start *depScope, canonicalTypeK
 	return out
 }
 
+func (r *depResolver) findNearestLegacyProviderByName(start *depScope, name, targetType string) []*providerDecl {
+	if name == "" {
+		return nil
+	}
+	for curr := start; curr != nil; curr = curr.parent {
+		var matches []*providerDecl
+		for _, decl := range curr.declProviders {
+			if decl.isLegacy && decl.name != "" && decl.name == name {
+				if targetType == "" || decl.canonicalTypeKey == "" || decl.canonicalTypeKey == targetType {
+					matches = append(matches, decl)
+				}
+			}
+		}
+		if len(matches) > 0 {
+			return matches
+		}
+	}
+	return nil
+}
+
 func (r *depResolver) findVisibleLegacyProvidersByName(start *depScope, name string) []*providerDecl {
 	var out []*providerDecl
 	for curr := start; curr != nil; curr = curr.parent {
@@ -1506,15 +1618,18 @@ func (r *depResolver) findVisibleLegacyProvidersByName(start *depScope, name str
 }
 
 func (r *depResolver) findVisibleProvidersByName(start *depScope, name string) []*providerDecl {
-	var out []*providerDecl
 	for curr := start; curr != nil; curr = curr.parent {
+		var matches []*providerDecl
 		for _, decl := range curr.declProviders {
 			if decl.hasExplicitName && decl.name == name {
-				out = append(out, decl)
+				matches = append(matches, decl)
 			}
 		}
+		if len(matches) > 0 {
+			return matches
+		}
 	}
-	return out
+	return nil
 }
 
 func (r *depResolver) findNearestParam(start *depScope, name string) (*depScope, *FunctionParameter) {
@@ -1618,6 +1733,33 @@ func (r *depResolver) probeCyclesForUnusedProvider(decl *providerDecl, stack []s
 		}
 	}
 	nextStack := append(append([]string(nil), stack...), cycleKey)
+	if len(decl.explicitInputs) > 0 || decl.hasExplicitArgs {
+		for _, argName := range decl.explicitInputs {
+			if _, param := r.findNearestParam(decl.owner, argName); param != nil {
+				if param.Generator.Type == SourceTypeGenerator && param.Generator.Func != nil {
+					for _, cand := range r.findVisibleProvidersByType(decl.owner, paramCanonicalType(param)) {
+						if err := r.probeCyclesForUnusedProvider(cand, nextStack); err != nil {
+							return err
+						}
+					}
+				} else if !param.HasExplicitCLISpec && !param.IsBuiltinCLIType() && !param.HasConstructor() {
+					for _, cand := range r.findVisibleProvidersByType(decl.owner, paramCanonicalType(param)) {
+						if err := r.probeCyclesForUnusedProvider(cand, nextStack); err != nil {
+							return err
+						}
+					}
+				}
+				continue
+			}
+			cands := r.findVisibleProvidersByName(decl.owner, argName)
+			if len(cands) == 1 {
+				if err := r.probeCyclesForUnusedProvider(cands[0], nextStack); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
 	if !decl.signatureKnown {
 		return nil
 	}

@@ -5140,6 +5140,15 @@ var streamsCollisionsFixture []byte
 //go:embed templates/testdata/runtime/issue561_requires.txtar
 var issue561RequiresFixture []byte
 
+//go:embed templates/testdata/runtime/issue561_explicit_inferred_args.txtar
+var issue561ExplicitInferredArgsFixture []byte
+
+//go:embed templates/testdata/runtime/issue561_legacy_compat.txtar
+var issue561LegacyCompatFixture []byte
+
+//go:embed templates/testdata/runtime/issue561_mixed_cleanup.txtar
+var issue561MixedCleanupFixture []byte
+
 func TestGenerateIssue522Lifecycle(t *testing.T) {
 	archive := txtar.Parse(issue522LifecycleFixture)
 	input, expected := splitInputExpected(archive)
@@ -6029,7 +6038,7 @@ func TestGenerateIssue561Requires(t *testing.T) {
 		"compat.go",
 	}
 
-	for _, backend := range []string{"gnu", "go-flag"} {
+	for _, backend := range []string{"gnu", "go-flag", "plus-minus"} {
 		t.Run(backend, func(t *testing.T) {
 			generate := func() map[string][]byte {
 				writer := NewCollectingFileWriter()
@@ -6145,11 +6154,23 @@ func TestGenerateIssue561Requires(t *testing.T) {
 				{[]string{"admin", "unknown-cmd"}, false},
 				{[]string{"jobs", "run", "--unknown-flag"}, false},
 			}
-			if backend == "gnu" {
+			if backend != "go-flag" {
 				suppressCases = append(suppressCases, struct {
 					args   []string
 					wantOK bool
 				}{[]string{"unknown-cmd"}, false})
+			}
+			if backend == "plus-minus" {
+				suppressCases = append(suppressCases,
+					struct {
+						args   []string
+						wantOK bool
+					}{[]string{"jobs", "run", "--dry-run", "--help"}, true},
+					struct {
+						args   []string
+						wantOK bool
+					}{[]string{"jobs", "run", "++unknown-plus"}, false},
+				)
 			}
 			for _, suppress := range suppressCases {
 				command := exec.Command(binary, suppress.args...)
@@ -6300,6 +6321,42 @@ func TestRequires_InProcessReuseContextAndCachedError(t *testing.T) {
 				if strings.Count(string(out), "jobs:open-store:prod:ctx-42") != 3 {
 					t.Fatalf("expected 3 isolated ctx-42 executions in output:\n%s", out)
 				}
+			}
+
+			if backend == "plus-minus" {
+				t.Run("plus_minus_staged_commit", func(t *testing.T) {
+					pmCases := []struct {
+						args       []string
+						wantStdout string
+					}{
+						{
+							args:       []string{"--env=dev", "jobs", "run"},
+							wantStdout: "jobs:load-meta\njobs:open-store:dev:cli-default\njobs:open-client:dev\naction:jobs-run:live:dev:cli-default:v1\nclose:client:dev\nclose:store:dev\n",
+						},
+						{
+							args:       []string{"jobs", "run", "--dry-run", "++dry-run"},
+							wantStdout: "jobs:load-meta\njobs:open-store:prod:cli-default\njobs:open-client:prod\naction:jobs-run:live:prod:cli-default:v1\nclose:client:prod\nclose:store:prod\n",
+						},
+						{
+							args:       []string{"--env=stage", "jobs", "custom", "--env=hotfix"},
+							wantStdout: "jobs:open-store:hotfix:cli-default\naction:jobs-custom:hotfix:hotfix\nclose:store:hotfix\n",
+						},
+					}
+					for _, bin := range []string{binary, go122Binary} {
+						for _, pc := range pmCases {
+							command := exec.Command(bin, pc.args...)
+							command.Dir = dir
+							var stdout, stderr bytes.Buffer
+							command.Stdout, command.Stderr = &stdout, &stderr
+							if err := command.Run(); err != nil {
+								t.Fatalf("%s %v failed: %v\nstderr=%s\nstdout=%s", filepath.Base(bin), pc.args, err, stderr.String(), stdout.String())
+							}
+							if stdout.String() != pc.wantStdout {
+								t.Fatalf("%s %v stdout = %q, want %q", filepath.Base(bin), pc.args, stdout.String(), pc.wantStdout)
+							}
+						}
+					}
+				})
 			}
 		})
 	}
@@ -6460,4 +6517,407 @@ func Root(u func() *auth.User) error { return nil }
 			})
 		}
 	})
+}
+
+func runIssue561FixtureSuite(
+	t *testing.T,
+	fixtureBytes []byte,
+	txtarRelPath string,
+	goldenFiles []string,
+	extraChecks func(t *testing.T, backend, dir, binary, go122Binary string),
+) {
+	t.Helper()
+	archive := txtar.Parse(fixtureBytes)
+	input, expected := splitInputExpected(archive)
+	var invocations []struct {
+		Args   []string
+		Stdout string
+		Status int
+	}
+	if err := json.Unmarshal(expected["invocations.json"].Data, &invocations); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, backend := range []string{"gnu", "go-flag", "plus-minus"} {
+		t.Run(backend, func(t *testing.T) {
+			generate := func() map[string][]byte {
+				writer := NewCollectingFileWriter()
+				if err := GenerateWithFS(input, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: backend}); err != nil {
+					t.Fatal(err)
+				}
+				return writer.Files
+			}
+			files := generate()
+			if !reflect.DeepEqual(files, generate()) {
+				t.Fatal("nondeterministic generation")
+			}
+			for name, data := range files {
+				if strings.Contains(string(data), `"github.com/arran4/go-subcommand"`) {
+					t.Fatalf("runtime generator dependency in %s", name)
+				}
+			}
+
+			if *updateGolden && backend == "gnu" {
+				var buf bytes.Buffer
+				if comment := strings.TrimSpace(string(archive.Comment)); comment != "" {
+					buf.WriteString(comment + "\n")
+				}
+				for _, f := range archive.Files {
+					if strings.HasPrefix(f.Name, "input/") || f.Name == "expected/invocations.json" {
+						buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{f}})))
+					}
+				}
+				for _, name := range goldenFiles {
+					buf.WriteString(string(txtar.Format(&txtar.Archive{Files: []txtar.File{{
+						Name: "expected/" + name,
+						Data: files["cmd/app/"+name],
+					}}})))
+				}
+				if err := os.WriteFile(txtarRelPath, buf.Bytes(), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("updated %s", txtarRelPath)
+				return
+			}
+
+			if backend == "gnu" {
+				for _, name := range goldenFiles {
+					golden, ok := expected[name]
+					if !ok {
+						t.Fatalf("missing expected golden %s", name)
+					}
+					if !bytes.Equal(files["cmd/app/"+name], golden.Data) {
+						t.Fatalf("generated %s differs from golden:\n%s", name, files["cmd/app/"+name])
+					}
+				}
+			}
+
+			dir := t.TempDir()
+			for name, file := range input {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(file.Data))
+			}
+			for name, data := range files {
+				writeRuntimeFixture(t, filepath.Join(dir, name), string(data))
+			}
+			binary := filepath.Join(dir, "app")
+			build := exec.Command("go", "build", "-o", binary, "./cmd/app")
+			build.Dir = dir
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("local build: %v\n%s", err, out)
+			}
+			go122Binary := buildGeneratedGo122Binary(t, dir, filepath.Join(dir, "app-go122"), "./cmd/app")
+
+			for _, bin := range []string{binary, go122Binary} {
+				for _, invocation := range invocations {
+					command := exec.Command(bin, invocation.Args...)
+					command.Dir = dir
+					command.Env = append(os.Environ(), "COLUMNS=80")
+					var stdout, stderr bytes.Buffer
+					command.Stdout, command.Stderr = &stdout, &stderr
+					err := command.Run()
+					status := 0
+					if err != nil {
+						if exit, ok := err.(*exec.ExitError); ok {
+							status = exit.ExitCode()
+						} else {
+							t.Fatal(err)
+						}
+					}
+					if status != invocation.Status || stdout.String() != invocation.Stdout {
+						t.Errorf("%s %v: status=%d stdout=%q stderr=%q; want status=%d stdout=%q",
+							filepath.Base(bin), invocation.Args, status, stdout.String(), stderr.String(), invocation.Status, invocation.Stdout)
+					}
+				}
+			}
+
+			if extraChecks != nil {
+				extraChecks(t, backend, dir, binary, go122Binary)
+			}
+		})
+	}
+}
+
+func TestGenerateIssue561ExplicitInferredArgs(t *testing.T) {
+	runIssue561FixtureSuite(
+		t,
+		issue561ExplicitInferredArgsFixture,
+		"templates/testdata/runtime/issue561_explicit_inferred_args.txtar",
+		[]string{"root.go", "api.go", "api_health.go", "api_list.go", "api_badge.go"},
+		func(t *testing.T, backend, dir, binary, go122Binary string) {
+			for _, tc := range []struct {
+				name       string
+				args       []string
+				env        string
+				wantStdout string
+				forbid     []string
+				wantErr    string
+			}{
+				{
+					name:       "FAIL_USER",
+					args:       []string{"api", "list"},
+					env:        "FAIL_USER=1",
+					wantStdout: "auth:current-user:fail\n",
+					forbid:     []string{"auth:require-admin", "action:list"},
+					wantErr:    "user lookup failed",
+				},
+				{
+					name:       "FAIL_ADMIN",
+					args:       []string{"api", "list"},
+					env:        "FAIL_ADMIN=1",
+					wantStdout: "auth:current-user\nauth:require-admin:admin\n",
+					forbid:     []string{"action:list"},
+					wantErr:    "admin authorization failed",
+				},
+			} {
+				command := exec.Command(binary, tc.args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), tc.env)
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				if err := command.Run(); err == nil {
+					t.Errorf("%s: expected error, got nil", tc.name)
+				}
+				if stdout.String() != tc.wantStdout {
+					t.Errorf("%s: stdout=%q want=%q", tc.name, stdout.String(), tc.wantStdout)
+				}
+				if !strings.Contains(stderr.String(), tc.wantErr) {
+					t.Errorf("%s: stderr=%q want=%q", tc.name, stderr.String(), tc.wantErr)
+				}
+				for _, b := range tc.forbid {
+					if strings.Contains(stdout.String(), b) {
+						t.Errorf("%s: unexpected %q in stdout %q", tc.name, b, stdout.String())
+					}
+				}
+			}
+
+			// Verify embedded generated tests + -race pass.
+			cmd := exec.Command("go", "test", "-race", "./cmd/app")
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("go test -race ./cmd/app failed: %v\n%s", err, out)
+			}
+		},
+	)
+
+	// Negative cycle and missing provider diagnostics for explicit inferred args.
+	t.Run("negative_diagnostics", func(t *testing.T) {
+		archive := txtar.Parse(issue561ExplicitInferredArgsFixture)
+		input, _ := splitInputExpected(archive)
+		for _, tc := range []struct {
+			name   string
+			appSrc string
+			extra  map[string]string
+			want   string
+		}{
+			{
+				name: "explicit_inferred_cycle",
+				extra: map[string]string{
+					"cyc/cyc.go": "package cyc\ntype A struct{}\ntype B struct{}\nfunc MakeA(b *B) (*A, error) { return nil, nil }\nfunc MakeB(a *A) (*B, error) { return nil, nil }\n",
+				},
+				appSrc: `package app
+import "example.com/explicitinferred/cyc"
+// Root is a subcommand ` + "`app`" + `
+// Requires: cyc.MakeA(b), cyc.MakeB(a)
+func Root(a *cyc.A, b *cyc.B) error { return nil }
+`,
+				want: "cycle",
+			},
+			{
+				name: "missing_inferred_provider_for_explicit_guard_arg",
+				appSrc: `package app
+import "example.com/explicitinferred/auth"
+// Root is a subcommand ` + "`app`" + `
+// Requires: auth.RequireAdmin(user)
+func Root(user *auth.User) error { return nil }
+`,
+				want: "unbound dependency parameter",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fsys := fstest.MapFS{
+					"go.mod":       input["go.mod"],
+					"auth/auth.go": input["auth/auth.go"],
+					"app.go":       &fstest.MapFile{Data: []byte(tc.appSrc)},
+				}
+				for p, s := range tc.extra {
+					fsys[p] = &fstest.MapFile{Data: []byte(s)}
+				}
+				writer := NewCollectingFileWriter()
+				err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu"})
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("got err=%v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+}
+
+func TestGenerateIssue561LegacyCompat(t *testing.T) {
+	runIssue561FixtureSuite(
+		t,
+		issue561LegacyCompatFixture,
+		"templates/testdata/runtime/issue561_legacy_compat.txtar",
+		[]string{"root.go", "run.go", "custom.go", "db.go", "db_report.go", "db_swap.go"},
+		func(t *testing.T, backend, dir, binary, go122Binary string) {
+			cmd := exec.Command("go", "test", "-race", "./cmd/app")
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("go test -race ./cmd/app failed: %v\n%s", err, out)
+			}
+		},
+	)
+
+	t.Run("negative_diagnostics", func(t *testing.T) {
+		archive := txtar.Parse(issue561LegacyCompatFixture)
+		input, _ := splitInputExpected(archive)
+		for _, tc := range []struct {
+			name   string
+			appSrc string
+			want   string
+		}{
+			{
+				name: "legacy_unmatched_param_still_ambiguous",
+				appSrc: `package app
+import "example.com/legacycompat/db"
+// Root is a subcommand ` + "`app`" + `
+// Shared provider: primary = "example.com/legacycompat/db".PrimaryDB
+// Shared provider: replica = "example.com/legacycompat/db".ReplicaDB
+func Root(conn *db.Conn) error { return nil }
+`,
+				want: "ambiguous",
+			},
+			{
+				name: "unqualified_requires_still_ambiguous",
+				appSrc: `package app
+import "example.com/legacycompat/db"
+// Root is a subcommand ` + "`app`" + `
+// Requires: db.PrimaryDB, db.ReplicaDB
+func Root(primary, replica *db.Conn) error { return nil }
+`,
+				want: "ambiguous",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fsys := fstest.MapFS{
+					"go.mod":   input["go.mod"],
+					"db/db.go": input["db/db.go"],
+					"app.go":   &fstest.MapFile{Data: []byte(tc.appSrc)},
+				}
+				writer := NewCollectingFileWriter()
+				err := GenerateWithFS(fsys, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu"})
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("got err=%v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+}
+
+func TestGenerateIssue561MixedCleanup(t *testing.T) {
+	runIssue561FixtureSuite(
+		t,
+		issue561MixedCleanupFixture,
+		"templates/testdata/runtime/issue561_mixed_cleanup.txtar",
+		[]string{"root.go", "mix.go"},
+		func(t *testing.T, backend, dir, binary, go122Binary string) {
+			for _, tc := range []struct {
+				name       string
+				args       []string
+				env        []string
+				wantStdout string
+				wantErr    string
+			}{
+				{
+					name:       "root_fail_action_reverse_cleanup",
+					args:       []string{"--fail-action"},
+					wantStdout: "acquire:A-root\naction:before-B:root\nacquire:B\naction:fail:shared\nclose:B:shared\nclose:A-root:root\n",
+					wantErr:    "action failed",
+				},
+				{
+					name:       "mix_fail_action_reverse_cleanup",
+					args:       []string{"mix", "--fail-action"},
+					wantStdout: "acquire:A\naction:before-B:sub\nacquire:B\naction:fail:shared\nclose:B:shared\nclose:A:sub\n",
+					wantErr:    "action failed",
+				},
+				{
+					name:       "mix_fail_acquire_B_closes_A",
+					args:       []string{"mix"},
+					env:        []string{"FAIL_B=1"},
+					wantStdout: "acquire:A\naction:before-B:sub\nacquire:B:fail\nclose:A:sub\n",
+					wantErr:    "acquire B failed",
+				},
+				{
+					name:       "mix_close_B_error_still_closes_A_and_propagates_B_err",
+					args:       []string{"mix"},
+					env:        []string{"FAIL_CLOSE_B=1", "FAIL_CLOSE_A=1"},
+					wantStdout: "acquire:A\naction:before-B:sub\nacquire:B\naction:after-B:sub:shared\nclose:B:shared\nclose:A:sub\n",
+					wantErr:    "close B failed",
+				},
+			} {
+				command := exec.Command(binary, tc.args...)
+				command.Dir = dir
+				command.Env = append(os.Environ(), tc.env...)
+				var stdout, stderr bytes.Buffer
+				command.Stdout, command.Stderr = &stdout, &stderr
+				if err := command.Run(); err == nil {
+					t.Errorf("%s: expected error, got nil", tc.name)
+				}
+				if stdout.String() != tc.wantStdout {
+					t.Errorf("%s: stdout = %q, want %q", tc.name, stdout.String(), tc.wantStdout)
+				}
+				if !strings.Contains(stderr.String(), tc.wantErr) {
+					t.Errorf("%s: stderr = %q, want %q", tc.name, stderr.String(), tc.wantErr)
+				}
+			}
+
+			// Verify repeated reuse/reset and borrowed caller WriteCloser stream rules under -race.
+			testSrc := `package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+type trackWriteCloser struct {
+	bytes.Buffer
+	closed bool
+}
+
+func (w *trackWriteCloser) Close() error {
+	w.closed = true
+	return nil
+}
+
+func TestMixedCleanup_ReuseAndBorrowedStream(t *testing.T) {
+	borrowed := &trackWriteCloser{}
+	var errBuf bytes.Buffer
+	root, err := NewRootWithOptions("app", "", "", "", RootOptions{
+		IO: CommandIO{Stdout: borrowed, Stderr: &errBuf},
+	})
+	if err != nil {
+		t.Fatalf("NewRootWithOptions: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := root.Execute([]string{"mix", "-o", "-"}); err != nil {
+			t.Fatalf("run %d: %v", i+1, err)
+		}
+		if borrowed.closed {
+			t.Fatalf("run %d closed borrowed caller io.WriteCloser", i+1)
+		}
+		if !strings.Contains(borrowed.String(), "action:after-B:sub:shared") {
+			t.Fatalf("run %d borrowed stdout = %q", i+1, borrowed.String())
+		}
+		borrowed.Reset()
+	}
+}
+`
+			writeRuntimeFixture(t, filepath.Join(dir, "cmd", "app", "mixed_runtime_test.go"), testSrc)
+			cmd := exec.Command("go", "test", "-race", "-v", "./cmd/app")
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("go test -race ./cmd/app failed: %v\n%s", err, out)
+			}
+		},
+	)
 }

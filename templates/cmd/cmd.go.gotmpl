@@ -351,7 +351,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		}
 		c.{{.ValueFieldName}} = v
 		if closer, ok := interface{}(v).(io.Closer); ok {
+			{{- if $.RootHasLifecycle }}
+			c.registerCleanup(closer.Close)
+			{{- else }}
 			cleanups = append(cleanups, closer.Close)
+			{{- end }}
 		}
 	}
 	{{- end }}

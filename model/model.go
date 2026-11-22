@@ -2254,6 +2254,16 @@ func (sc *SubCommand) HasLifecycle() bool {
 	return false
 }
 
+// RootHasLifecycle reports whether the owning command tree uses shared lifecycle cleanup.
+func (cmd *Command) RootHasLifecycle() bool {
+	return cmd.HasLifecycle()
+}
+
+// RootHasLifecycle reports whether the owning command tree uses shared lifecycle cleanup.
+func (sc *SubCommand) RootHasLifecycle() bool {
+	return sc.Command != nil && sc.Command.HasLifecycle()
+}
+
 func (cmd *Command) FindParameter(name string) *FunctionParameter {
 	for _, p := range cmd.Parameters {
 		if p.Name == name {

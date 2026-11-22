@@ -356,7 +356,7 @@ Commands (executable Go functions or functionless `is a command` declarations) a
 func Health() error { return nil }
 
 // Users is a command `app api users`.
-// Requires: auth.RequireAdmin // RequireAdmin(user *auth.User) error transitively acquires CurrentUser first.
+// Requires: auth.RequireAdmin
 
 // List is a subcommand `app api users list`.
 func List(user *auth.User) error { /* receives the already-acquired User */ return nil }
@@ -392,9 +392,9 @@ Requires: "example.com/myapp/auth".CurrentUser
 ```
 ````
 
-**Backwards Compatibility:** Existing `Initializer:`, `Shared provider:` / `Provider:` declarations, and local `(generator: ...)` parameter annotations remain supported and participate in the unified dependency graph.
+**Backwards Compatibility & Mixed Lifecycle:** Existing `Initializer:`, named `Shared provider:` / `Provider:` declarations (bound by parameter name before type fallback without mutating distinct shadowed-input scopes), and local `(generator: ...)` parameter annotations remain supported and participate in the unified dependency graph. Explicit guard/provider arguments (such as `Requires: auth.CurrentUser, auth.RequireAdmin(user)`) resolve through inferred dependency bindings, and mixed local + shared `io.Closer` resources close together in exact reverse acquisition order.
 
-Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/testdata/runtime/issue561_requires.txtar) and [issue522_lifecycle.txtar](templates/testdata/runtime/issue522_lifecycle.txtar).
+Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/testdata/runtime/issue561_requires.txtar), [issue561_explicit_inferred_args.txtar](templates/testdata/runtime/issue561_explicit_inferred_args.txtar), [issue561_legacy_compat.txtar](templates/testdata/runtime/issue561_legacy_compat.txtar), [issue561_mixed_cleanup.txtar](templates/testdata/runtime/issue561_mixed_cleanup.txtar), and [issue522_lifecycle.txtar](templates/testdata/runtime/issue522_lifecycle.txtar).
 
 #### Root constructor context
 
