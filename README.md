@@ -25,56 +25,49 @@ go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 
 ## Getting Started
 
-### 1. Define Your Commands
+Keep action functions in an ordinary importable Go package, not `package main`. The generated executable imports that package and provides its own entry point.
 
-Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// FunctionName is a subcommand 'root-command sub-command...'`.
+Create a module:
 
-Example `main.go`:
-
-```go
-package main
+```sh
+mkdir my-app
+cd my-app
+go mod init example.com/my-app
+go mod edit -go=1.22
+cat > hello.go <<'GO'
+package myapp
 
 import "fmt"
 
-// PrintHelloWorld is a subcommand `my-app hello`
-// This command prints "Hello, World!" to the console.
-func PrintHelloWorld() {
+// Hello is a subcommand `my-app hello` -- Print a greeting.
+func Hello() {
     fmt.Println("Hello, World!")
 }
+GO
 ```
 
-### 2. Add a `generate.go` File
+Generate and run with a published tool version:
 
-Create a file named `generate.go` in the same directory (package `main`). This robust version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
-
-```go
-package main
-
-//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
-```
-
-### 3. Generate the CLI
-
-Run `go generate` in your terminal:
-
-```bash
-go generate
-```
-
-This will create a `cmd/my-app` directory containing the generated CLI code.
-
-### 4. Run Your New CLI
-
-You can now run your newly generated CLI:
-
-```bash
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
 go run ./cmd/my-app hello
 ```
 
 Output:
-```
+
+```text
 Hello, World!
 ```
+
+For reproducible regeneration, save this complete file as `generate.go` alongside the action:
+
+```go
+package myapp
+
+//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+```
+
+Run `go generate ./...` after changing action declarations. The generator's Go toolchain requirement (Go 1.26 for v0.0.33) is separate from the target application's Go version. See the [Hugo documentation](https://arran4.github.io/go-subcommand/) for more examples.
 
 ## Comment Syntax Guide
 
@@ -268,6 +261,8 @@ Multiple parenthesized attributes can be combined with semicolons, for example `
 
 #### Optional-value flags
 
+**Since version:** v0.0.32 (GNU).
+
 `(optional value)` is an explicit flag contract supporting ordinary Go
 primitive types, pointers and slices. It distinguishes flag presence from value
 assignment:
@@ -336,6 +331,8 @@ Generated files plan import identifiers for the complete file before rendering. 
 
 #### Unified `Requires` and Demand-Ordered Dependencies
 
+**Since version:** unreleased (merged in #567; proposed release v0.0.34). Legacy selected-path initializers and shared providers: v0.0.33.
+
 Commands (executable Go functions or functionless `is a command` declarations) and native `.mdc` command definitions can declare lifecycle requirements and shared typed dependencies using the canonical `Requires:` directive:
 
 *   **Error-Only Mandatory Guards (`func(...) error`):** Selected-path guards execute after routing and flag parsing/validation and before any descendant action that selects them. Guards do not run for help, usage, version, or invalid parse requests.
@@ -346,49 +343,120 @@ Commands (executable Go functions or functionless `is a command` declarations) a
 *   **Opt-In Intra-Action Laziness:** For conditional execution paths (such as `--dry-run`), declare a callable action parameter (`func() (*T, error)` or infallible `func() *T` when the provider chain cannot return an error). If the callable is never invoked, the provider is never acquired.
 *   **Resource Cleanup & Isolation:** Providers returning `io.Closer` are automatically closed in exact reverse acquisition order on command completion or error. In-process repeated executions cleanly reset all memoized instances and errors.
 
+The examples below are excerpts from the compiled [`issue561_requires.txtar`](templates/testdata/runtime/issue561_requires.txtar) fixture. A standalone `...` explicitly marks omitted Go source (including the package/imports, root action and other commands). The archive contains the complete copyable module and its dependency packages; use those files for a runnable example. The blank lines after metadata-only command comments are intentional.
+
 **Example A — Health-check hierarchy (demand-driven auth):**
+
 ```go
-// API is a command `app api`.
+...
+
+// API is a command `app api` -- API endpoints.
 // Requires: auth.CurrentUser
 
-// Health is a subcommand `app api health`.
-// No *auth.User input: CurrentUser is not acquired.
-func Health() error { return nil }
+// Health is a subcommand `app api health` -- Health check without user acquisition.
+func Health() error {
+	fmt.Println("action:health")
+	return nil
+}
 
-// Users is a command `app api users`.
+...
+
+// Users is a command `app api users` -- User management.
 // Requires: auth.RequireAdmin
 
-// List is a subcommand `app api users list`.
-func List(user *auth.User) error { /* receives the already-acquired User */ return nil }
+// UsersList is a subcommand `app api users list` -- List users.
+func UsersList(user *auth.User) error {
+	fmt.Printf("action:users-list:%s\n", user.Role)
+	return nil
+}
 ```
 
+`app api health` does not acquire a user. `app api users list` acquires the user once, checks authorization, then executes the action.
+
 **Example B — Comma-separated, `(always)`, lazy callable, and ambiguity override:**
+
 ```go
-// Admin is a command `app admin`.
+...
+
+// Admin is a command `app admin` -- Admin commands.
 // Requires: auth.RequireAdmin, auth.AuditTrail (always)
 // Requires: auth.CurrentUser
 
-// DB is a command `app db`.
+// AdminPing is a subcommand `app admin ping` -- Admin ping.
+// Requires: auth.CurrentUser
+func AdminPing() error {
+	fmt.Println("action:admin-ping")
+	return nil
+}
+
+...
+
+// Jobs is a command `app jobs` -- Background jobs.
+// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta
+
+// JobsRun is a subcommand `app jobs run` -- Run jobs with lazy dependencies.
+//
+// Flags:
+//
+//	dryRun: --dry-run Skip opening store and client.
+//	checkErr: --check-err Invoke failing client twice to verify error caching.
+func JobsRun(dryRun bool, checkErr bool, client func() (*jobs.Client, error), meta func() *jobs.Meta) error {
+	m := meta()
+	if dryRun {
+		fmt.Printf("action:jobs-run:dry:%s\n", m.Version)
+		return nil
+	}
+	if checkErr {
+		_, err1 := client()
+		_, err2 := client()
+		fmt.Printf("action:jobs-run:check-err:%v:%v\n", err1 != nil, err1 == err2)
+		return err1
+	}
+	c1, err := client()
+	if err != nil {
+		return err
+	}
+	c2, err := client()
+	if err != nil {
+		return err
+	}
+	if c1 != c2 {
+		return fmt.Errorf("client instance not memoized")
+	}
+	fmt.Printf("action:jobs-run:live:%s:%s:%s\n", c1.Store.Env, c1.Store.RtID, m.Version)
+	return nil
+}
+
+...
+
+// DB is a command `app db` -- Database commands.
 // Requires: db.PrimaryDB, db.ReplicaDB
 
-// Query is a subcommand `app db query`.
+// DBQuery is a subcommand `app db query` -- Query primary and replica connections.
+//
 // Flags:
+//
 //	replica: (provider: db.ReplicaDB) Replica connection.
 //	primary: (provider: db.PrimaryDB) Primary connection.
-func Query(replica *db.Conn, primary *db.Conn) error { return nil }
-
-// Run is a subcommand `app jobs run`.
-// Requires: jobs.OpenClient, jobs.OpenStore
-// Flags:
-//	dryRun: --dry-run Skip opening store and client.
-func Run(dryRun bool, client func() (*jobs.Client, error)) error { return nil }
+func DBQuery(replica *db.Conn, primary *db.Conn) error {
+	fmt.Printf("action:db-query:%s:%s\n", replica.Role, primary.Role)
+	return nil
+}
 ```
 
-In native `.mdc` configuration (using explicit quoted import paths):
+`app admin ping` executes its mandatory authorization and audit requirements even without a typed action argument. `app jobs run --dry-run` invokes only the metadata callback, not the store/client providers; the live path requests the client twice and checks memoization. `app db query` selects the two same-type providers explicitly.
+
+In native `.mdc` configuration, the following complete metadata file can replace the corresponding `Admin` metadata-only source comment in the fixture (keep the other source declarations and the module's actual import paths):
+
 ````markdown
+format-version: 1
+
+# Commands
+
 ```command: app admin
-Requires: "example.com/myapp/auth".RequireAdmin, "example.com/myapp/auth".AuditTrail (always)
-Requires: "example.com/myapp/auth".CurrentUser
+Description: Admin commands.
+Requires: "example.com/requiresapp/auth".RequireAdmin, "example.com/requiresapp/auth".AuditTrail (always)
+Requires: "example.com/requiresapp/auth".CurrentUser
 ```
 ````
 
@@ -397,6 +465,8 @@ Requires: "example.com/myapp/auth".CurrentUser
 Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/testdata/runtime/issue561_requires.txtar), [issue561_explicit_inferred_args.txtar](templates/testdata/runtime/issue561_explicit_inferred_args.txtar), [issue561_legacy_compat.txtar](templates/testdata/runtime/issue561_legacy_compat.txtar), [issue561_mixed_cleanup.txtar](templates/testdata/runtime/issue561_mixed_cleanup.txtar), and [issue522_lifecycle.txtar](templates/testdata/runtime/issue522_lifecycle.txtar).
 
 #### Root constructor context
+
+**Since version:** v0.0.32.
 
 Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
 
@@ -513,6 +583,8 @@ output. Generated usage repeats this direction-specific meaning, including for
 `default: -`. Names such as `stdin` and `stdout` remain ordinary file paths.
 
 ### Invocation-Scoped Streams
+
+**Since version:** v0.0.33.
 
 Generated command trees support per-invocation stream dependency injection without mutable package-global state:
 
@@ -732,6 +804,8 @@ Generates the Go code for your CLI.
 *   `--config <path>`: Read an optional version-one project configuration (`.mdconf`, `.mdc`, or `.json`). Explicit command-line flags override configuration values, and configuration values override built-in defaults. Unknown keys and unsupported versions fail before generation.
 
 #### Generation configuration
+
+**Since version:** v0.0.32.
 
 Configuration is opt-in. Both candidate native extensions, `.mdconf` and `.mdc`,
 accept top-level generator settings, without a `# Configuration` heading:
@@ -987,6 +1061,8 @@ Generates release configuration.
 
 ### Generated parser and process errors
 
+**Since version:** v0.0.32.
+
 Generated applications expose `ErrUsage` and `UsageError` in their own `cmd`
 package, with no go-subcommand runtime dependency. Callers can classify errors
 without inspecting their messages:
@@ -1036,6 +1112,8 @@ customization, and its validation/internal default classification and rendering
 contract. Those facilities remain separate work under #479/#503.
 
 ### Require a selected command
+
+**Since version:** v0.0.32.
 
 Add the accepted execution policy to functionless root metadata:
 
@@ -1120,6 +1198,8 @@ host defaults.
 
 #### `plus-minus` runtime parser
 
+**Since version:** v0.0.32.
+
 Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
 This backend implements a dedicated command-scoped parser with atomic staging and validation (#464):
 
@@ -1170,6 +1250,8 @@ subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
 remain separate work and are not implied by this backend.
 
 ##### Opt-in Unmatched Argv Filter (`plus-minus` only)
+
+**Since version:** v0.0.33.
 
 Commands using the `plus-minus` parser backend can opt in to receiving otherwise-unrecognized command-line arguments (such as signed numeric values `-0.1`, `+0.1`, unknown flags, or arbitrary foreign options) directly in a `[]string` action parameter marked with `(unmatched)` (#550):
 
