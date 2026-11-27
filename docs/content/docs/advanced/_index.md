@@ -5,13 +5,13 @@ weight: 5
 
 # Advanced Topics
 
-See [Generator design principles](generator-design-principles/) for the function-and-comment-first design, execution ownership, scoped initializer decisions, and when advanced startup/template customization is appropriate. The architecture document clearly distinguishes current behaviour from proposed features.
+See [How generation works](generator-design-principles/) for the relationship between application functions, generated parsing, dispatch and the process entry point.
 
 See [Project generation configuration](project-configuration/) for optional versioned generator settings and explicit CLI override precedence.
 
 See [Functionless command metadata](command-metadata/) for explicit root identity and help without an action, Go/config declarations, documentation and man appendices.
 
-See [Scoped providers and command initializers](scoped-lifecycle/) for the merged lifecycle syntax, demand-only typed dependencies and selected-path guards. The unified `Requires:` syntax is implemented by #561; the older declarations remain supported.
+See [Scoped providers and command initializers](scoped-lifecycle/) for the merged lifecycle syntax, demand-only typed dependencies and selected-path guards. Use `Requires:` (since version: v0.0.34) for new declarations; the older declarations remain supported.
 
 ## Man Page Generation
 
@@ -48,8 +48,7 @@ The generator works by:
 
 ## Runtime Logic
 
-The experimental [plus/minus parser proposal](plus-minus-parser/) documents its
-grammar, audit, command-scope architecture and compiled acceptance cases.
+See [Plus/minus parser](plus-minus-parser/) for supported option syntax and parser selection.
 
 The generated code uses a lightweight `Command` interface.
 *   **Flags**: It uses the standard `flag` package.

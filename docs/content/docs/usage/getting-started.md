@@ -32,7 +32,7 @@ GO
 ## Generate and run
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 go run ./cmd/basic1 example1
 ```
 
@@ -56,7 +56,7 @@ Save this as `generate.go` in the same module:
 ```go
 package basic1
 
-//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 ```
 
 Run `go generate ./...` whenever action declarations change. **Since version:** v0.0.32 supports suppressing nested generated directives, allowing one canonical pinned generation command. Do not edit generated Go by hand.

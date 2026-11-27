@@ -30,7 +30,7 @@ go test ./...
 For a clean project, use the [quickstart](../getting-started/). Each full source file below belongs in a separate empty module. Generate using:
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 ```
 
 ## Error returns
@@ -142,7 +142,7 @@ go run ./cmd/io_types copy-file input.txt -
 printf 'from stdin\n' | go run ./cmd/io_types copy-file - -
 ```
 
-Inspect reports 14 bytes for the sample input. Only `-` selects a borrowed stream, and generated code leaves borrowed streams open. Constructor-owned framework stream injection: **since version:** v0.0.33. Direct action-stream annotation remains a separate feature (#559).
+Inspect reports 14 bytes for the sample input. Only `-` selects a borrowed stream, and generated code leaves borrowed streams open. Constructor-owned framework stream injection: **since version:** v0.0.33. Direct action-stream annotation is not available in v0.0.34.
 
 ## Explicit inheritance
 
@@ -184,20 +184,13 @@ go run ./cmd/issue50 parent --verbose child
 
 The child uses the parent's parameter instead of registering a separate flag.
 
-## Compiled feature examples
+## More practical guides
 
-The [runtime txtar fixtures](https://github.com/arran4/go-subcommand/tree/main/templates/testdata/runtime) contain complete annotated Go modules, generated files and expected invocations. Extract their `input/` files for the full source; the archive's expected generated files are not files to edit.
+- [Optional flag values and optional positionals](../recipes/) — distinguish omitted, bare and explicitly empty values.
+- [Constructor context and invocation streams](../recipes/#constructor-context) — test generated commands with application-owned context and streams.
+- [Scoped dependencies and lifecycle](../../advanced/scoped-lifecycle/) — typed requirements, authorization, lazy acquisition and cleanup.
+- [Plus/minus parser](../../advanced/plus-minus-parser/) — polarity, clusters, parser boundaries and raw unmatched arguments.
+- [Functionless metadata](../../advanced/command-metadata/) and [no-command policy](../../advanced/no-command-policy/) — application roots and help.
+- [Generated errors](../../advanced/generated-errors/) — preserve error chains and exit status.
 
-| Capability | Since version / availability | Fixture |
-| --- | --- | --- |
-| Optional flag values | v0.0.32 | [issue401](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue401_optional_value.txtar) |
-| Provider and presence | v0.0.32 | [issue403](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue403_presence.txtar) |
-| Plus/minus | v0.0.32 | [issue464](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue464.txtar) |
-| Root context | v0.0.32 | [issue483](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue483_presence.txtar) |
-| Scoped lifecycle | v0.0.33 | [issue522](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue522_lifecycle.txtar) |
-| Optional root positionals | v0.0.33 | [issue548](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue548_optional_positional.txtar) |
-| Streams | v0.0.33 | [issue549](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue549_streams.txtar) |
-| Unmatched arguments | v0.0.33 | [issue550](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue550_unmatched.txtar) |
-| Unified Requires | Unreleased, merged #567 | [issue561](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_requires.txtar), [explicit args](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_explicit_inferred_args.txtar), [legacy](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_legacy_compat.txtar), [cleanup](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_mixed_cleanup.txtar) |
-
-See [feature versions](../feature-versions/) before choosing the generator pin.
+See [Feature versions](../feature-versions/) to choose a generator version.

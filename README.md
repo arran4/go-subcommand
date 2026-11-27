@@ -49,7 +49,7 @@ GO
 Generate and run with a published tool version:
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 go run ./cmd/my-app hello
 ```
 
@@ -64,10 +64,10 @@ For reproducible regeneration, save this complete file as `generate.go` alongsid
 ```go
 package myapp
 
-//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 ```
 
-Run `go generate ./...` after changing action declarations. The generator's Go toolchain requirement (Go 1.26 for v0.0.33) is separate from the target application's Go version. See the [Hugo documentation](https://arran4.github.io/go-subcommand/) for more examples.
+Run `go generate ./...` after changing action declarations. See the [compatibility guide](https://arran4.github.io/go-subcommand/docs/reference/compatibility/) for Go versions and the [documentation](https://arran4.github.io/go-subcommand/) for more examples.
 
 ## Comment Syntax Guide
 
@@ -331,7 +331,7 @@ Generated files plan import identifiers for the complete file before rendering. 
 
 #### Unified `Requires` and Demand-Ordered Dependencies
 
-**Since version:** unreleased (merged in #567; proposed release v0.0.34). Legacy selected-path initializers and shared providers: v0.0.33.
+**Since version:** v0.0.34. Legacy selected-path initializers and shared providers: v0.0.33.
 
 Commands (executable Go functions or functionless `is a command` declarations) and native `.mdc` command definitions can declare lifecycle requirements and shared typed dependencies using the canonical `Requires:` directive:
 
@@ -1246,8 +1246,7 @@ Generated Go code remains strictly compatible with Go 1.22 (#542).
 See the [grammar, audit and architecture decision](docs/content/docs/advanced/plus-minus-parser.md).
 `templates/testdata/runtime/issue464.txtar` records source comments, complete
 generated artifacts/help and exact compiled invocations, including mixed-backend
-subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
-remain separate work and are not implied by this backend.
+subtrees. GNU and Go-flag keep their existing grammars. Optional-value flags are available in GNU only.
 
 ##### Opt-in Unmatched Argv Filter (`plus-minus` only)
 
@@ -1307,7 +1306,7 @@ A parent parsing its argv according to its own backend scopes the argv entirely 
 The `go-flag` backend integrates directly with the Go standard library `flag.FlagSet`, meaning it strictly ignores GNU-style clustered short options. A flag invoked as `-abc` evaluates specifically as the exact declared flag named `abc` if it exists. If `abc` is undeclared, it strictly returns an unknown flag error rather than being parsed as `-a -b -c`. It handles single dashes natively (so `-in README.md` is fully supported), and supports boolean toggles intuitively. Go-flag halts parsing explicitly on its first seen positional argument, exactly as defined by the flag standard library. Both `-name=value` and `--name=value` syntaxes are accepted.
 All arguments preceding an explicit '--' are correctly resolved and parsed to correctly segregate positional offsets accurately across all backends natively supporting them. Unknown flags will properly log unrecognized syntax per the target backend structure. Standard `-h` and `--help` return FlagSet help behavior if undeclared, but explicitly declared `h` / `help` are treated as ordinary registered flags.
 
-The optional `plus-minus` proposal is described above and tracked under #464.
+The `plus-minus` parser is described above.
 
 
 #### Replace CLI-Parser Backends

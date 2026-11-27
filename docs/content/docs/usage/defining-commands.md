@@ -35,7 +35,7 @@ func UserDelete(name string) { fmt.Println("delete", name) }
 ```
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 go run ./cmd/app users create alice
 go run ./cmd/app help users delete
 ```
