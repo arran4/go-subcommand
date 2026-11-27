@@ -8,7 +8,7 @@ weight: 15
 **Since version:** v0.0.32.
 
 Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
-This backend implements a dedicated command-scoped parser with atomic staging and validation (#464):
+This backend implements a dedicated command-scoped parser with atomic staging and validation:
 
 | Token | Meaning |
 | --- | --- |
@@ -19,7 +19,7 @@ This backend implements a dedicated command-scoped parser with atomic staging an
 | `-n 5`, `-n5`, `-n=5` | Value-taking short option. |
 | `-abn5`, `-abn=5` | Short cluster with trailing attached value. |
 | `--count=3`, `--count 3` | Value-taking long option. |
-| `++count`, `++count=3` | Explicitly configured nonboolean plus operation (#531). |
+| `++count`, `++count=3` | Explicitly configured nonboolean plus operation. |
 | `--` | Delimiter terminating option scanning and routing; remaining tokens are literal. |
 
 Scalar toggles are last-wins, preserve absent defaults, and track explicit
@@ -27,7 +27,7 @@ presence for both polarities and all aliases. A long boolean may take an explici
 Go boolean value such as `--enabled=false`. Short booleans reject `=` assignments.
 When values resemble options, attached assignment is required (`--label=--verbose`).
 Interspersed options after positional arguments are accepted within the same command scope
-while preserving positional argument ordering (#534). Subcommand boundaries yield
+while preserving positional argument ordering. Subcommand boundaries yield
 unconsumed arguments to the child command. Unambiguous parent options can be supplied
 before or after child commands; child-declared options shadow parent options without conflict.
 Required parent flags are validated across the selected command path: supplying the flag either
@@ -40,15 +40,15 @@ positional argument validation all succeed. Any child failure or missing child p
 prevents parent commits and prevents parent I/O side effects.
 
 Nonboolean plus operations have no implicit behavior and require explicit consumer
-configuration (#531):
+configuration:
 - `(plus: reset)` or `(plus-bare: reset)`: resets to declared default.
 - `(plus-bare: zero)`: sets to zero value.
 - `(plus: FuncName)` or `(plus-bare: FuncName)`: calls consumer function `func() (T, error)`.
 - `(plus-value: set)`: standard value assignment under `+`/`++` prefix.
 - `(plus-value: FuncName)`: calls consumer function `func(string) (T, error)`.
 
-Standalone `++` after `--` is intentionally undefined in this release (#532).
-Generated Go code remains strictly compatible with Go 1.22 (#542).
+`--` terminates option scanning; tokens after it are literal arguments.
+See [Compatibility](../../reference/compatibility/) for supported Go versions.
 
 `templates/testdata/runtime/issue464.txtar` records source comments, complete
 generated artifacts/help and exact compiled invocations, including mixed-backend
@@ -58,7 +58,7 @@ subtrees. GNU and Go-flag keep their existing grammars. GNU optional-value flags
 
 **Since version:** v0.0.33.
 
-Commands using the `plus-minus` parser backend can opt in to receiving otherwise-unrecognized command-line arguments (such as signed numeric values `-0.1`, `+0.1`, unknown flags, or arbitrary foreign options) directly in a `[]string` action parameter marked with `(unmatched)` (#550):
+Commands using the `plus-minus` parser backend can opt in to receiving otherwise-unrecognized command-line arguments (such as signed numeric values `-0.1`, `+0.1`, unknown flags, or arbitrary foreign options) directly in a `[]string` action parameter marked with `(unmatched)`:
 
 ```go
 package app
@@ -94,8 +94,8 @@ func Volume(player string, args []string) error {
 Save the example as `app.go` in a fresh Go module, then generate and run:
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 go run ./cmd/app volume --player=vlc -0.1
 ```
 
-Expected stdout: `player="vlc" args=["-0.1"]`. The argument is preserved verbatim. See the [compiled parser fixture](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue464.txtar) and [unmatched fixture](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue550_unmatched.txtar) for real annotated input, generated output and invocation contracts. Historical design is preserved in [#464](https://github.com/arran4/go-subcommand/issues/464) and [#505](https://github.com/arran4/go-subcommand/pull/505).
+Expected stdout: `player="vlc" args=["-0.1"]`. The argument is preserved verbatim. See [Flags and parameters](../../usage/flags-parameters/) for ordinary flag binding and [Examples](../../usage/examples/) for complete example applications.

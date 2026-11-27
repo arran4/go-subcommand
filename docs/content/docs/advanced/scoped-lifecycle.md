@@ -5,7 +5,7 @@ weight: 14
 
 # Scoped providers and command initializers
 
-> The original scoped lifecycle feature shipped in v0.0.33 ([#522 / PR #555](https://github.com/arran4/go-subcommand/pull/555)). The unified `Requires:` directive is implemented on `main` ([#561 / PR #567](https://github.com/arran4/go-subcommand/pull/567)). Prefer `Requires:` for new declarations and use a generator version that includes #567. The earlier syntax is retained for compatibility.
+> **Since version:** v0.0.34 for `Requires:`; v0.0.33 for legacy `Initializer:` and `Shared provider:` declarations. Prefer `Requires:` for new commands. The earlier forms remain supported.
 
 Use the existing [functionless command metadata](../command-metadata/) to attach initialization to a command subtree without inventing a dummy action. Two behaviors are intentionally different:
 
@@ -18,14 +18,81 @@ Both use the existing typed provider dependency model. Neither means "initialize
 
 ## Canonical `Requires:` declarations
 
-**Since version:** unreleased (merged in #567; proposed release v0.0.34). Earlier `Initializer:` and `Shared provider:` lifecycle declarations: **since version: v0.0.33**.
+**Since version:** v0.0.34.
 
 A requirement returning only `error` is mandatory for the selected executable path. A requirement returning `T` or `(T, error)` supplies a demand-driven typed value. A value-producing requirement marked `(always)` is mandatory even if no action consumes its result. Multiple directives and top-level comma-separated entries accumulate. Unique exact resolved Go types allow inference; use an explicit `(provider: ...)` binding when the type alone is ambiguous.
 
-The following is an excerpt from the compiled [`issue561_requires.txtar`](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_requires.txtar) fixture. Standalone `...` marks omitted Go source (including package/import declarations and the root action). The archive contains the complete runnable module.
+### Example: authorization only when needed
+
+Create the module and package directory:
+
+```sh
+mkdir requiresapp
+cd requiresapp
+go mod init example.com/requiresapp
+go mod edit -go=1.22
+mkdir auth
+```
+
+Save the following as `auth/auth.go`. These functions simulate authentication for illustration; they are not production authentication.
 
 ```go
-...
+package auth
+
+import (
+	"fmt"
+	"os"
+)
+
+type User struct {
+	Role string
+}
+
+type Audit struct {
+	Tag string
+}
+
+func CurrentUser() (*User, error) {
+	if os.Getenv("FAIL_USER") == "1" {
+		fmt.Println("auth:current-user:fail")
+		return nil, fmt.Errorf("user lookup failed")
+	}
+	role := "admin"
+	if r := os.Getenv("USER_ROLE"); r != "" {
+		role = r
+	}
+	fmt.Println("auth:current-user")
+	return &User{Role: role}, nil
+}
+
+func RequireAdmin(user *User) error {
+	fmt.Printf("auth:require-admin:%s\n", user.Role)
+	if os.Getenv("FAIL_ADMIN") == "1" || user.Role != "admin" {
+		return fmt.Errorf("admin authorization failed")
+	}
+	return nil
+}
+
+func AuditTrail() (*Audit, error) {
+	fmt.Println("auth:audit-trail")
+	if os.Getenv("FAIL_AUDIT") == "1" {
+		return nil, fmt.Errorf("audit failed")
+	}
+	return &Audit{Tag: "audit-1"}, nil
+}
+```
+
+Save the following as `app.go`:
+
+```go
+package app
+
+import (
+	"fmt"
+	"example.com/requiresapp/auth"
+)
+
+type UserAlias = auth.User
 
 // API is a command `app api` -- API endpoints.
 // Requires: auth.CurrentUser
@@ -36,7 +103,11 @@ func Health() error {
 	return nil
 }
 
-...
+// Profile is a subcommand `app api profile` -- Profile using type alias without auth import.
+func Profile(user *UserAlias) error {
+	fmt.Printf("action:profile:%s\n", user.Role)
+	return nil
+}
 
 // Users is a command `app api users` -- User management.
 // Requires: auth.RequireAdmin
@@ -46,13 +117,41 @@ func UsersList(user *auth.User) error {
 	fmt.Printf("action:users-list:%s\n", user.Role)
 	return nil
 }
+
+// UsersDelete is a subcommand `app api users delete` -- Delete user via type alias.
+func UsersDelete(user *UserAlias) error {
+	fmt.Printf("action:users-delete:%s\n", user.Role)
+	return nil
+}
 ```
 
-The health action acquires no user; the selected users action acquires the user, checks authorization, and invokes the action. A mandatory guard attached to `api` itself would also apply to `health`.
+Generate and execute:
+
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
+go run ./cmd/app api health
+go run ./cmd/app api users list
+```
+
+Expected stdout for health:
+
+```text
+action:health
+```
+
+Expected stdout for list:
+
+```text
+auth:current-user
+auth:require-admin:admin
+action:users-list:admin
+```
+
+A mandatory guard attached directly to `api` would also apply to health. Here it belongs to `api users`; both its dependency and the action receive the same cached user. With `USER_ROLE=guest`, the guard returns an authorization error before the action executes.
 
 ## Compatibility example: an admin subtree
 
-This is the source from the compiled lifecycle fixture (module `example.com/lifecycleapp`, with `go 1.22`). The functions simulate authorization and resource failures with environment variables **for testing only**, not production authentication.
+Create a separate module `example.com/lifecycleapp` with `go 1.22` and a `session/` directory. The functions simulate authorization and resource failures with environment variables **for testing only**, not production authentication.
 
 ```go
 // session/session.go
@@ -168,7 +267,7 @@ The tested implementation includes the following behaviors:
 | `app admin --help` | **Not** run | **Not** acquired |
 | `app help admin` | **Not** run | **Not** acquired |
 
-The exact executable fixture is [`issue522_lifecycle.txtar`](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue522_lifecycle.txtar); check the fixture and final merged code when upgrading.
+To run the legacy example, create a separate module named `example.com/lifecycleapp`, put the two files at the paths shown, and generate with `gosubc generate`. The table describes expected execution.
 
 ## Native command configuration
 
@@ -203,8 +302,8 @@ The generated command tree still owns parsing and dispatch; application packages
 
 ## Validation and compatibility
 
-Use the tested declaration and binding forms above. The unified resolver supports typed dependency ordering and ambiguity diagnostics; see the #561 fixture for the full compiled scenarios. Do not work around unresolved generator errors by manually editing generated source.
+Use the tested declaration and binding forms above. The unified resolver supports typed dependency ordering and ambiguity diagnostics. Do not work around unresolved generator errors by manually editing generated source.
 
 The generator's toolchain version and **generated application's Go minimum** are separate constraints: verify emitted source with an actual Go 1.22 compiler and `GOTOOLCHAIN=local`. Generated applications must not import the generator at runtime.
 
-For detailed lifecycle behavior, review the source and compiled invocations in [PR #555](https://github.com/arran4/go-subcommand/pull/555) and [PR #567](https://github.com/arran4/go-subcommand/pull/567). The examples derive from their merged fixtures.
+See [constructor context and I/O](../../usage/recipes/) and [generated errors](../generated-errors/) for related capabilities.

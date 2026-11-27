@@ -47,15 +47,12 @@ combined then validated by existing routing rules. Conflicting CLI-Parser or
 Default route directives are errors. Root aliases require a real action; alias
 paths cannot be used as canonical metadata targets.
 
-Functionless flags, positionals and providers are currently unsupported and
-explicitly rejected. Go types and binding must come from a real typed source,
-rather than being guessed from prose. Root flags without a root action remain
-follow-up work under #63/#522. No dummy action, global registry, manual root
+Functionless flags and positionals cannot infer Go types from prose. Attach typed lifecycle requirements to structural commands with `Requires:` (since version: v0.0.34); see [Scoped providers and command initializers](../scoped-lifecycle/). No dummy action, global registry, manual root
 construction or main-template replacement is required for metadata.
 
 ## Native declarations
 
-Both candidate extensions, `.mdc` and `.mdconf`, accept generator settings first,
+Both extensions, `.mdc` and `.mdconf`, accept generator settings first,
 then typed appendices:
 
 ~~~text
@@ -109,7 +106,7 @@ Only one of each top-level section is allowed, and each section needs at least
 one typed fenced block. Unknown headings, wrong block kinds, unclosed/mismatched
 fences and generator settings after appendices are errors. A longer backtick
 fence may contain shorter literal fences in its body. Minimum-version checks,
-arbitrary typed template variables and multiple targets remain separate #63 work.
+arbitrary typed template variables and multiple targets are not supported.
 
 External references are relative to the configuration directory. Markdown accepts
 `.md`/`.markdown`; text and man fragments accept `.txt`/`.text`. Quote paths with
@@ -123,10 +120,4 @@ Programmatic readers can use `LoadGenerateConfigFS` and
 parsing, validation and rendering precede output cleanup/writes. Invalid
 declarations preserve existing generated files even when `--clean` is selected.
 
-The inspectable fixture `templates/testdata/issue516.go.txtar` contains real Go
-and native sources, external documentation, representative invocations, help
-snapshots and an empty-root generated-source golden. `TestGenerateCommandMetadata`
-compiles and runs complete applications on GNU and Go-flag, compares Go/config
-output equivalence and checks repeated generation. The CLI integration test also
-verifies metadata aliases, complete regeneration and preservation on an invalid
-clean request.
+For a complete application with a structural parent and lifecycle requirements, see [Scoped providers and command initializers](../scoped-lifecycle/).
