@@ -336,6 +336,8 @@ Generated files plan import identifiers for the complete file before rendering. 
 
 #### Unified `Requires` and Demand-Ordered Dependencies
 
+**Since version:** unreleased (merged in #567; proposed release v0.0.34). Legacy selected-path initializers and shared providers: v0.0.33.
+
 Commands (executable Go functions or functionless `is a command` declarations) and native `.mdc` command definitions can declare lifecycle requirements and shared typed dependencies using the canonical `Requires:` directive:
 
 *   **Error-Only Mandatory Guards (`func(...) error`):** Selected-path guards execute after routing and flag parsing/validation and before any descendant action that selects them. Guards do not run for help, usage, version, or invalid parse requests.
