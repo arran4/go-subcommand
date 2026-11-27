@@ -142,7 +142,40 @@ go run ./cmd/io_types copy-file input.txt -
 printf 'from stdin\n' | go run ./cmd/io_types copy-file - -
 ```
 
-Inspect reports 14 bytes for the sample input. Only `-` selects a borrowed stream, and generated code leaves borrowed streams open. Constructor-owned framework stream injection: **since version:** v0.0.33. Direct action-stream annotation is not available in v0.0.34.
+Inspect reports 14 bytes for the sample input. Only `-` selects a borrowed stream, and generated code leaves borrowed streams open. Constructor-owned framework stream injection: **since version:** v0.0.33. 
+
+### Selectable files with standard-stream defaults
+
+Save this complete action in a separate Go module:
+
+```go
+package app
+
+import "io"
+
+// Copy is a subcommand `app copy`.
+//
+// Flags:
+//
+//	input: --input (default: "-") Input file or invocation input.
+//	output: --output (default: "-") Output file or invocation output.
+func Copy(input io.Reader, output io.Writer) error {
+	_, err := io.Copy(output, input)
+	return err
+}
+```
+
+Generate with the pinned command above. Both arguments remain normal CLI file selections, and the declared defaults are used if the flags are absent.
+
+```sh
+printf 'Hello\n' > input.txt
+go run ./cmd/app copy --input input.txt
+printf 'Hello\n' | go run ./cmd/app copy --output output.txt
+go run ./cmd/app copy --input input.txt --output output.txt
+go run ./cmd/app copy --input - --output -
+```
+
+A default may instead be a filename. Parameter names do not force a particular source or destination. With `io.ReadCloser` and `io.WriteCloser`, a borrowed invocation stream remains caller-owned; requesting a closer does not transfer ownership. Files opened by generated code are released during cleanup. Framework diagnostic output is separate from application data output.
 
 ## Explicit inheritance
 
