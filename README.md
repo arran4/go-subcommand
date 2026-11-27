@@ -346,49 +346,120 @@ Commands (executable Go functions or functionless `is a command` declarations) a
 *   **Opt-In Intra-Action Laziness:** For conditional execution paths (such as `--dry-run`), declare a callable action parameter (`func() (*T, error)` or infallible `func() *T` when the provider chain cannot return an error). If the callable is never invoked, the provider is never acquired.
 *   **Resource Cleanup & Isolation:** Providers returning `io.Closer` are automatically closed in exact reverse acquisition order on command completion or error. In-process repeated executions cleanly reset all memoized instances and errors.
 
+The examples below are excerpts from the compiled [`issue561_requires.txtar`](templates/testdata/runtime/issue561_requires.txtar) fixture. A standalone `...` explicitly marks omitted Go source (including the package/imports, root action and other commands). The archive contains the complete copyable module and its dependency packages; use those files for a runnable example. The blank lines after metadata-only command comments are intentional.
+
 **Example A — Health-check hierarchy (demand-driven auth):**
+
 ```go
-// API is a command `app api`.
+...
+
+// API is a command `app api` -- API endpoints.
 // Requires: auth.CurrentUser
 
-// Health is a subcommand `app api health`.
-// No *auth.User input: CurrentUser is not acquired.
-func Health() error { return nil }
+// Health is a subcommand `app api health` -- Health check without user acquisition.
+func Health() error {
+	fmt.Println("action:health")
+	return nil
+}
 
-// Users is a command `app api users`.
+...
+
+// Users is a command `app api users` -- User management.
 // Requires: auth.RequireAdmin
 
-// List is a subcommand `app api users list`.
-func List(user *auth.User) error { /* receives the already-acquired User */ return nil }
+// UsersList is a subcommand `app api users list` -- List users.
+func UsersList(user *auth.User) error {
+	fmt.Printf("action:users-list:%s\n", user.Role)
+	return nil
+}
 ```
 
+`app api health` does not acquire a user. `app api users list` acquires the user once, checks authorization, then executes the action.
+
 **Example B — Comma-separated, `(always)`, lazy callable, and ambiguity override:**
+
 ```go
-// Admin is a command `app admin`.
+...
+
+// Admin is a command `app admin` -- Admin commands.
 // Requires: auth.RequireAdmin, auth.AuditTrail (always)
 // Requires: auth.CurrentUser
 
-// DB is a command `app db`.
+// AdminPing is a subcommand `app admin ping` -- Admin ping.
+// Requires: auth.CurrentUser
+func AdminPing() error {
+	fmt.Println("action:admin-ping")
+	return nil
+}
+
+...
+
+// Jobs is a command `app jobs` -- Background jobs.
+// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta
+
+// JobsRun is a subcommand `app jobs run` -- Run jobs with lazy dependencies.
+//
+// Flags:
+//
+//	dryRun: --dry-run Skip opening store and client.
+//	checkErr: --check-err Invoke failing client twice to verify error caching.
+func JobsRun(dryRun bool, checkErr bool, client func() (*jobs.Client, error), meta func() *jobs.Meta) error {
+	m := meta()
+	if dryRun {
+		fmt.Printf("action:jobs-run:dry:%s\n", m.Version)
+		return nil
+	}
+	if checkErr {
+		_, err1 := client()
+		_, err2 := client()
+		fmt.Printf("action:jobs-run:check-err:%v:%v\n", err1 != nil, err1 == err2)
+		return err1
+	}
+	c1, err := client()
+	if err != nil {
+		return err
+	}
+	c2, err := client()
+	if err != nil {
+		return err
+	}
+	if c1 != c2 {
+		return fmt.Errorf("client instance not memoized")
+	}
+	fmt.Printf("action:jobs-run:live:%s:%s:%s\n", c1.Store.Env, c1.Store.RtID, m.Version)
+	return nil
+}
+
+...
+
+// DB is a command `app db` -- Database commands.
 // Requires: db.PrimaryDB, db.ReplicaDB
 
-// Query is a subcommand `app db query`.
+// DBQuery is a subcommand `app db query` -- Query primary and replica connections.
+//
 // Flags:
+//
 //	replica: (provider: db.ReplicaDB) Replica connection.
 //	primary: (provider: db.PrimaryDB) Primary connection.
-func Query(replica *db.Conn, primary *db.Conn) error { return nil }
-
-// Run is a subcommand `app jobs run`.
-// Requires: jobs.OpenClient, jobs.OpenStore
-// Flags:
-//	dryRun: --dry-run Skip opening store and client.
-func Run(dryRun bool, client func() (*jobs.Client, error)) error { return nil }
+func DBQuery(replica *db.Conn, primary *db.Conn) error {
+	fmt.Printf("action:db-query:%s:%s\n", replica.Role, primary.Role)
+	return nil
+}
 ```
 
-In native `.mdc` configuration (using explicit quoted import paths):
+`app admin ping` executes its mandatory authorization and audit requirements even without a typed action argument. `app jobs run --dry-run` invokes only the metadata callback, not the store/client providers; the live path requests the client twice and checks memoization. `app db query` selects the two same-type providers explicitly.
+
+In native `.mdc` configuration, the following complete metadata file can replace the corresponding `Admin` metadata-only source comment in the fixture (keep the other source declarations and the module's actual import paths):
+
 ````markdown
+format-version: 1
+
+# Commands
+
 ```command: app admin
-Requires: "example.com/myapp/auth".RequireAdmin, "example.com/myapp/auth".AuditTrail (always)
-Requires: "example.com/myapp/auth".CurrentUser
+Description: Admin commands.
+Requires: "example.com/requiresapp/auth".RequireAdmin, "example.com/requiresapp/auth".AuditTrail (always)
+Requires: "example.com/requiresapp/auth".CurrentUser
 ```
 ````
 
