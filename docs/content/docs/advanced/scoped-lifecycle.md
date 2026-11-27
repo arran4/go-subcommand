@@ -103,7 +103,7 @@ func Health() error {
 	return nil
 }
 
-// Profile is a subcommand `app api profile` -- Profile using type alias without auth import.
+// Profile is a subcommand `app api profile` -- Profile using a type alias.
 func Profile(user *UserAlias) error {
 	fmt.Printf("action:profile:%s\n", user.Role)
 	return nil

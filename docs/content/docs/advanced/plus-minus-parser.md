@@ -50,9 +50,7 @@ configuration:
 `--` terminates option scanning; tokens after it are literal arguments.
 See [Compatibility](../../reference/compatibility/) for supported Go versions.
 
-`templates/testdata/runtime/issue464.txtar` records source comments, complete
-generated artifacts/help and exact compiled invocations, including mixed-backend
-subtrees. GNU and Go-flag keep their existing grammars. GNU optional-value flags are a separate implemented feature; they are not supported by this backend.
+GNU and Go-flag retain their respective grammars. See [Examples](../../usage/examples/) for mixed-backend applications. GNU optional-value flags are a separate implemented feature; they are not supported by this backend.
 
 ## Opt-in unmatched argv filter (`plus-minus` only)
 

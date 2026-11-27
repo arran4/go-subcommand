@@ -343,7 +343,7 @@ Commands (executable Go functions or functionless `is a command` declarations) a
 *   **Opt-In Intra-Action Laziness:** For conditional execution paths (such as `--dry-run`), declare a callable action parameter (`func() (*T, error)` or infallible `func() *T` when the provider chain cannot return an error). If the callable is never invoked, the provider is never acquired.
 *   **Resource Cleanup & Isolation:** Providers returning `io.Closer` are automatically closed in exact reverse acquisition order on command completion or error. In-process repeated executions cleanly reset all memoized instances and errors.
 
-The examples below are excerpts from the compiled [`issue561_requires.txtar`](templates/testdata/runtime/issue561_requires.txtar) fixture. A standalone `...` explicitly marks omitted Go source (including the package/imports, root action and other commands). The archive contains the complete copyable module and its dependency packages; use those files for a runnable example. The blank lines after metadata-only command comments are intentional.
+The examples below are excerpts; standalone `...` marks omitted Go source. For a complete runnable application, see the [scoped lifecycle guide](https://arran4.github.io/go-subcommand/docs/advanced/scoped-lifecycle/). The blank lines after metadata-only command comments are intentional.
 
 **Example A — Health-check hierarchy (demand-driven auth):**
 
@@ -462,7 +462,7 @@ Requires: "example.com/requiresapp/auth".CurrentUser
 
 **Backwards Compatibility & Mixed Lifecycle:** Existing `Initializer:`, named `Shared provider:` / `Provider:` declarations (bound by parameter name before type fallback without mutating distinct shadowed-input scopes), and local `(generator: ...)` parameter annotations remain supported and participate in the unified dependency graph. Explicit guard/provider arguments (such as `Requires: auth.CurrentUser, auth.RequireAdmin(user)`) resolve through inferred dependency bindings, and mixed local + shared `io.Closer` resources close together in exact reverse acquisition order.
 
-Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/testdata/runtime/issue561_requires.txtar), [issue561_explicit_inferred_args.txtar](templates/testdata/runtime/issue561_explicit_inferred_args.txtar), [issue561_legacy_compat.txtar](templates/testdata/runtime/issue561_legacy_compat.txtar), [issue561_mixed_cleanup.txtar](templates/testdata/runtime/issue561_mixed_cleanup.txtar), and [issue522_lifecycle.txtar](templates/testdata/runtime/issue522_lifecycle.txtar).
+For runnable examples and expected outputs, see the [scoped lifecycle guide](https://arran4.github.io/go-subcommand/docs/advanced/scoped-lifecycle/) and [feature recipes](https://arran4.github.io/go-subcommand/docs/usage/recipes/).
 
 #### Root constructor context
 
@@ -1156,23 +1156,11 @@ stdout/stderr/status snapshots on GNU and Go-flag.
 
 ### Generated application Go compatibility
 
-The Go version needed to run `gosubc` is separate from the version supported by
-the generated application. Generated command packages require **Go 1.16 or
-newer** because they use standard-library embedding and `io/fs`.
+The supported generated-code floor is Go 1.22. The generator's own toolchain can advance independently. See the [compatibility matrix](https://arran4.github.io/go-subcommand/docs/reference/compatibility/) for version-specific requirements and isolated build-time tooling.
 
-The generator reads the target module's `go` directive and adapts its output:
-
-| Target module version | Generated compatibility form |
-| --- | --- |
-| Go 1.16–1.17 | `interface{}` and local loops (no `slices`) |
-| Go 1.18–1.20 | `any` and local loops |
-| Go 1.21+ | `any` and `slices.Contains` |
-
-Generation fails before writing output when a target module declares Go 1.15 or
-older. The compatibility forms are regression-tested as generated source.
-* `--parser-name` configures the source/comment parser behavior used to read your files. (Default: `commentv1`)
-* `--cli-parser` configures the runtime argv parser behavior generated in your binary. (Default: `gnu`)
-* parameter `parser:` specifies a custom value parser for reading your types out of flag/positional arguments.
+* `--parser-name` selects the source/comment parser (default `commentv1`).
+* `--cli-parser` selects the generated argv parser (default `gnu`).
+* Parameter `parser:` selects a custom value parser.
 
 ### Target-aware source discovery
 
@@ -1243,7 +1231,7 @@ configuration (#531):
 Standalone `++` after `--` is intentionally undefined in this release (#532).
 Generated Go code remains strictly compatible with Go 1.22 (#542).
 
-See the [grammar, audit and architecture decision](docs/content/docs/advanced/plus-minus-parser.md).
+See the [plus/minus parser guide](https://arran4.github.io/go-subcommand/docs/advanced/plus-minus-parser/).
 `templates/testdata/runtime/issue464.txtar` records source comments, complete
 generated artifacts/help and exact compiled invocations, including mixed-backend
 subtrees. GNU and Go-flag keep their existing grammars. Optional-value flags are available in GNU only.
