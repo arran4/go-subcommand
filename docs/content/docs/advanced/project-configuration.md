@@ -3,6 +3,8 @@ title: "Project generation configuration"
 weight: 11
 ---
 
+**Since version:** v0.0.32.
+
 `gosubc generate --config gosubc.mdc` reads optional generator settings.
 Both `.mdc` and `.mdconf` are supported candidates; neither filename is required.
 Generated applications do not read this file or depend on go-subcommand at runtime.

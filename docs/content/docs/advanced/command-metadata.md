@@ -3,6 +3,8 @@ title: "Functionless command metadata"
 weight: 12
 ---
 
+**Since version:** v0.0.32.
+
 Use a package or standalone comment to describe a root or child without
 registering an executable action:
 
@@ -10,6 +12,8 @@ registering an executable action:
 // App is a command `app` -- Manage jobs.
 // More application help.
 package commands
+
+import "fmt"
 
 // Generate is a subcommand `app generate` -- Generate jobs.
 func Generate() { fmt.Println("generate") }
