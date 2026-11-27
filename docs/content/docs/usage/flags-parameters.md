@@ -3,103 +3,86 @@ title: "Flags & Parameters"
 weight: 3
 ---
 
-# Flags & Parameters
+# Flags and parameters
 
-`go-subcommand` automatically maps your function parameters to command-line flags and arguments.
+Annotated action parameters map to CLI flags by default. Prefer an indented `Flags:` block; inline parameter comments and preceding parameter comments are also supported, in that priority order.
 
-## Automatic Mapping
+## Copyable example
 
-Function parameters are converted to flags by default.
-
-```go
-func Server(port int, verbose bool)
-```
-
-Generates flags:
-*   `--port <int>`
-*   `--verbose` (boolean flag)
-
-Flag names are automatically converted to kebab-case (e.g., `maxRetries` -> `--max-retries`).
-
-## Customizing Flags
-
-You can customize flags using comments. There are three ways to define them, in order of priority:
-
-1.  **Flags Block**: A `Flags:` block in the function documentation.
-2.  **Inline Comment**: Comment on the same line as the parameter.
-3.  **Preceding Comment**: Comment on the line before the parameter.
-
-### 1. Flags Block (Highest Priority)
+Save the following as `complex.go` in a fresh Go module. This is the action source from [examples/complex](https://github.com/arran4/go-subcommand/tree/v0.0.33/examples/complex), excluding its generation directive.
 
 ```go
-// MyCmd is a subcommand `app cmd`
+package complex
+
+import (
+	"fmt"
+	"time"
+)
+
+// TopLevel is a subcommand `complex toplevel` -- A top level command
+//
+// This command demonstrates a top level command with a string argument.
+// It prints the name provided.
+//
 // Flags:
-//   port: default: 8080 description: Port to listen on
-func MyCmd(port int) {}
+//
+//	name: --name -n (default: "world") The name to greet
+func TopLevel(name string) {
+	fmt.Printf("TopLevel command executed with name: %s\n", name)
+}
+
+// Nested is a subcommand `complex toplevel nested` -- A nested command
+//
+// This command demonstrates a nested command under 'toplevel'.
+// It takes an integer and a boolean.
+//
+// Flags:
+//
+//	count: --count -c (default: 1) Number of times to repeat
+//	verbose: --verbose -v (default: false) Enable verbose output
+func Nested(count int, verbose bool) {
+	fmt.Printf("Nested command executed with count: %d, verbose: %v\n", count, verbose)
+}
+
+// Another is a subcommand `complex another` -- Another top level command
+//
+// This command demonstrates using a duration parameter.
+//
+// Flags:
+//
+//	wait: --wait -w (default: 1s) How long to wait
+func Another(wait time.Duration) {
+	fmt.Printf("Another command executed, waiting for %s\n", wait)
+}
 ```
 
-### 2. Inline Comment
-
-```go
-func MyCmd(
-    port int, // default: 8080 description: Port to listen on
-) {}
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run ./cmd/complex toplevel -n test
+go run ./cmd/complex toplevel nested -c 3 -v
+go run ./cmd/complex another --wait=2s
 ```
 
-### 3. Preceding Comment
+The first invocation prints `TopLevel command executed with name: test`. The nested action accepts an integer and boolean; the last accepts a Go duration.
 
-```go
-// default: 8080 description: Port to listen on
-port int
-```
+## Parameter declarations
 
-## Syntax Reference
+| Form | Meaning | Availability |
+| --- | --- | --- |
+| `name: --name -n (default: "world") Name` | Named flag, alias, default and description | v0.0.33 |
+| `src: @1 Source` | First positional | v0.0.33 |
+| `src: @1 (optional) Source` | Explicitly omittable positional | Root support since version: v0.0.33 |
+| `args: ... Remaining arguments` with `args ...string` | Variadic positional tail | v0.0.33 |
+| `count: --count (required)` | Require explicit flag | v0.0.33 |
+| `verbose: (from parent)` | Explicit inheritance | v0.0.33 |
+| `seen: (flag presence)` on `map[string]bool` | Explicit flag presence | v0.0.32 |
+| `raw: --raw (optional value)` | Optional flag value (GNU only) | Since version: v0.0.32 |
+| `value: (generator: BuildValue)` | Local provider dependency | Provider DI since version: v0.0.32 |
+| `config: (root context)` | Constructor-injected parameter | Since version: v0.0.32 |
+| `args: (unmatched)` on `[]string` | Raw unmatched collector (plus-minus only) | Since version: v0.0.33 |
 
-The parameter definition syntax supports several attributes:
+Use `(default: ...)` for explicit defaults. Do not assume a variadic declaration enforces a minimum count; validate application-specific limits in the action unless a documented generator contract applies.
 
-*   **Flag Alias**: `flag: -p` or just `-p` to define aliases.
-*   **Description**: `description: text` or just text (if unambiguous).
-*   **Default Value**: `default: value`.
-*   **Positional Argument**: `@N` (e.g., `@1`) marks the parameter as a positional argument at index N (1-based).
-*   **Variadic**: `...` or `min...max` (e.g., `1...` or `1...3`) for variadic arguments.
+Common types include strings, booleans, integers, floats, durations, pointers, repeated slices, and typed I/O interfaces. For `io.Reader` and `io.Writer`, only `-` borrows the corresponding invocation stream; other values are filenames. See [I/O examples](../examples/#file-and-stream-arguments). GNU is the default CLI parser; [plus/minus](../../advanced/plus-minus-parser/) and Go-flag have distinct token rules.
 
-### Examples
-
-**Positional Argument**
-
-```go
-// Copy is a subcommand `cp`
-func Copy(
-    src string, // @1 source file
-    dst string, // @2 destination file
-)
-```
-
-**Custom Flag Name**
-
-```go
-func Serve(
-    addr string, // flag: --address -a description: Bind address
-)
-```
-
-**Required Variadic Arguments**
-
-```go
-func Echo(
-    args []string, // @1 ... description: Strings to echo
-)
-```
-
-## Supported Types
-
-*   `int`, `int64`, etc.
-*   `bool`
-*   `string`
-*   `time.Duration` (e.g., `10s`, `1m`)
-*   `float64`
-*   Structs (via custom selector handling, advanced)
-
-## Implicit Parameters
-
-You can also define parameters solely in comments without them strictly matching the function signature's parameter names if using advanced usage, but typically they map 1:1 to function arguments.
+See [feature versions](../feature-versions/) and the [full syntax reference](https://github.com/arran4/go-subcommand/blob/main/README.md#comment-syntax-guide).
