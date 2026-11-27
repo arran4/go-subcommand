@@ -18,6 +18,8 @@ Both use the existing typed provider dependency model. Neither means "initialize
 
 ## Canonical `Requires:` declarations
 
+**Since version:** unreleased (merged in #567; proposed release v0.0.34). Earlier `Initializer:` and `Shared provider:` lifecycle declarations: **since version: v0.0.33**.
+
 A requirement returning only `error` is mandatory for the selected executable path. A requirement returning `T` or `(T, error)` supplies a demand-driven typed value. A value-producing requirement marked `(always)` is mandatory even if no action consumes its result. Multiple directives and top-level comma-separated entries accumulate. Unique exact resolved Go types allow inference; use an explicit `(provider: ...)` binding when the type alone is ambiguous.
 
 The following is an excerpt from the compiled [`issue561_requires.txtar`](https://github.com/arran4/go-subcommand/blob/main/templates/testdata/runtime/issue561_requires.txtar) fixture. Standalone `...` marks omitted Go source (including package/import declarations and the root action). The archive contains the complete runnable module.
