@@ -444,6 +444,9 @@ type GenerateOptions struct {
 	CommandDeclarations []parsers.CommandDeclaration
 	// CLIParser is the generation-wide runtime CLI parser backend fallback.
 	CLIParser string
+	// DispatcherPackage selects importable dispatcher output and omits main.go.
+	// It must be a valid, non-main Go package identifier.
+	DispatcherPackage string
 	// SuppressGoGenerate omits the nested go:generate directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
@@ -461,6 +464,9 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value.DispatcherPackage != "" {
+				result.DispatcherPackage = value.DispatcherPackage
+			}
 			if value.SuppressGoGenerate {
 				result.SuppressGoGenerate = true
 			}
@@ -474,6 +480,9 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 			if value != nil && value.CLIParser != "" {
 				result.CLIParser = value.CLIParser
 			}
+			if value != nil && value.DispatcherPackage != "" {
+				result.DispatcherPackage = value.DispatcherPackage
+			}
 			if value != nil && value.SuppressGoGenerate {
 				result.SuppressGoGenerate = true
 			}
@@ -483,6 +492,16 @@ func extractGenerateOptions(ops []any) GenerateOptions {
 		}
 	}
 	return result
+}
+
+func (o GenerateOptions) validateDispatcherPackage() error {
+	if o.DispatcherPackage == "" {
+		return nil
+	}
+	if !token.IsIdentifier(o.DispatcherPackage) || o.DispatcherPackage == "main" || o.DispatcherPackage == "_" {
+		return fmt.Errorf("dispatcher package %q must be an importable Go package identifier", o.DispatcherPackage)
+	}
+	return nil
 }
 
 func resolveCLIParser(local, fallback string) (string, error) {
@@ -604,6 +623,9 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return err
 	}
 	generateOptions := extractGenerateOptions(ops)
+	if err := generateOptions.validateDispatcherPackage(); err != nil {
+		return err
+	}
 	if len(generateOptions.CommandDeclarations) != 0 {
 		var copied parsers.ParseOptions
 		if options != nil {
@@ -631,6 +653,7 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 		return err
 	}
 	for _, cmd := range dataModel.Commands {
+		cmd.GeneratedPackageName = generateOptions.DispatcherPackage
 		cmd.SuppressGoGenerate = generateOptions.SuppressGoGenerate
 		cmd.RegenerationCommand = generateOptions.RegenerationCommand
 	}
@@ -651,8 +674,10 @@ func GenerateWithFS(inputFS fs.FS, writer FileWriter, dir string, manDir string,
 	for _, cmd := range dataModel.Commands {
 		cmdOutDir := filepath.Join(dir, "cmd", cmd.MainCmdName)
 		assignUsageFileNames(cmd.MainCmdName, cmd.SubCommands)
-		if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
-			return err
+		if !cmd.DispatcherOnly() {
+			if err := generateFile(collector, cmdOutDir, "main.go", "main.go.gotmpl", cmd, true); err != nil {
+				return err
+			}
 		}
 		if err := generateFile(collector, cmdOutDir, "process.go", "process.go.gotmpl", cmd, true); err != nil {
 			return err
