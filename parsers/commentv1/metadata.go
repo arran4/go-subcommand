@@ -53,6 +53,10 @@ func collectGoMetadata(fset *token.FileSet, file *ast.File, importPath string, t
 		// Normalize the declaration marker, then reuse the action comment parser.
 		// Only the metadata model is populated; no function name is synthesized.
 		source.Text = "Metadata is a subcommand `" + source.Path + "`" + match[2] + "\n" + rest
+		if tree.DeclarationImports == nil {
+			tree.DeclarationImports = make(map[int][]*ast.ImportSpec)
+		}
+		tree.DeclarationImports[len(tree.Declarations)] = file.Imports
 		tree.Declarations = append(tree.Declarations, source)
 	}
 	return nil
@@ -71,7 +75,7 @@ func validateDeclarationPath(source parsers.CommandDeclaration) ([]string, error
 	return parts, nil
 }
 
-func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, error) {
+func parseMetadata(source parsers.CommandDeclaration, fileImports []*ast.ImportSpec, isGoFile bool, idx *moduleIndex) (*model.CommandMetadata, error) {
 	parts, err := validateDeclarationPath(source)
 	if err != nil {
 		return nil, err
@@ -89,6 +93,7 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 	var noCommand model.NoCommandPolicy
 	var initializers []*model.InitializerConfig
 	var sharedProviders []*model.SharedProviderConfig
+	var requirements []*model.RequirementConfig
 	for index, line := range lines[1:] {
 		index += lineOffset
 		trimmed := strings.TrimSpace(line)
@@ -108,6 +113,16 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 			canonical = "initializer"
 		case "shared provider", "provider":
 			canonical = "shared provider"
+		case DirectiveRequires:
+			canonical = DirectiveRequires
+		}
+		if hasColon && canonical == DirectiveRequires {
+			parsedReqs, reqErr := parseRequirementLine(value, source.Filename, source.Line+index, source.ImportPath, source.PackageName, fileImports, isGoFile, idx, nil, nil)
+			if reqErr != nil {
+				return nil, reqErr
+			}
+			requirements = append(requirements, parsedReqs...)
+			continue
 		}
 		if hasColon && canonical == "initializer" {
 			value = strings.TrimSpace(value)
@@ -126,12 +141,16 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 					ref.PackagePath = source.ImportPath
 					ref.CommandPackageName = source.PackageName
 				}
-				initializers = append(initializers, &model.InitializerConfig{
+				ic := &model.InitializerConfig{
 					Name:         ref.FunctionName,
 					Func:         ref,
 					Inputs:       inputs,
 					ReturnsError: true,
-				})
+					Filename:     source.Filename,
+					Line:         source.Line + index,
+				}
+				enrichLegacyInitializer(ic, idx, source.PackageName)
+				initializers = append(initializers, ic)
 			}
 			continue
 		}
@@ -154,12 +173,7 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 				if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
 					name = name[lastDot+1:]
 				}
-				name = strings.TrimPrefix(name, "Open")
-				name = strings.TrimPrefix(name, "New")
-				name = strings.TrimPrefix(name, "Get")
-				if len(name) > 0 {
-					name = strings.ToLower(name[:1]) + name[1:]
-				}
+				name = deriveLegacyProviderName(name)
 			}
 			fnName, inputs := parseGeneratorInputs(fn)
 			ref := parseFuncRef(fnName)
@@ -168,12 +182,16 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 				ref.PackagePath = source.ImportPath
 				ref.CommandPackageName = source.PackageName
 			}
-			sharedProviders = append(sharedProviders, &model.SharedProviderConfig{
+			sp := &model.SharedProviderConfig{
 				Name:         name,
 				Func:         ref,
 				Inputs:       inputs,
 				ReturnsError: true,
-			})
+				Filename:     source.Filename,
+				Line:         source.Line + index,
+			}
+			enrichLegacySharedProvider(sp, idx, source.PackageName)
+			sharedProviders = append(sharedProviders, sp)
 			continue
 		}
 		if hasColon && (canonical == "description" || canonical == "aliases" || canonical == "cli-parser" || canonical == "default route" || canonical == "no command") {
@@ -232,6 +250,7 @@ func parseMetadata(source parsers.CommandDeclaration) (*model.CommandMetadata, e
 		Line:            source.Line,
 		Initializers:    initializers,
 		SharedProviders: sharedProviders,
+		Requirements:    requirements,
 	}, nil
 }
 
@@ -246,11 +265,16 @@ func appendHelp(existing, extra string) string {
 }
 
 func applyDeclarations(tree *CommandsTree) error {
-	for _, source := range tree.Declarations {
+	for declIdx, source := range tree.Declarations {
 		if source.Kind != "command" {
 			continue
 		}
-		metadata, err := parseMetadata(source)
+		var fileImports []*ast.ImportSpec
+		var isGoFile bool
+		if tree.DeclarationImports != nil {
+			fileImports, isGoFile = tree.DeclarationImports[declIdx]
+		}
+		metadata, err := parseMetadata(source, fileImports, isGoFile, tree.index)
 		if err != nil {
 			return err
 		}
@@ -304,6 +328,7 @@ func applyDeclarations(tree *CommandsTree) error {
 			}
 			root.Initializers = append(root.Initializers, metadata.Initializers...)
 			root.SharedProviders = append(root.SharedProviders, metadata.SharedProviders...)
+			root.Requirements = append(root.Requirements, metadata.Requirements...)
 		} else {
 			node := root.Find(parts[1:]).SubCommand
 			if node.CLIParser != "" && metadata.CLIParser != "" && node.CLIParser != metadata.CLIParser {
@@ -329,6 +354,7 @@ func applyDeclarations(tree *CommandsTree) error {
 			}
 			node.Initializers = append(node.Initializers, metadata.Initializers...)
 			node.SharedProviders = append(node.SharedProviders, metadata.SharedProviders...)
+			node.Requirements = append(node.Requirements, metadata.Requirements...)
 		}
 	}
 	for _, source := range tree.Declarations {

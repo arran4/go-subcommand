@@ -298,3 +298,103 @@ Flags:
 		t.Fatalf("format description lost prose: got %q", formatParam.Description)
 	}
 }
+
+func TestParseRequiresDirectives_AndDiagnostics(t *testing.T) {
+	fsys := fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/reqapp\n\ngo 1.22\n")},
+		"auth/auth.go": {Data: []byte(`package auth
+
+type User struct{}
+type Session struct{}
+type Audit struct{}
+
+func RequireAdmin(u *User) error              { return nil }
+func CurrentUser() (*User, error)             { return nil, nil }
+func MakeSession(a, b string) (*Session, error) { return nil, nil }
+func AuditTrail() (*Audit, error)             { return nil, nil }
+func BadNoReturn()                            {}
+func BadThree() (int, string, error)          { return 0, "", nil }
+func BadSecond() (int, string)                { return 0, "" }
+func BadErrErr() (error, error)               { return nil, nil }
+func unexportedFn() error                     { return nil }
+`)},
+		"app/commands.go": {Data: []byte(`package app
+
+import myauth "example.com/reqapp/auth"
+
+// Root is a subcommand ` + "`app`" + ` -- Root cmd.
+//
+// Flags:
+//	a: --a Env a.
+//	b: --b Env b.
+func Root(a, b string) error { return nil }
+
+// Admin is a command ` + "`app admin`" + ` -- Admin commands.
+// Requires: myauth.CurrentUser, sess = myauth.MakeSession(a, b)
+// Requires: myauth.RequireAdmin
+// Requires: myauth.AuditTrail (always)
+// Additional admin usage line.
+
+// Inspect is a subcommand ` + "`app admin inspect`" + ` -- Inspect.
+func Inspect(user *myauth.User, sess *myauth.Session, audit *myauth.Audit) error { return nil }
+`)},
+	}
+
+	dm, err := (&CommentParser{}).Parse(fsys, ".", &parsers.ParseOptions{Recursive: true})
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	admin := dm.Commands[0].SubCommands[0]
+	if len(admin.Requirements) != 4 {
+		t.Fatalf("admin.Requirements len = %d, want 4", len(admin.Requirements))
+	}
+	if admin.Requirements[0].Func.FunctionName != "CurrentUser" || admin.Requirements[0].Func.ImportPath != "example.com/reqapp/auth" {
+		t.Fatalf("req[0] = %+v", admin.Requirements[0])
+	}
+	if admin.Requirements[1].Name != "sess" || len(admin.Requirements[1].ExplicitInputs) != 2 || admin.Requirements[1].ExplicitInputs[0] != "a" || admin.Requirements[1].ExplicitInputs[1] != "b" {
+		t.Fatalf("req[1] = %+v", admin.Requirements[1])
+	}
+	if admin.Requirements[2].Kind != model.RequirementKindGuard || admin.Requirements[2].Policy != model.RequirementPolicyOnDemand {
+		t.Fatalf("req[2] = %+v", admin.Requirements[2])
+	}
+	if admin.Requirements[3].Policy != model.RequirementPolicyAlways || admin.Requirements[3].Kind != model.RequirementKindProvider {
+		t.Fatalf("req[3] = %+v", admin.Requirements[3])
+	}
+	if admin.SubCommandExtendedHelp != "Additional admin usage line." {
+		t.Fatalf("admin.SubCommandExtendedHelp = %q, want Requires lines stripped", admin.SubCommandExtendedHelp)
+	}
+
+	diagCases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"negated", "package app\n// Run is a subcommand `app`\n// Requires: !auth.Check\nfunc Run() {}\n", "negative requirement"},
+		{"empty", "package app\n// Run is a subcommand `app`\n// Requires:   \nfunc Run() {}\n", "empty Requires"},
+		{"empty slot", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.CurrentUser, , auth.RequireAdmin\nfunc Run() {}\n", "empty entry"},
+		{"unknown modifier", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.CurrentUser (lazy)\nfunc Run() {}\n", "unsupported requirement modifier"},
+		{"duplicate always", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.CurrentUser (always) (always)\nfunc Run() {}\n", "duplicate modifier (always)"},
+		{"unimported qualifier no imports", "package app\n// Run is a subcommand `app`\n// Requires: auth.CurrentUser\nfunc Run() {}\n", "unimported package qualifier"},
+		{"unimported qualifier with imports", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: wrong.CurrentUser\nfunc Run() {}\n", "unimported package qualifier"},
+		{"missing function", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.DoesNotExist\nfunc Run() {}\n", "not found"},
+		{"unexported function", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.unexportedFn\nfunc Run() {}\n", "must be exported"},
+		{"zero returns", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.BadNoReturn\nfunc Run() {}\n", "0 return values"},
+		{"three returns", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.BadThree\nfunc Run() {}\n", "returns 3 values"},
+		{"second not error", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.BadSecond\nfunc Run() {}\n", "invalid second return type"},
+		{"error error", "package app\nimport \"example.com/reqapp/auth\"\n// Run is a subcommand `app`\n// Requires: auth.BadErrErr\nfunc Run() {}\n", "(error, error)"},
+	}
+	for _, tc := range diagCases {
+		t.Run(tc.name, func(t *testing.T) {
+			badFS := fstest.MapFS{
+				"go.mod":          fsys["go.mod"],
+				"auth/auth.go":    fsys["auth/auth.go"],
+				"app/commands.go": {Data: []byte(tc.src)},
+			}
+			_, err := (&CommentParser{}).Parse(badFS, ".", &parsers.ParseOptions{Recursive: true})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got err=%v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+

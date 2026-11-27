@@ -334,29 +334,67 @@ cleanup errors. Help, usage, version and a sibling without providers acquire non
 
 Generated files plan import identifiers for the complete file before rendering. Source import aliases and qualified default expressions are therefore preserved when possible and deterministically renamed when they collide with generated dependencies such as `flag`, `fmt`, or `os`.
 
-#### Shared Typed Providers and Lifecycle Initializers
+#### Unified `Requires` and Demand-Ordered Dependencies
 
-Commands can declare shared typed providers and lifecycle initializers:
+Commands (executable Go functions or functionless `is a command` declarations) and native `.mdc` command definitions can declare lifecycle requirements and shared typed dependencies using the canonical `Requires:` directive:
 
-*   **Initializers (`Initializer: Func`):** Mandatory guards declared on a command node (or in functionless metadata) that run in root-to-leaf order before any selected descendant action. If an initializer returns an error, execution stops immediately and cleanups run. Initializers do not run during help, usage, or version requests.
-*   **Shared Providers (`Shared provider: name = Func`):** Lazy memoized typed providers hoisted to the lowest safe common ancestor or declared explicitly on an ancestor node. Descendant commands can receive the provider directly as a typed parameter (e.g. `session *AdminSession`) or as an opt-in lazy callable (e.g. `session func() (*AdminSession, error)`). When an action receives a lazy callable and never invokes it (for example in dry-run mode), the provider is never acquired.
-*   **Resource Cleanup:** Providers returning `io.Closer` are automatically closed in reverse acquisition order on command completion or failure. In-process reused command executions cleanly reset all memoized instances.
+*   **Error-Only Mandatory Guards (`func(...) error`):** Selected-path guards execute after routing and flag parsing/validation and before any descendant action that selects them. Guards do not run for help, usage, version, or invalid parse requests.
+*   **Demand-Driven Typed Providers (`func(...) T` or `func(...) (T, error)`):** Providers execute lazily on demand per invocation when required by a selected guard or action parameter, are memoized across all consumers in the invocation, and are hoisted to the lowest safe common ancestor without widening execution scope.
+    *   **Important:** Unreferenced value-producing `Requires:` entries do **not** run eagerly unless marked explicitly with `(always)` (for example, `Requires: auth.AuditTrail (always)` for mandatory audit/setup returning `(T, error)`).
+*   **Single Unified Dependency Graph:** All requirements (comma-separated on one line and/or across multiple `Requires:` directives, with commas inside call arguments or quoted import paths preserved), guards, providers, typed parameters, and constructor-injected context participate in one DAG ordered topologically (`dep -> dependent`, breaking ties among independent mandatory steps by declaration order). Duplicate identical requirements on ancestors/descendants deduplicate safely; cycles, invalid signatures, and unimported qualifiers fail generation with source diagnostics.
+*   **Automatic Typed Binding & Disambiguation:** Action and guard parameters bind automatically by unique exact resolved Go type (including Go type aliases like `type UserAlias = auth.User`) without hijacking built-in CLI flag types or explicit CLI specifications. If multiple providers in scope supply the same type, disambiguate explicitly on the consumer with `(provider: ...)` (or `(generator: ...)` / `(inject: ...)`).
+*   **Opt-In Intra-Action Laziness:** For conditional execution paths (such as `--dry-run`), declare a callable action parameter (`func() (*T, error)` or infallible `func() *T` when the provider chain cannot return an error). If the callable is never invoked, the provider is never acquired.
+*   **Resource Cleanup & Isolation:** Providers returning `io.Closer` are automatically closed in exact reverse acquisition order on command completion or error. In-process repeated executions cleanly reset all memoized instances and errors.
 
-Declarations can be written in Go source comments:
+**Example A — Health-check hierarchy (demand-driven auth):**
 ```go
-// Admin is a command `app admin` -- Administrative commands.
-// Initializer: "example.com/myapp/auth".RequireAdmin
-// Shared provider: session = "example.com/myapp/session".OpenAdminSession
+// API is a command `app api`.
+// Requires: auth.CurrentUser
+
+// Health is a subcommand `app api health`.
+// No *auth.User input: CurrentUser is not acquired.
+func Health() error { return nil }
+
+// Users is a command `app api users`.
+// Requires: auth.RequireAdmin
+
+// List is a subcommand `app api users list`.
+func List(user *auth.User) error { /* receives the already-acquired User */ return nil }
 ```
-or in native `.mdc` configuration:
+
+**Example B — Comma-separated, `(always)`, lazy callable, and ambiguity override:**
+```go
+// Admin is a command `app admin`.
+// Requires: auth.RequireAdmin, auth.AuditTrail (always)
+// Requires: auth.CurrentUser
+
+// DB is a command `app db`.
+// Requires: db.PrimaryDB, db.ReplicaDB
+
+// Query is a subcommand `app db query`.
+// Flags:
+//	replica: (provider: db.ReplicaDB) Replica connection.
+//	primary: (provider: db.PrimaryDB) Primary connection.
+func Query(replica *db.Conn, primary *db.Conn) error { return nil }
+
+// Run is a subcommand `app jobs run`.
+// Requires: jobs.OpenClient, jobs.OpenStore
+// Flags:
+//	dryRun: --dry-run Skip opening store and client.
+func Run(dryRun bool, client func() (*jobs.Client, error)) error { return nil }
+```
+
+In native `.mdc` configuration (using explicit quoted import paths):
 ````markdown
 ```command: app admin
-Initializer: "example.com/myapp/auth".RequireAdmin
-Shared provider: session = "example.com/myapp/session".OpenAdminSession
+Requires: "example.com/myapp/auth".RequireAdmin, "example.com/myapp/auth".AuditTrail (always)
+Requires: "example.com/myapp/auth".CurrentUser
 ```
 ````
 
-Compiled runtime scenarios are verified in `templates/testdata/runtime/issue522_lifecycle.txtar`.
+**Backwards Compatibility & Mixed Lifecycle:** Existing `Initializer:`, named `Shared provider:` / `Provider:` declarations (bound by parameter name before type fallback without mutating distinct shadowed-input scopes), and local `(generator: ...)` parameter annotations remain supported and participate in the unified dependency graph. Explicit guard/provider arguments (such as `Requires: auth.CurrentUser, auth.RequireAdmin(user)`) resolve through inferred dependency bindings, and mixed local + shared `io.Closer` resources close together in exact reverse acquisition order.
+
+Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/testdata/runtime/issue561_requires.txtar), [issue561_explicit_inferred_args.txtar](templates/testdata/runtime/issue561_explicit_inferred_args.txtar), [issue561_legacy_compat.txtar](templates/testdata/runtime/issue561_legacy_compat.txtar), [issue561_mixed_cleanup.txtar](templates/testdata/runtime/issue561_mixed_cleanup.txtar), and [issue522_lifecycle.txtar](templates/testdata/runtime/issue522_lifecycle.txtar).
 
 #### Root constructor context
 

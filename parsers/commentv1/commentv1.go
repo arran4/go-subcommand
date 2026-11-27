@@ -75,12 +75,16 @@ type CommandTree struct {
 	ImportPath         string
 	Initializers       []*model.InitializerConfig
 	SharedProviders    []*model.SharedProviderConfig
+	Requirements       []*model.RequirementConfig
 }
 
 type CommandsTree struct {
-	Declarations []parsers.CommandDeclaration
-	Commands     map[string]*CommandTree
-	PackagePath  string
+	Declarations       []parsers.CommandDeclaration
+	DeclarationImports map[int][]*ast.ImportSpec
+	Commands           map[string]*CommandTree
+	PackagePath        string
+	index              *moduleIndex
+	deferMapValidation bool
 }
 
 func (cst *CommandsTree) Insert(importPath, packageName, cmdName string, subcommandSequence []string, s *model.SubCommand) {
@@ -125,9 +129,14 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 
 	modPath := modfile.ModulePath(goModBytes)
 
+	buildContext := sourceBuildContext(fsys, options)
+
 	rootCommands := &CommandsTree{
-		Commands:    map[string]*CommandTree{},
-		PackagePath: modPath,
+		Commands:           map[string]*CommandTree{},
+		PackagePath:        modPath,
+		DeclarationImports: map[int][]*ast.ImportSpec{},
+		index:              newModuleIndex(fsys, root, modPath, buildContext, fset),
+		deferMapValidation: true,
 	}
 
 	searchPaths := []string{root}
@@ -138,7 +147,6 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 		}
 		recursive = options.Recursive
 	}
-	buildContext := sourceBuildContext(fsys, options)
 
 	for _, startDir := range searchPaths {
 		if startDir == "" {
@@ -294,6 +302,7 @@ func (p *CommentParser) Parse(fsys fs.FS, root string, options *parsers.ParseOpt
 			ManSections:        cmdTree.ManSections,
 			Initializers:       cmdTree.Initializers,
 			SharedProviders:    cmdTree.SharedProviders,
+			Requirements:       cmdTree.Requirements,
 			DataModel:          d,
 			MainCmdName:        cmdName,
 			PackagePath:        rootCommands.PackagePath,
@@ -537,14 +546,35 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 						}
 
+						idx := cmdTree.index
+						if idx == nil {
+							idx = &moduleIndex{fset: fset}
+						}
+						rt := idx.resolveTypeExprWithOptions(expr, importPath, f.Name.Name, f.Imports, true)
+						if typeImportPath == "" && rt.PrimaryImportPath != "" {
+							typeImportPath = rt.PrimaryImportPath
+							typePackageName = rt.PrimaryPackageName
+							if typeActualName == "" {
+								typeActualName = rt.PrimaryTypeName
+							}
+						}
+						if (rt.IsCallable || strings.Contains(typeName, "map[")) && rt.GeneratedType != "" {
+							typeName = rt.GeneratedType
+						}
+
 						fp := &model.FunctionParameter{
-							Name:            name.Name,
-							Type:            typeName,
-							IsVarArg:        isVarArg,
-							DeclaredIn:      currentCmdName,
-							TypeImportPath:  typeImportPath,
-							TypePackageName: typePackageName,
-							TypeName:        typeActualName,
+							Name:                  name.Name,
+							Type:                  typeName,
+							IsVarArg:              isVarArg,
+							DeclaredIn:            currentCmdName,
+							TypeImportPath:        typeImportPath,
+							TypePackageName:       typePackageName,
+							TypeName:              typeActualName,
+							CanonicalTypeKey:      rt.CanonicalKey,
+							TypeImports:           rt.TypeImports,
+							CallableReturnTypeKey: rt.CallableReturnTypeKey,
+							CallableReturnsError:  rt.CallableReturnsError,
+							IsCallableInfallible:  rt.IsCallable && !rt.CallableReturnsError,
 						}
 						// Extract details from different sources with priority
 						// Priority:
@@ -640,6 +670,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						// Fields are filled from lowest priority up, overwriting if present.
 
 						inherited := false
+						generatorQuoted := false
 
 						// Start with Preceding (3rd)
 						if len(candidates) > 2 {
@@ -692,6 +723,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
+								generatorQuoted = c.GeneratorQuoted
 							}
 							if c.Parser.Type != "" {
 								fp.Parser = c.Parser
@@ -749,6 +781,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
+								generatorQuoted = c.GeneratorQuoted
 							}
 							if c.Parser.Type != "" {
 								fp.Parser = c.Parser
@@ -806,6 +839,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							}
 							if c.Generator.Type != "" {
 								fp.Generator = c.Generator
+								generatorQuoted = c.GeneratorQuoted
 							}
 							if c.Parser.Type != "" {
 								fp.Parser = c.Parser
@@ -837,10 +871,20 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 							fp.Parser.Func.PackagePath = importPath
 							fp.Parser.Func.CommandPackageName = f.Name.Name
 						}
-						if fp.Generator.Func != nil && fp.Generator.Func.ImportPath == "" && f.Name.Name != "main" {
-							fp.Generator.Func.ImportPath = importPath
-							fp.Generator.Func.PackagePath = importPath
-							fp.Generator.Func.CommandPackageName = f.Name.Name
+						if fp.Generator.Func != nil && !generatorQuoted {
+							if fp.Generator.Func.ImportPath != "" && fp.Generator.Func.CommandPackageName == fp.Generator.Func.ImportPath && f != nil {
+								if impPath, pkgReal, ok := idx.resolveImportQualifier(fp.Generator.Func.ImportPath, f.Imports); ok {
+									fp.Generator.Func.ImportPath = impPath
+									fp.Generator.Func.PackagePath = impPath
+									fp.Generator.Func.CommandPackageName = pkgReal
+								} else if cmdTree.index != nil {
+									return fmt.Errorf("%s:%d: parameter %s: provider %s.%s references unimported package qualifier %q", filename, fset.Position(p.Pos()).Line, fp.Name, fp.Generator.Func.ImportPath, fp.Generator.Func.FunctionName, fp.Generator.Func.ImportPath)
+								}
+							} else if fp.Generator.Func.ImportPath == "" && f != nil && f.Name != nil && f.Name.Name != "main" {
+								fp.Generator.Func.ImportPath = importPath
+								fp.Generator.Func.PackagePath = importPath
+								fp.Generator.Func.CommandPackageName = f.Name.Name
+							}
 						}
 						if fp.PlusBare.Func != nil && fp.PlusBare.Func.ImportPath == "" && f.Name.Name != "main" {
 							fp.PlusBare.Func.ImportPath = importPath
@@ -854,7 +898,14 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 						}
 						fp.DefaultExpr = resolveDefaultExpressionImport(fp.Default, f.Imports)
 
-						if strings.Contains(fp.Type, "map[") && !fp.IsFlagPresence() {
+						fp.HasExplicitCLISpec = len(fp.FlagAliases) > 0 || len(fp.ShortAliases) > 0 || len(fp.LongAliases) > 0 ||
+							fp.IsPositional || fp.IsVarArg || fp.HasDefaultValue || fp.Required || fp.Optional ||
+							fp.OptionalValue || fp.IsUnmatchedArgv || fp.IsFlagPresence() ||
+							fp.Parser.Type != "" || fp.PlusBare.Mode != "" || fp.PlusBare.Func != nil ||
+							fp.PlusValue.Mode != "" || fp.PlusValue.Func != nil ||
+							fp.Generator.Type == model.SourceTypeConstructor
+
+						if !cmdTree.deferMapValidation && strings.Contains(fp.Type, "map[") && !fp.IsFlagPresence() && !fp.HasGenerator() && !fp.HasConstructor() && !fp.HasCustomParser() {
 							return fmt.Errorf("parameter %s: unsupported type %s without (flag presence)", fp.Name, fp.Type)
 						}
 						for _, candidate := range candidates {
@@ -928,7 +979,14 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				}
 			}
 
-			inits, shared := parseDirectivesFromDoc(s.Doc.Text(), importPath, f.Name.Name, pkgFuncs)
+			docStartLine := 1
+			if s.Doc != nil && fset != nil {
+				docStartLine = fset.Position(s.Doc.Pos()).Line
+			}
+			inits, shared, reqs, err := parseDirectivesFromDoc(s.Doc.Text(), filename, docStartLine, importPath, f.Name.Name, f.Imports, cmdTree.index, pkgFuncs, f)
+			if err != nil {
+				return err
+			}
 
 			if len(subCommandSequence) == 0 {
 				ct, ok := cmdTree.Commands[cmdName]
@@ -953,6 +1011,7 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				ct.Aliases = aliases
 				ct.Initializers = append(ct.Initializers, inits...)
 				ct.SharedProviders = append(ct.SharedProviders, shared...)
+				ct.Requirements = append(ct.Requirements, reqs...)
 				if defaultRoute != "" {
 					ct.DefaultRoute = defaultRoute
 				}
@@ -971,14 +1030,15 @@ func ParseGoFile(fset *token.FileSet, filename, importPath string, file io.Reade
 				DefaultRoute:           defaultRoute,
 				IsDefault:              isDefault,
 				// SubCommandStructName is assigned during collection
-				DefinitionFile: filename,
-				DocStart:       s.Doc.Pos(),
-				DocEnd:         s.Doc.End(),
-				Parameters:     params,
-				ReturnsError:   returnsError,
-				ReturnCount:    returnCount,
-				Initializers:   inits,
+				DefinitionFile:  filename,
+				DocStart:        s.Doc.Pos(),
+				DocEnd:          s.Doc.End(),
+				Parameters:      params,
+				ReturnsError:    returnsError,
+				ReturnCount:     returnCount,
+				Initializers:    inits,
 				SharedProviders: shared,
+				Requirements:    reqs,
 			})
 		}
 	}
@@ -1060,6 +1120,7 @@ type ParsedParam struct {
 	PlusBare           model.PlusOperationConfig
 	PlusValue          model.PlusOperationConfig
 	Generator          model.GeneratorConfig
+	GeneratorQuoted    bool `json:"-"`
 	Parser             model.ParserConfig
 	DefaultExpr        *model.FuncRef
 	Order              int `json:"-"`
@@ -1235,6 +1296,15 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 			continue
 		}
 
+		if !inFlagsBlock {
+			if dirKey, _, hasColon := strings.Cut(trimmedLine, ":"); hasColon {
+				switch strings.ToLower(strings.TrimSpace(dirKey)) {
+				case DirectiveRequires, "initializer", "initializers", "shared provider", "provider":
+					continue
+				}
+			}
+		}
+
 		parsedParam := false
 		var paramLine string
 
@@ -1307,7 +1377,7 @@ func ParseSubCommandComments(text string) (cmdName string, subCommandSequence []
 
 func isLikelyAttribute(attrStr string) bool {
 	lower := strings.ToLower(attrStr)
-	knownKVs := []string{"generator:", "parser:", "default:", "alias:", "aliases:", "aka:", "plus:", "plus-bare:", "plus-value:", "plus-assigned:"}
+	knownKVs := []string{"generator:", AttributeProvider + ":", AttributeInject + ":", "parser:", "default:", "alias:", "aliases:", "aka:", "plus:", "plus-bare:", "plus-value:", "plus-assigned:"}
 	for _, k := range knownKVs {
 		if strings.Contains(lower, k) {
 			return true
@@ -1460,10 +1530,90 @@ func parseFuncRef(val string) *model.FuncRef {
 	return &model.FuncRef{FunctionName: val}
 }
 
-func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map[string]*ast.FuncDecl) ([]*model.InitializerConfig, []*model.SharedProviderConfig) {
+func deriveLegacyProviderName(name string) string {
+	trimmed := name
+	for _, prefix := range []string{"Open", "New", "Get"} {
+		if strings.HasPrefix(trimmed, prefix) && len(trimmed) > len(prefix) {
+			trimmed = trimmed[len(prefix):]
+			break
+		}
+	}
+	if trimmed == "" {
+		trimmed = name
+	}
+	if len(trimmed) > 0 {
+		return strings.ToLower(trimmed[:1]) + trimmed[1:]
+	}
+	return trimmed
+}
+
+func enrichLegacyInitializer(ic *model.InitializerConfig, idx *moduleIndex, fallbackPkgName string) {
+	if ic == nil || ic.Func == nil || idx == nil {
+		return
+	}
+	impPath := ic.Func.ImportPath
+	if impPath == "" {
+		return
+	}
+	pkg, ok := idx.loadPackage(impPath)
+	if !ok {
+		return
+	}
+	pkgName := pkg.pkgName
+	if pkgName == "" {
+		pkgName = fallbackPkgName
+	}
+	if ifn, exists := pkg.funcs[ic.Func.FunctionName]; exists {
+		ic.SignatureParams = idx.resolveIndexedFuncParams(ifn, impPath, pkgName)
+		ic.SignatureKnown = true
+	}
+}
+
+func enrichLegacySharedProvider(sp *model.SharedProviderConfig, idx *moduleIndex, fallbackPkgName string) {
+	if sp == nil || sp.Func == nil || idx == nil {
+		return
+	}
+	impPath := sp.Func.ImportPath
+	if impPath == "" {
+		return
+	}
+	pkg, ok := idx.loadPackage(impPath)
+	if !ok {
+		return
+	}
+	pkgName := pkg.pkgName
+	if pkgName == "" {
+		pkgName = fallbackPkgName
+	}
+	if ifn, exists := pkg.funcs[sp.Func.FunctionName]; exists {
+		if cls, err := idx.classifyFuncResults(ifn, impPath, pkgName); err == nil {
+			sp.Type = cls.returnType
+			sp.CanonicalTypeKey = cls.canonicalTypeKey
+			sp.TypeImportPath = cls.typeImportPath
+			sp.TypePackageName = cls.typePackageName
+			sp.TypeImports = cls.typeImports
+			sp.ReturnsError = cls.returnsError
+		}
+		sp.SignatureParams = idx.resolveIndexedFuncParams(ifn, impPath, pkgName)
+		sp.SignatureKnown = true
+	}
+}
+
+func parseDirectivesFromDoc(
+	doc string,
+	filename string,
+	docStartLine int,
+	importPath, pkgName string,
+	fileImports []*ast.ImportSpec,
+	idx *moduleIndex,
+	pkgFuncs map[string]*ast.FuncDecl,
+	localFile *ast.File,
+) ([]*model.InitializerConfig, []*model.SharedProviderConfig, []*model.RequirementConfig, error) {
 	var inits []*model.InitializerConfig
 	var shared []*model.SharedProviderConfig
-	for _, line := range strings.Split(doc, "\n") {
+	var reqs []*model.RequirementConfig
+	for lineIdx, line := range strings.Split(doc, "\n") {
+		lineNum := docStartLine + lineIdx
 		trimmed := strings.TrimSpace(line)
 		key, value, hasColon := strings.Cut(trimmed, ":")
 		if !hasColon {
@@ -1471,6 +1621,14 @@ func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
+		if key == DirectiveRequires {
+			parsedReqs, err := parseRequirementLine(value, filename, lineNum, importPath, pkgName, fileImports, true, idx, pkgFuncs, localFile)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			reqs = append(reqs, parsedReqs...)
+			continue
+		}
 		if value == "" {
 			continue
 		}
@@ -1487,12 +1645,16 @@ func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map
 					ref.PackagePath = importPath
 					ref.CommandPackageName = pkgName
 				}
-				inits = append(inits, &model.InitializerConfig{
+				ic := &model.InitializerConfig{
 					Name:         ref.FunctionName,
 					Func:         ref,
 					Inputs:       inputs,
 					ReturnsError: true,
-				})
+					Filename:     filename,
+					Line:         lineNum,
+				}
+				enrichLegacyInitializer(ic, idx, pkgName)
+				inits = append(inits, ic)
 			}
 		} else if key == "shared provider" || key == "provider" {
 			var name, fn string
@@ -1509,12 +1671,7 @@ func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map
 				if lastDot := strings.LastIndex(name, "."); lastDot != -1 {
 					name = name[lastDot+1:]
 				}
-				name = strings.TrimPrefix(name, "Open")
-				name = strings.TrimPrefix(name, "New")
-				name = strings.TrimPrefix(name, "Get")
-				if len(name) > 0 {
-					name = strings.ToLower(name[:1]) + name[1:]
-				}
+				name = deriveLegacyProviderName(name)
 			}
 			fnName, inputs := parseGeneratorInputs(fn)
 			ref := parseFuncRef(fnName)
@@ -1528,8 +1685,11 @@ func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map
 				Func:         ref,
 				Inputs:       inputs,
 				ReturnsError: true,
+				Filename:     filename,
+				Line:         lineNum,
 			}
-			if pkgFuncs != nil {
+			enrichLegacySharedProvider(sp, idx, pkgName)
+			if sp.Type == "" && pkgFuncs != nil {
 				if decl, ok := pkgFuncs[ref.FunctionName]; ok && decl.Type != nil && decl.Type.Results != nil && len(decl.Type.Results.List) > 0 {
 					retType, _ := formatType(decl.Type.Results.List[0].Type)
 					sp.Type = retType
@@ -1541,7 +1701,7 @@ func parseDirectivesFromDoc(doc string, importPath, pkgName string, pkgFuncs map
 			shared = append(shared, sp)
 		}
 	}
-	return inits, shared
+	return inits, shared, reqs, nil
 }
 
 func parseAttributes(attrs string, p *ParsedParam) {
@@ -1594,19 +1754,25 @@ func parseAttributes(attrs string, p *ParsedParam) {
 		case AttributeGenerator, AttributeProvider, AttributeInject:
 			p.Generator.Type = model.SourceTypeGenerator
 			if val != "" {
-				if idx := strings.LastIndex(val, "."); idx != -1 {
+				fnExpr, inputs := parseGeneratorInputs(val)
+				p.Generator.Inputs = inputs
+				p.GeneratorQuoted = strings.Contains(fnExpr, "\"")
+				if idx := strings.LastIndex(fnExpr, "."); idx != -1 {
+					p.Generator.ExplicitlyQualified = true
+					imp := strings.Trim(fnExpr[:idx], "\"")
 					p.Generator.Func = &model.FuncRef{
-						ImportPath:   strings.Trim(val[:idx], "\""),
-						FunctionName: val[idx+1:],
+						ImportPath:         imp,
+						PackagePath:        imp,
+						CommandPackageName: path.Base(imp),
+						FunctionName:       fnExpr[idx+1:],
 					}
-					p.Generator.Func.PackagePath = p.Generator.Func.ImportPath
-					p.Generator.Func.CommandPackageName = path.Base(p.Generator.Func.ImportPath)
+					if !p.GeneratorQuoted {
+						p.Generator.Func.CommandPackageName = imp
+					}
 				} else {
-					p.Generator.Func = &model.FuncRef{FunctionName: val}
+					p.Generator.ExplicitlyQualified = false
+					p.Generator.Func = &model.FuncRef{FunctionName: fnExpr}
 				}
-			}
-			if p.Generator.Func != nil {
-				p.Generator.Func.FunctionName, p.Generator.Inputs = parseGeneratorInputs(p.Generator.Func.FunctionName)
 			}
 		case AttributeRootContext, "constructor":
 			p.Generator.Type = model.SourceTypeConstructor
@@ -1793,8 +1959,28 @@ func parseParamDetails(text string) ParsedParam {
 
 func formatType(expr ast.Expr) (string, error) {
 	switch t := expr.(type) {
+	case *ast.ParenExpr:
+		return formatType(t.X)
 	case *ast.Ident:
 		return t.Name, nil
+	case *ast.InterfaceType:
+		if t.Methods == nil || len(t.Methods.List) == 0 {
+			return "interface{}", nil
+		}
+		return "", fmt.Errorf("unsupported type: %T", t)
+	case *ast.ChanType:
+		v, err := formatType(t.Value)
+		if err != nil {
+			return "", err
+		}
+		switch t.Dir {
+		case ast.RECV:
+			return "<-chan " + v, nil
+		case ast.SEND:
+			return "chan<- " + v, nil
+		default:
+			return "chan " + v, nil
+		}
 	case *ast.MapType:
 		key, err := formatType(t.Key)
 		if err != nil {
@@ -1822,6 +2008,9 @@ func formatType(expr ast.Expr) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if t.Len != nil {
+			return "[" + formatArrayLenExpr(t.Len) + "]" + s, nil
+		}
 		return "[]" + s, nil
 	case *ast.Ellipsis:
 		s, err := formatType(t.Elt)
@@ -1837,7 +2026,13 @@ func formatType(expr ast.Expr) (string, error) {
 				if err != nil {
 					return "", err
 				}
-				params = append(params, pt)
+				count := len(p.Names)
+				if count == 0 {
+					count = 1
+				}
+				for i := 0; i < count; i++ {
+					params = append(params, pt)
+				}
 			}
 		}
 		var results []string
@@ -1847,7 +2042,13 @@ func formatType(expr ast.Expr) (string, error) {
 				if err != nil {
 					return "", err
 				}
-				results = append(results, rt)
+				count := len(r.Names)
+				if count == 0 {
+					count = 1
+				}
+				for i := 0; i < count; i++ {
+					results = append(results, rt)
+				}
 			}
 		}
 		resStr := ""

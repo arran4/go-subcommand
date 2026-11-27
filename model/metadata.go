@@ -24,6 +24,7 @@ type CommandMetadata struct {
 	Line            int
 	Initializers    []*InitializerConfig
 	SharedProviders []*SharedProviderConfig
+	Requirements    []*RequirementConfig
 }
 
 // ManSection is a validated, command-scoped manual appendix.

@@ -42,31 +42,51 @@ type {{.SubCommandStructName}} struct {
 	{{.ErrorFieldName}} error
 	{{- end }}
 }
-{{- range .SharedProviders }}
+{{- range $sp := .SharedProviders }}
 
-func (c *{{$.SubCommandStructName}}) {{.MethodName}}() ({{.QualifiedType}}, error) {
-	c.{{.OnceFieldName}}.Do(func() {
+func (c *{{$.SubCommandStructName}}) {{$sp.MethodName}}() ({{$sp.QualifiedType}}, error) {
+	c.{{$sp.OnceFieldName}}.Do(func() {
 		c.registerReset(func() {
-			c.{{.OnceFieldName}} = sync.Once{}
-			var zero {{.QualifiedType}}
-			c.{{.ValueFieldName}} = zero
-			c.{{.ErrorFieldName}} = nil
+			c.{{$sp.OnceFieldName}} = sync.Once{}
+			var zero {{$sp.QualifiedType}}
+			c.{{$sp.ValueFieldName}} = zero
+			c.{{$sp.ErrorFieldName}} = nil
 		})
-		{{- if .ReturnsError }}
-		c.{{.ValueFieldName}}, c.{{.ErrorFieldName}} = {{.CallFor "c"}}
-		if c.{{.ErrorFieldName}} == nil {
-			if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+		{{- range $i, $in := $sp.ResolvedInputs }}
+		{{- if eq $in.Kind "provider" }}
+		{{- if $in.LazyCallable }}
+		{{- if $in.LazyReturnsErr }}
+		dep{{$i}} := c.{{$in.Provider.MethodName}}
+		{{- else }}
+		dep{{$i}} := func() {{$in.Provider.QualifiedType}} {
+			v, _ := c.{{$in.Provider.MethodName}}()
+			return v
+		}
+		{{- end }}
+		{{- else }}
+		dep{{$i}}, depErr{{$i}} := c.{{$in.Provider.MethodName}}()
+		if depErr{{$i}} != nil {
+			c.{{$sp.ErrorFieldName}} = depErr{{$i}}
+			return
+		}
+		{{- end }}
+		{{- end }}
+		{{- end }}
+		{{- if $sp.ReturnsError }}
+		c.{{$sp.ValueFieldName}}, c.{{$sp.ErrorFieldName}} = {{$sp.ResolvedCallFor "c"}}
+		if c.{{$sp.ErrorFieldName}} == nil {
+			if closer, ok := interface{}(c.{{$sp.ValueFieldName}}).(io.Closer); ok {
 				c.registerCleanup(closer.Close)
 			}
 		}
 		{{- else }}
-		c.{{.ValueFieldName}} = {{.CallFor "c"}}
-		if closer, ok := interface{}(c.{{.ValueFieldName}}).(io.Closer); ok {
+		c.{{$sp.ValueFieldName}} = {{$sp.ResolvedCallFor "c"}}
+		if closer, ok := interface{}(c.{{$sp.ValueFieldName}}).(io.Closer); ok {
 			c.registerCleanup(closer.Close)
 		}
 		{{- end }}
 	})
-	return c.{{.ValueFieldName}}, c.{{.ErrorFieldName}}
+	return c.{{$sp.ValueFieldName}}, c.{{$sp.ErrorFieldName}}
 }
 {{- end }}
 
@@ -153,7 +173,7 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	{{- if or .IsPositional .IsVarArg .IsUnmatchedArgv }}
 	{{- $needsRemainingArgs = true }}
 	{{- end }}
-	{{- if and (not .Inherited) (not .HasConstructor) (or .IsWriter .IsReader) }}
+	{{- if and (not .Inherited) (not .HasConstructor) (not .HasGenerator) (or .IsWriter .IsReader) }}
 	{{- $hasStagedFlags = true }}
 	{{- end }}
 	{{- end }}
@@ -264,15 +284,53 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 	c.{{.ValueFieldName}} = seenFlags
 	{{- end }}
 	{{- end }}
-	{{- range .HierarchyInitializers }}
-	if err := {{.CallFor "c"}}; err != nil {
+	{{- range $step := .EffectiveExecutionSteps }}
+	{{- if eq $step.Kind "provider" }}
+	if _, err := c.{{$step.Provider.MethodName}}(); err != nil {
 		return err
 	}
+	{{- else if $step.HasProviderInputs }}
+	{
+		{{- range $i, $in := $step.Inputs }}
+		{{- if eq $in.Kind "provider" }}
+		{{- if $in.LazyCallable }}
+		{{- if $in.LazyReturnsErr }}
+		dep{{$i}} := c.{{$in.Provider.MethodName}}
+		{{- else }}
+		dep{{$i}} := func() {{$in.Provider.QualifiedType}} {
+			v, _ := c.{{$in.Provider.MethodName}}()
+			return v
+		}
+		{{- end }}
+		{{- else }}
+		dep{{$i}}, depErr{{$i}} := c.{{$in.Provider.MethodName}}()
+		if depErr{{$i}} != nil {
+			return depErr{{$i}}
+		}
+		{{- end }}
+		{{- end }}
+		{{- end }}
+		if err := {{$step.CallFor "c"}}; err != nil {
+			return err
+		}
+	}
+	{{- else }}
+	if err := {{$step.CallFor "c"}}; err != nil {
+		return err
+	}
+	{{- end }}
 	{{- end }}
 	{{- range .Parameters }}
 	{{- if .SharedProvider }}
 	{{- if .IsLazyCallable }}
+	{{- if .IsCallableInfallible }}
+	c.{{.ValueFieldName}} = func() {{.SharedProvider.QualifiedType}} {
+		v, _ := c.{{.SharedProvider.MethodName}}()
+		return v
+	}
+	{{- else }}
 	c.{{.ValueFieldName}} = c.{{.SharedProvider.MethodName}}
+	{{- end }}
 	{{- else }}
 	{
 		v, err := c.{{.SharedProvider.MethodName}}()
@@ -293,7 +351,11 @@ func (c *{{.SubCommandStructName}}) Execute(args []string) (err error) {
 		}
 		c.{{.ValueFieldName}} = v
 		if closer, ok := interface{}(v).(io.Closer); ok {
+			{{- if $.RootHasLifecycle }}
+			c.registerCleanup(closer.Close)
+			{{- else }}
 			cleanups = append(cleanups, closer.Close)
+			{{- end }}
 		}
 	}
 	{{- end }}
