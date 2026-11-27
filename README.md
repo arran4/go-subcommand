@@ -25,56 +25,49 @@ go install github.com/arran4/go-subcommand/cmd/gosubc@latest
 
 ## Getting Started
 
-### 1. Define Your Commands
+Keep action functions in an ordinary importable Go package, not `package main`. The generated executable imports that package and provides its own entry point.
 
-Create a Go file and define a function that will serve as your command. Add a comment above the function in the format `// FunctionName is a subcommand 'root-command sub-command...'`.
+Create a module:
 
-Example `main.go`:
-
-```go
-package main
+```sh
+mkdir my-app
+cd my-app
+go mod init example.com/my-app
+go mod edit -go=1.22
+cat > hello.go <<'GO'
+package myapp
 
 import "fmt"
 
-// PrintHelloWorld is a subcommand `my-app hello`
-// This command prints "Hello, World!" to the console.
-func PrintHelloWorld() {
+// Hello is a subcommand `my-app hello` -- Print a greeting.
+func Hello() {
     fmt.Println("Hello, World!")
 }
+GO
 ```
 
-### 2. Add a `generate.go` File
+Generate and run with a published tool version:
 
-Create a file named `generate.go` in the same directory (package `main`). This robust version checks if `gosubc` is installed; if not, it uses `go run` to fetch and run it. This ensures it works for everyone without manual installation steps.
-
-```go
-package main
-
-//go:generate sh -c "command -v gosubc >/dev/null 2>&1 && gosubc generate || go run github.com/arran4/go-subcommand/cmd/gosubc generate"
-```
-
-### 3. Generate the CLI
-
-Run `go generate` in your terminal:
-
-```bash
-go generate
-```
-
-This will create a `cmd/my-app` directory containing the generated CLI code.
-
-### 4. Run Your New CLI
-
-You can now run your newly generated CLI:
-
-```bash
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
 go run ./cmd/my-app hello
 ```
 
 Output:
-```
+
+```text
 Hello, World!
 ```
+
+For reproducible regeneration, save this complete file as `generate.go` alongside the action:
+
+```go
+package myapp
+
+//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+```
+
+Run `go generate ./...` after changing action declarations. The generator's Go toolchain requirement (Go 1.26 for v0.0.33) is separate from the target application's Go version. See the [Hugo documentation](https://arran4.github.io/go-subcommand/) for more examples.
 
 ## Comment Syntax Guide
 
@@ -267,6 +260,8 @@ Inside a `Flags:` block or inline/preceding comments, you can use the following 
 Multiple parenthesized attributes can be combined with semicolons, for example `(required; parser: ParseThing)`.
 
 #### Optional-value flags
+
+**Since version:** v0.0.32 (GNU).
 
 `(optional value)` is an explicit flag contract supporting ordinary Go
 primitive types, pointers and slices. It distinguishes flag presence from value
@@ -471,6 +466,8 @@ Compiled runtime scenarios are verified in [issue561_requires.txtar](templates/t
 
 #### Root constructor context
 
+**Since version:** v0.0.32.
+
 Use `(root context)` on a root-command parameter when the application, rather than argv or a runtime provider, owns a typed value for the command tree. The generated root stores it once and exposes `NewRootWithContext`; inherited child parameters use the embedded root field without redeclaring it.
 
 Constructor context and `(flag presence)` are independent inputs. A root or nested
@@ -586,6 +583,8 @@ output. Generated usage repeats this direction-specific meaning, including for
 `default: -`. Names such as `stdin` and `stdout` remain ordinary file paths.
 
 ### Invocation-Scoped Streams
+
+**Since version:** v0.0.33.
 
 Generated command trees support per-invocation stream dependency injection without mutable package-global state:
 
@@ -805,6 +804,8 @@ Generates the Go code for your CLI.
 *   `--config <path>`: Read an optional version-one project configuration (`.mdconf`, `.mdc`, or `.json`). Explicit command-line flags override configuration values, and configuration values override built-in defaults. Unknown keys and unsupported versions fail before generation.
 
 #### Generation configuration
+
+**Since version:** v0.0.32.
 
 Configuration is opt-in. Both candidate native extensions, `.mdconf` and `.mdc`,
 accept top-level generator settings, without a `# Configuration` heading:
@@ -1060,6 +1061,8 @@ Generates release configuration.
 
 ### Generated parser and process errors
 
+**Since version:** v0.0.32.
+
 Generated applications expose `ErrUsage` and `UsageError` in their own `cmd`
 package, with no go-subcommand runtime dependency. Callers can classify errors
 without inspecting their messages:
@@ -1109,6 +1112,8 @@ customization, and its validation/internal default classification and rendering
 contract. Those facilities remain separate work under #479/#503.
 
 ### Require a selected command
+
+**Since version:** v0.0.32.
 
 Add the accepted execution policy to functionless root metadata:
 
@@ -1193,6 +1198,8 @@ host defaults.
 
 #### `plus-minus` runtime parser
 
+**Since version:** v0.0.32.
+
 Set `--cli-parser plus-minus` or use `CLI-Parser: plus-minus` on a command.
 This backend implements a dedicated command-scoped parser with atomic staging and validation (#464):
 
@@ -1243,6 +1250,8 @@ subtrees. GNU and Go-flag keep their existing grammars. Optional values (#511)
 remain separate work and are not implied by this backend.
 
 ##### Opt-in Unmatched Argv Filter (`plus-minus` only)
+
+**Since version:** v0.0.33.
 
 Commands using the `plus-minus` parser backend can opt in to receiving otherwise-unrecognized command-line arguments (such as signed numeric values `-0.1`, `+0.1`, unknown flags, or arbitrary foreign options) directly in a `[]string` action parameter marked with `(unmatched)` (#550):
 
