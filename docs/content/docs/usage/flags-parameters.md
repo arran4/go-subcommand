@@ -57,7 +57,7 @@ func Another(wait time.Duration) {
 ```
 
 ```sh
-go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.34 generate --emit-go-generate=false
 go run ./cmd/complex toplevel -n test
 go run ./cmd/complex toplevel nested -c 3 -v
 go run ./cmd/complex another --wait=2s

@@ -6,6 +6,8 @@
 * Provide full copyable annotated Go/config examples, generation and invocation commands and expected output. If code is omitted, use an unmistakable standalone `...` and link the complete tested source. Avoid empty stubs that imply behavior they do not implement. Document standalone `examples/` modules on the Hugo site and prefer examples derived from real tests/fixtures.
 * Distinguish released functionality from proposals and generator toolchain requirements from the generated application's Go requirements. Verify documentation builds and examples where practical.
 
+Public user guides should link to user-facing articles, release tags and ordinary examples rather than raw test archives or routine merged issues/PRs. Keep engineering history in the tracker. Ask the maintainer for design rationale before attributing motivations. Maintain the compatibility matrix and update released version labels.
+
 ## Code Generation & Testing
 * **Keep README.md and txtar tests up to date:** When adding new features, ensure that the `README.md` documentation and `txtar` tests (in `templates/testdata`) are updated to reflect the changes. This helps maintain a comprehensive regression suite and up-to-date documentation.
 * **Embed Large Test Data:** When writing unit tests (e.g., in `issues_test.go` or new test files) that require significant source code strings, put the source code in a file within the `testdata/` directory and use `//go:embed` to load it. This avoids large, messy string literals in test files and potential file system issues.

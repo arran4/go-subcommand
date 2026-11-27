@@ -47,19 +47,4 @@ classification and duplicate error output. I/O acquisition failures remain
 ordinary errors rather than becoming usage failures merely because they occurred
 during argument binding.
 
-`templates/testdata/issue523.go.txtar` bundles real Go annotations, the generated
-error contract, and representative stdout/stderr/status expectations.
-`TestGenerateTypedErrors` generates standalone applications in memory, verifies
-repeatability, compiles their complete source, checks error identities and
-causes, compares Go-flag behaviour with the standard library, and executes the
-recorded invocations. Help cases verify that business providers do not run.
-
-This feature enables gogenmux to replace parser-message scanning. The
-[no-command policy](../no-command-policy/) also supplies typed bare-invocation errors.
-Complete custom-main removal still needs version/build metadata and version output,
-propagation of `builtBy`, and its
-validation=2/internal=3 default classification and rendering contract under
-[#479](https://github.com/arran4/go-subcommand/issues/479). Explicit exit errors
-can already carry those statuses, but arbitrary application error types are not
-automatically assigned a new default. No mutable global process-policy table is
-introduced.
+For an executable action returning an error, see [Error returns](../../usage/examples/#error-returns). The [no-command policy](../no-command-policy/) supplies typed bare-invocation errors. Arbitrary application error types are not automatically mapped to a custom exit status; use an explicit `ErrExitCode` when required.

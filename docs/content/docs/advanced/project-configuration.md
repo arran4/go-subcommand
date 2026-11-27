@@ -6,7 +6,7 @@ weight: 11
 **Since version:** v0.0.32.
 
 `gosubc generate --config gosubc.mdc` reads optional generator settings.
-Both `.mdc` and `.mdconf` are supported candidates; neither filename is required.
+Both `.mdc` and `.mdconf` are supported extensions; neither filename is required.
 Generated applications do not read this file or depend on go-subcommand at runtime.
 
 ```text
@@ -40,7 +40,7 @@ sections with typed fences. See [Functionless command metadata](../command-metad
 for source/config equivalence, declarations, external file references, precedence
 and examples. The JSON reader remains limited to generator settings.
 
-The wider design remains in [#63](https://github.com/arran4/go-subcommand/issues/63).
+
 Minimum generator versions, typed template variables, multiple targets and setup
 questions are deferred. Unsupported keys/headings are rejected rather than
 accepted without effect.

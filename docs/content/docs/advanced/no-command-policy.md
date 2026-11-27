@@ -57,14 +57,6 @@ Only generated main calls `os.Exit`.
 Explicit help, usage and version do not acquire business providers. The policy
 does not change selected actions, nested aliases, inherited flags, positional
 binding or parser-specific grammar. `--` stops routing as before; without any
-following argument it leaves no command selected. Functionless root flags and
-providers still need future typed binding support under #63/#522 and are rejected
-rather than inferred from prose.
+following argument it leaves no command selected. Functionless root flags require typed source declarations. Scoped `Requires:` guards and providers are supported separately; see [Scoped lifecycle](../scoped-lifecycle/).
 
-`templates/testdata/issue524.go.txtar` contains real Go/native sources, exact
-process invocations and help snapshots, and an inspectable empty-root golden.
-`TestGenerateNoCommandPolicy` compares equivalent Go/config output, repeats
-generation, compiles empty and populated applications with GNU and Go-flag, and
-runs direct typed-error/exit-override tests. Existing metadata scenarios also
-exercise ordinary root actions and default routes. No custom main, dummy action,
-global callbacks or runtime generator dependency is required.
+No custom main, dummy action or global callbacks are needed. See [Functionless metadata](../command-metadata/) for defining the root and [Generated errors](../generated-errors/) for error classification.

@@ -5,23 +5,23 @@ weight: 6
 
 # Feature versions
 
-Versions refer to gosubc, not the target application's Go compiler. The introduction versions below are based on the published [v0.0.32](https://github.com/arran4/go-subcommand/releases/tag/v0.0.32) and [v0.0.33](https://github.com/arran4/go-subcommand/releases/tag/v0.0.33) changelogs. Older features are not assigned speculative introduction versions.
+Versions refer to gosubc, not the target application's Go compiler. The introduction versions below are based on the published [v0.0.32](https://github.com/arran4/go-subcommand/releases/tag/v0.0.32), [v0.0.33](https://github.com/arran4/go-subcommand/releases/tag/v0.0.33) and [v0.0.34](https://github.com/arran4/go-subcommand/releases/tag/v0.0.34) changelogs. Older features are not assigned speculative introduction versions.
 
-| Feature | Since version | Implementation |
+| Feature | Since version | Guide |
 | --- | --- | --- |
-| Native project config | v0.0.32 | [#510](https://github.com/arran4/go-subcommand/pull/510) |
-| GNU optional flag values | v0.0.32 | [#511](https://github.com/arran4/go-subcommand/pull/511) |
-| Typed root context | v0.0.32 | [#501](https://github.com/arran4/go-subcommand/pull/501) |
-| Local provider DI and ordering | v0.0.32 | [#512](https://github.com/arran4/go-subcommand/pull/512) |
-| Typed usage errors and generated process boundary | v0.0.32 | [#526](https://github.com/arran4/go-subcommand/pull/526) |
-| Functionless command metadata | v0.0.32 | [#527](https://github.com/arran4/go-subcommand/pull/527) |
-| No-command policy | v0.0.32 | [#528](https://github.com/arran4/go-subcommand/pull/528) |
-| Plus-minus backend | v0.0.32 | [#505](https://github.com/arran4/go-subcommand/pull/505) |
-| Leaf and late help fixes | v0.0.33 | [#551](https://github.com/arran4/go-subcommand/pull/551) |
-| Explicit optional root positionals | v0.0.33 | [#552](https://github.com/arran4/go-subcommand/pull/552) |
-| Constructor-owned framework streams | v0.0.33 | [#554](https://github.com/arran4/go-subcommand/pull/554) |
-| Scoped mandatory guards and lazy shared providers | v0.0.33 | [#555](https://github.com/arran4/go-subcommand/pull/555) |
-| Unmatched argv (plus-minus only) | v0.0.33 | [#556](https://github.com/arran4/go-subcommand/pull/556) |
-| Unified Requires, typed inference and unified cleanup | Unreleased (proposed v0.0.34) | [#567](https://github.com/arran4/go-subcommand/pull/567) |
+| Native project config | v0.0.32 | [Guide](../../advanced/project-configuration/) |
+| GNU optional flag values | v0.0.32 | [Guide](../recipes/#optional-flag-values) |
+| Typed root context | v0.0.32 | [Guide](../recipes/#constructor-context) |
+| Local provider DI and ordering | v0.0.32 | [Guide](../../advanced/scoped-lifecycle/) |
+| Typed usage errors and generated process boundary | v0.0.32 | [Guide](../../advanced/generated-errors/) |
+| Functionless command metadata | v0.0.32 | [Guide](../../advanced/command-metadata/) |
+| No-command policy | v0.0.32 | [Guide](../../advanced/no-command-policy/) |
+| Plus-minus backend | v0.0.32 | [Guide](../../advanced/plus-minus-parser/) |
+| Leaf and late help fixes | v0.0.33 | [Guide](../defining-commands/) |
+| Explicit optional root positionals | v0.0.33 | [Guide](../recipes/#optional-positionals) |
+| Constructor-owned framework streams | v0.0.33 | [Guide](../recipes/#invocation-streams) |
+| Scoped mandatory guards and lazy shared providers | v0.0.33 | [Guide](../../advanced/scoped-lifecycle/) |
+| Unmatched argv (plus-minus only) | v0.0.33 | [Guide](../../advanced/plus-minus-parser/#opt-in-unmatched-argv-filter-plus-minus-only) |
+| Unified Requires, typed inference and unified cleanup | v0.0.34 | [Guide](../../advanced/scoped-lifecycle/) |
 
-Update the unreleased row to the actual published tag once available. Direct action-stream injection (#559), mixed typed variadic arguments (#562) and typed finite choices (#565) remain separate work. See [all releases](https://github.com/arran4/go-subcommand/releases).
+See [Compatibility](../../reference/compatibility/) for Go compiler requirements and [releases](https://github.com/arran4/go-subcommand/releases) for release changes.
