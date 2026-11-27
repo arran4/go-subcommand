@@ -5,26 +5,21 @@ weight: 2
 
 # Installation
 
-To use **Go Subcommand**, you need to install the `gosubc` CLI tool.
+`gosubc` is a build-time generator, not a runtime library. The published v0.0.33 generator requires Go 1.26.0 ([go.mod](https://github.com/arran4/go-subcommand/blob/v0.0.33/go.mod)). Its generated application can target older Go versions; recent runtime fixtures are actually compiled with Go 1.22.12. Do not confuse the generator's toolchain with the generated application's toolchain. Test your chosen target compiler.
 
-## Prerequisites
+## Install a released version
 
-*   **Go**: Version 1.18 or later.
-
-## Installing `gosubc`
-
-Run the following command to install the latest version:
-
-```bash
-go install github.com/arran4/go-subcommand/cmd/gosubc@latest
+```sh
+go install github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33
+gosubc version
 ```
 
-Verify the installation:
+Ensure your Go binary directory (normally `$(go env GOPATH)/bin` unless GOBIN is set) is on PATH. Use `@latest` for exploration, or a pinned tag for reproducibility.
 
-```bash
-gosubc --help
+Without a separate installation, run the generator from your module directory:
+
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
 ```
 
-## Adding to Your Project
-
-You don't need to import `go-subcommand` in your application logic files unless you are using specific helper types. The generated code will reside in a separate package (usually `cmd/appname`).
+See [Getting started](../../usage/getting-started/) and [Feature versions](../../usage/feature-versions/).

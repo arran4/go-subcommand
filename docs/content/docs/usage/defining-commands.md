@@ -3,50 +3,45 @@ title: "Defining Commands"
 weight: 2
 ---
 
-# Defining Commands
+# Defining commands
 
-Commands are defined by adding specific comments to your Go functions.
+Declare a command by putting its path in a comment above an ordinary Go function. Root and child actions live in importable application packages, separate from generated executable code.
 
-## Syntax
-
-```go
-// FunctionName is a subcommand `root-cmd sub-cmd...`
-// Description text...
-```
-
-*   **FunctionName**: The name of the Go function to execute.
-*   **root-cmd**: The name of your root application (e.g., `git`, `kubectl`).
-*   **sub-cmd...**: A space-separated list of subcommands (e.g., `remote add`).
-
-## Description
-
-The text following the command definition or on subsequent lines is used as the command description in usage text.
+Save this complete file as `commands.go` in a fresh Go module:
 
 ```go
-// Push is a subcommand `git push`
-// Update remote refs along with associated objects.
-func Push() { ... }
+package commands
+
+import "fmt"
+
+// Root is a subcommand `app` -- Application entry point.
+func Root() { fmt.Println("root") }
+
+// Users is a command `app users` -- User commands.
+
+// UserCreate is a subcommand `app users create` -- Create a user.
+//
+// Flags:
+//
+//	name: @1 User name.
+func UserCreate(name string) { fmt.Println("create", name) }
+
+// UserDelete is a subcommand `app users delete` -- Delete a user.
+//
+// Flags:
+//
+//	name: @1 User name.
+func UserDelete(name string) { fmt.Println("delete", name) }
 ```
 
-## Extended Help
-
-Any comments that are not part of the command definition or parameter documentation are treated as **Extended Help**. This text is shown when the user requests help for a specific command (e.g., via `man` pages or detailed help output).
-
-## Nested Commands
-
-You can create deep hierarchies.
-
-```go
-// UserCreate is a subcommand `app users create`
-func UserCreate() {}
-
-// UserDelete is a subcommand `app users delete`
-func UserDelete() {}
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run ./cmd/app users create alice
+go run ./cmd/app help users delete
 ```
 
-Intermediate commands (e.g., `users` in `app users create`) do not need to be explicitly defined if they don't have specific logic. `gosubc` will create "synthetic" commands for them. However, if you want to define behavior for the parent command, you can:
+The first invocation prints `create alice`. The blank line after the metadata-only Users comment is intentional. Intermediate commands can also be inferred from child paths.
 
-```go
-// Users is a subcommand `app users`
-func Users() { fmt.Println("Manage users") }
-```
+**Since version:** v0.0.32 supports explicit functionless [command metadata](../../advanced/command-metadata/) and [no-command policy](../../advanced/no-command-policy/). Leaf help after positionals was corrected in v0.0.33.
+
+Short descriptions follow the command path; later prose provides extended help. Built-in help, usage and version should not execute business actions. See the [examples catalogue](../examples/).

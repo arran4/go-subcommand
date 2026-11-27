@@ -3,12 +3,16 @@ title: "No-command policy"
 weight: 13
 ---
 
+**Since version:** v0.0.32.
+
 Use functionless root metadata to require a selected command:
 
 ```go
 // App is a command `app` -- Run jobs.
 // No command: error
 package commands
+
+import "fmt"
 
 // Run is a subcommand `app run` -- Run a job.
 func Run() { fmt.Println("run") }

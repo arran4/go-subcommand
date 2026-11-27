@@ -3,68 +3,62 @@ title: "Getting Started"
 weight: 1
 ---
 
-# Getting Started
+# Getting started
 
-Let's build a simple CLI application named `greet`.
+Use ordinary importable Go packages for application logic. The generator creates a separate executable package under `cmd/<app>`; do not put actions in `package main` if the generated executable must import them.
 
-## 1. Create a Go Module
+## Create a module
 
-```bash
-mkdir greet
-cd greet
-go mod init example.com/greet
-```
+The following complete POSIX shell example uses the action from [examples/basic1](https://github.com/arran4/go-subcommand/tree/v0.0.33/examples/basic1).
 
-## 2. Define a Command
-
-Create `main.go` and define your command function.
-
-```go
-package main
+```sh
+mkdir basic1
+cd basic1
+go mod init example.com/basic1
+go mod edit -go=1.22
+cat > examplecmd1.go <<'GO'
+package basic1
 
 import "fmt"
 
-// Hello is a subcommand `greet hello`
-// Prints a greeting.
-func Hello(name string) {
-    fmt.Printf("Hello, %s!\n", name)
+// ExampleCmd1 is a subcommand `basic1 example1`
+// Does nothing practical
+func ExampleCmd1() {
+	fmt.Println("Caught me")
 }
-
-func main() {
-    // This will be replaced by the generated code usage,
-    // but for now you can leave it empty or use it to run the generated cmd.
-}
+GO
 ```
 
-## 3. Configure Generation
+## Generate and run
 
-Create a `generate.go` file to instruct `go generate`.
+```sh
+go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
+go run ./cmd/basic1 example1
+```
+
+Expected stdout:
+
+```text
+Caught me
+```
+
+```sh
+go run ./cmd/basic1 --help
+go run ./cmd/basic1 help example1
+go build -o basic1 ./cmd/basic1
+./basic1 example1
+```
+
+## Repeat generation
+
+Save this as `generate.go` in the same module:
 
 ```go
-package main
+package basic1
 
-//go:generate gosubc generate
+//go:generate go run github.com/arran4/go-subcommand/cmd/gosubc@v0.0.33 generate --emit-go-generate=false
 ```
 
-## 4. Generate Code
+Run `go generate ./...` whenever action declarations change. **Since version:** v0.0.32 supports suppressing nested generated directives, allowing one canonical pinned generation command. Do not edit generated Go by hand.
 
-Run the generator:
-
-```bash
-go generate
-```
-
-This will create a `cmd/greet` directory with the generated code.
-
-## 5. Run Your CLI
-
-You can now run your CLI using `go run`:
-
-```bash
-go run ./cmd/greet hello --name World
-```
-
-Output:
-```
-Hello, World!
-```
+Next: [Defining commands](../defining-commands/), [Flags and parameters](../flags-parameters/), [Examples](../examples/).

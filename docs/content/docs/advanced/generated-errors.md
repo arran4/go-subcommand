@@ -3,14 +3,20 @@ title: "Generated errors and process boundary"
 weight: 12
 ---
 
+**Since version:** v0.0.32.
+
 Generated `cmd` packages expose `ErrUsage` and `*UsageError`. These are generated
 application types; applications do not import go-subcommand at runtime.
 
+This excerpt assumes the application's generated `cmd` package, `errors`, `fmt`, and an error value are in scope. Standalone `...` marks omitted source.
+
 ```go
+...
 var usage *cmd.UsageError
 if errors.Is(err, cmd.ErrUsage) && errors.As(err, &usage) {
     fmt.Printf("%s: kind=%s flag=%s\n", usage.CommandPath, usage.Kind, usage.Flag)
 }
+...
 ```
 
 The stable kinds are `UsageUnknownCommand`, `UsageUnknownFlag`,
