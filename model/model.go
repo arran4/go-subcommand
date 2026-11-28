@@ -125,8 +125,8 @@ type SharedProviderConfig struct {
 	Type                    string
 	TypeImportPath          string
 	TypePackageName         string
-	CanonicalTypeKey        string              `json:",omitempty"`
-	TypeImports             []TypeImportRef     `json:",omitempty"`
+	CanonicalTypeKey        string          `json:",omitempty"`
+	TypeImports             []TypeImportRef `json:",omitempty"`
 	Func                    *FuncRef
 	Inputs                  []string
 	ReturnsError            bool

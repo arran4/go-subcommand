@@ -397,4 +397,3 @@ func Inspect(user *myauth.User, sess *myauth.Session, audit *myauth.Audit) error
 		})
 	}
 }
-

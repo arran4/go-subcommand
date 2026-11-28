@@ -6364,50 +6364,50 @@ func TestRequires_InProcessReuseContextAndCachedError(t *testing.T) {
 	// Native .mdc configuration equivalence: strip Requires directives & metadata comments into CommandDeclarations.
 	if !*updateGolden {
 		t.Run("mdc_native_config_equivalence", func(t *testing.T) {
-		mdcDecls := []parsers.CommandDeclaration{
-			{Kind: "command", Path: "app api", Text: "Description: API endpoints.\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 1},
-			{Kind: "command", Path: "app api users", Text: "Description: User management.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin\n", Filename: "commands.mdc", Line: 4},
-			{Kind: "command", Path: "app admin", Text: "Description: Admin commands.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin, \"example.com/requiresapp/auth\".AuditTrail (always)\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 7},
-			{Kind: "command", Path: "app admin ping", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 11},
-			{Kind: "command", Path: "app jobs", Text: "Description: Background jobs.\nRequires: \"example.com/requiresapp/jobs\".OpenClient, \"example.com/requiresapp/jobs\".OpenStore, \"example.com/requiresapp/jobs\".LoadMeta\n", Filename: "commands.mdc", Line: 13},
-			{Kind: "command", Path: "app db", Text: "Description: Database commands.\nRequires: \"example.com/requiresapp/db\".PrimaryDB, \"example.com/requiresapp/db\".ReplicaDB\n", Filename: "commands.mdc", Line: 16},
-			{Kind: "command", Path: "app stores", Text: "Description: Multiple packages exporting Open.\nRequires: \"example.com/requiresapp/storea\".Open, \"example.com/requiresapp/storeb\".Open\n", Filename: "commands.mdc", Line: 19},
-			{Kind: "command", Path: "app compat", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 22},
-		}
+			mdcDecls := []parsers.CommandDeclaration{
+				{Kind: "command", Path: "app api", Text: "Description: API endpoints.\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 1},
+				{Kind: "command", Path: "app api users", Text: "Description: User management.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin\n", Filename: "commands.mdc", Line: 4},
+				{Kind: "command", Path: "app admin", Text: "Description: Admin commands.\nRequires: \"example.com/requiresapp/auth\".RequireAdmin, \"example.com/requiresapp/auth\".AuditTrail (always)\nRequires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 7},
+				{Kind: "command", Path: "app admin ping", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 11},
+				{Kind: "command", Path: "app jobs", Text: "Description: Background jobs.\nRequires: \"example.com/requiresapp/jobs\".OpenClient, \"example.com/requiresapp/jobs\".OpenStore, \"example.com/requiresapp/jobs\".LoadMeta\n", Filename: "commands.mdc", Line: 13},
+				{Kind: "command", Path: "app db", Text: "Description: Database commands.\nRequires: \"example.com/requiresapp/db\".PrimaryDB, \"example.com/requiresapp/db\".ReplicaDB\n", Filename: "commands.mdc", Line: 16},
+				{Kind: "command", Path: "app stores", Text: "Description: Multiple packages exporting Open.\nRequires: \"example.com/requiresapp/storea\".Open, \"example.com/requiresapp/storeb\".Open\n", Filename: "commands.mdc", Line: 19},
+				{Kind: "command", Path: "app compat", Text: "Requires: \"example.com/requiresapp/auth\".CurrentUser\n", Filename: "commands.mdc", Line: 22},
+			}
 
-		mdcInput := fstest.MapFS{}
-		for k, v := range input {
-			if k == "app.go" {
-				s := string(v.Data)
-				for _, rm := range []string{
-					"// API is a command `app api` -- API endpoints.\n// Requires: auth.CurrentUser\n\n",
-					"// Users is a command `app api users` -- User management.\n// Requires: auth.RequireAdmin\n\n",
-					"// Admin is a command `app admin` -- Admin commands.\n// Requires: auth.RequireAdmin, auth.AuditTrail (always)\n// Requires: auth.CurrentUser\n\n",
-					"// Requires: auth.CurrentUser\n",
-					"// Jobs is a command `app jobs` -- Background jobs.\n// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta\n\n",
-					"// DB is a command `app db` -- Database commands.\n// Requires: db.PrimaryDB, db.ReplicaDB\n\n",
-					"// Stores is a command `app stores` -- Multiple packages exporting Open.\n// Requires: storea.Open, storeb.Open\n\n",
-				} {
-					s = strings.ReplaceAll(s, rm, "")
+			mdcInput := fstest.MapFS{}
+			for k, v := range input {
+				if k == "app.go" {
+					s := string(v.Data)
+					for _, rm := range []string{
+						"// API is a command `app api` -- API endpoints.\n// Requires: auth.CurrentUser\n\n",
+						"// Users is a command `app api users` -- User management.\n// Requires: auth.RequireAdmin\n\n",
+						"// Admin is a command `app admin` -- Admin commands.\n// Requires: auth.RequireAdmin, auth.AuditTrail (always)\n// Requires: auth.CurrentUser\n\n",
+						"// Requires: auth.CurrentUser\n",
+						"// Jobs is a command `app jobs` -- Background jobs.\n// Requires: jobs.OpenClient, jobs.OpenStore, jobs.LoadMeta\n\n",
+						"// DB is a command `app db` -- Database commands.\n// Requires: db.PrimaryDB, db.ReplicaDB\n\n",
+						"// Stores is a command `app stores` -- Multiple packages exporting Open.\n// Requires: storea.Open, storeb.Open\n\n",
+					} {
+						s = strings.ReplaceAll(s, rm, "")
+					}
+					mdcInput[k] = &fstest.MapFile{Data: []byte(s)}
+				} else {
+					mdcInput[k] = v
 				}
-				mdcInput[k] = &fstest.MapFile{Data: []byte(s)}
-			} else {
-				mdcInput[k] = v
 			}
-		}
 
-		writer := NewCollectingFileWriter()
-		if err := GenerateWithFS(mdcInput, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu", CommandDeclarations: mdcDecls}); err != nil {
-			t.Fatalf("mdc generation failed: %v", err)
-		}
-		for _, name := range goldenFiles {
-			if expected[name] == nil {
-				t.Fatalf("missing expected %s (run with -update first)", name)
+			writer := NewCollectingFileWriter()
+			if err := GenerateWithFS(mdcInput, writer, ".", "", "commentv1", &parsers.ParseOptions{Recursive: true}, false, false, nil, false, false, "", "", "", GenerateOptions{CLIParser: "gnu", CommandDeclarations: mdcDecls}); err != nil {
+				t.Fatalf("mdc generation failed: %v", err)
 			}
-			if !bytes.Equal(writer.Files["cmd/app/"+name], expected[name].Data) {
-				t.Fatalf("mdc generated %s differs from comment golden:\n%s", name, writer.Files["cmd/app/"+name])
+			for _, name := range goldenFiles {
+				if expected[name] == nil {
+					t.Fatalf("missing expected %s (run with -update first)", name)
+				}
+				if !bytes.Equal(writer.Files["cmd/app/"+name], expected[name].Data) {
+					t.Fatalf("mdc generated %s differs from comment golden:\n%s", name, writer.Files["cmd/app/"+name])
+				}
 			}
-		}
 		})
 	}
 
