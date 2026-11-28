@@ -160,4 +160,3 @@ func Run(user *auth.User) error { return nil }
 		t.Fatalf("expected unqualified alias diagnostic for .mdc, got %v", err)
 	}
 }
-
