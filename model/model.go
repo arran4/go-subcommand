@@ -355,11 +355,26 @@ type Command struct {
 	CLIParser string
 	// ResolvedCLIParser is the validated runtime CLI parser backend after inheritance and generator defaults.
 	ResolvedCLIParser string
+	// GeneratedPackageName selects importable dispatcher output; empty means main.
+	GeneratedPackageName string
 	// SuppressGoGenerate omits the nested regeneration directive from generated
 	// main.go. Its zero value retains the compatible default of emitting it.
 	SuppressGoGenerate bool
 	// RegenerationCommand is the documented project-owned generation command.
 	RegenerationCommand string
+}
+
+// GeneratedPackage returns the package for generated executable or dispatcher code.
+func (c *Command) GeneratedPackage() string {
+	if c == nil || c.GeneratedPackageName == "" {
+		return "main"
+	}
+	return c.GeneratedPackageName
+}
+
+// DispatcherOnly reports whether the command tree omits the generated main.
+func (c *Command) DispatcherOnly() bool {
+	return c != nil && c.GeneratedPackageName != ""
 }
 
 // EffectiveCLIParser returns the nearest explicit parser selection. It does not
